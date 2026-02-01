@@ -19,6 +19,8 @@ class EndpointConfig(BaseModel):
     insecure_tls_verify: bool = Field(False, description="Skip TLS verification")
     dirs: List['DirConfig'] = Field(default_factory=list, description="Directory mappings")
     max_connections: int = Field(5, description="Max concurrent connections")
+    emby_url: Optional[str] = Field(None, description="Emby server URL")
+    emby_api_key: Optional[str] = Field(None, description="Emby API key")
 
     @field_validator('base_url')
     @classmethod
@@ -45,6 +47,12 @@ class DirConfig(BaseModel):
         return v
 
 
+class APIKeysConfig(BaseModel):
+    """API密钥配置"""
+    ai_api_key: Optional[str] = Field(None, description="AI API密钥")
+    tmdb_api_key: Optional[str] = Field(None, description="TMDB API密钥")
+
+
 class AppConfig(BaseModel):
     """应用配置"""
     database: str = Field("quark_strm.db", description="Database file path")
@@ -56,6 +64,7 @@ class AppConfig(BaseModel):
     exts: List[str] = Field(default_factory=lambda: [".mp4", ".mkv", ".avi", ".mov"], description="Video extensions")
     alt_exts: List[str] = Field(default_factory=lambda: [".srt", ".ass"], description="Subtitle extensions")
     create_sub_directory: bool = Field(False, description="Create subdirectories globally")
+    api_keys: Optional[APIKeysConfig] = Field(None, description="API密钥配置")
 
     @field_validator('log_level')
     @classmethod

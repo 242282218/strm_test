@@ -6,7 +6,7 @@
 
 from app.models.quark import FileModel
 from app.models.strm import LinkModel
-from app.services.quark_api_client import QuarkAPIClient
+from app.services.quark_api_client_v2 import QuarkAPIClient
 from app.core.logging import get_logger
 from html import unescape
 from typing import List
@@ -26,6 +26,8 @@ class QuarkService:
             referer: Referer地址
         """
         self.client = QuarkAPIClient(cookie, referer)
+        self.cookie = cookie
+        self.referer = referer
         logger.info("QuarkService initialized")
 
     async def get_files(
@@ -105,24 +107,17 @@ class QuarkService:
         Returns:
             直链模型
         """
-        data = {"fids": [file_id]}
-
-        result = await self.client.request(
-            "/file/download",
-            method="POST",
-            data=data
-        )
-
-        download_url = result["data"][0]["download_url"]
+        result = await self.client.get_download_link(file_id)
+        download_url = result.get("url", "")
 
         logger.debug(f"Got download link for {file_id}")
 
         return LinkModel(
             url=download_url,
             headers={
-                "Cookie": self.client.cookie,
-                "Referer": self.client.referer,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "Cookie": self.cookie,
+                "Referer": self.referer,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/2.5.20 Chrome/100.0.4896.160 Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch"
             },
             concurrency=3,
             part_size=10 * 1024 * 1024  # 10MB
@@ -140,30 +135,16 @@ class QuarkService:
         Returns:
             直链模型
         """
-        data = {
-            "fid": file_id,
-            "resolutions": "low,normal,high,super,2k,4k",
-            "supports": "fmp4_av,m3u8,dolby_vision"
-        }
+        result = await self.client.get_transcoding_link(file_id)
+        transcoding_url = result.get("url", "")
 
-        result = await self.client.request(
-            "/file/v2/play/project",
-            method="POST",
-            data=data
+        logger.debug(f"Got transcoding link for {file_id}")
+
+        return LinkModel(
+            url=transcoding_url,
+            concurrency=3,
+            part_size=10 * 1024 * 1024
         )
-
-        video_list = result["data"]["video_list"]
-        for video in video_list:
-            if video["video_info"]["url"]:
-                logger.debug(f"Got transcoding link for {file_id}")
-                return LinkModel(
-                    url=video["video_info"]["url"],
-                    content_length=video["video_info"]["size"],
-                    concurrency=3,
-                    part_size=10 * 1024 * 1024
-                )
-
-        raise Exception("No transcoding link found")
 
     async def close(self):
         """关闭客户端"""

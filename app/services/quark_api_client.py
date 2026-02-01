@@ -64,7 +64,7 @@ class QuarkAPIClient:
         """
         await self._ensure_session()
 
-        url = f"{self.base_url}{pathname}"
+        url = f"{self.base_url}/uc{pathname}"
         headers = {
             "Cookie": self.cookie,
             "Accept": "application/json, text/plain, */*",
@@ -87,10 +87,11 @@ class QuarkAPIClient:
                 result = await response.json()
 
                 # 更新Cookie
-                for cookie in response.cookies:
-                    if cookie.key in ["__puus", "__pus"]:
-                        self.cookie = self._update_cookie(self.cookie, cookie.key, cookie.value)
-                        logger.debug(f"Updated cookie: {cookie.key}")
+                for cookie_key in response.cookies:
+                    if cookie_key in ["__puus", "__pus"]:
+                        cookie = response.cookies[cookie_key]
+                        self.cookie = self._update_cookie(self.cookie, cookie_key, cookie.value)
+                        logger.debug(f"Updated cookie: {cookie_key}")
 
                 # 检查响应状态
                 status = result.get("status", 0)

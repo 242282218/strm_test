@@ -4,7 +4,7 @@ STRM服务模块
 参考: AlistAutoStrm mission.go
 """
 
-from app.services.strm_generator import StrmGenerator
+from app.services.strm_generator import STRMGenerator as StrmGenerator
 from app.services.quark_service import QuarkService
 from app.core.database import Database
 from app.core.logging import get_logger

@@ -18,9 +18,9 @@ class StrmModel(BaseModel):
     参考: AlistAutoStrm strm.go:14-19
     """
     name: str = Field(..., description="STRM文件名")
-    local_dir: str = Field(..., description="本地目录路径")
-    remote_dir: str = Field(..., description="远程目录路径")
-    raw_url: str = Field(..., description="原始URL")
+    local_dir: str = Field("", description="本地目录路径")
+    remote_dir: str = Field("", description="远程目录路径")
+    raw_url: str = Field("", description="原始URL")
     created_at: Optional[datetime] = Field(None, description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="更新时间")
 
@@ -85,6 +85,63 @@ class StrmModel(BaseModel):
             return False
         except Exception as e:
             raise RuntimeError(f"Failed to delete STRM file {self.full_path}: {str(e)}")
+
+    def check_valid(self) -> bool:
+        """
+        检查STRM有效性
+
+        参考: AlistAutoStrm strm.go:73-85
+
+        Returns:
+            是否有效
+        """
+        import requests
+        try:
+            response = requests.head(self.raw_url, timeout=10)
+            return response.status_code in [200, 302]
+        except Exception:
+            return False
+
+    def __eq__(self, other: object) -> bool:
+        """
+        比较两个STRM对象
+
+        Args:
+            other: 另一个对象
+
+        Returns:
+            是否相等
+        """
+        if not isinstance(other, StrmModel):
+            return False
+        return self.name == other.name
+
+    def __hash__(self) -> int:
+        """
+        计算STRM对象的哈希值
+
+        Returns:
+            哈希值
+        """
+        return hash(self.name)
+
+    def __repr__(self) -> str:
+        """
+        返回STRM对象的字符串表示
+
+        Returns:
+            字符串表示
+        """
+        return f"StrmModel(name={self.name!r}, local_dir={self.local_dir!r}, remote_dir={self.remote_dir!r}, raw_url={self.raw_url!r})"
+
+    def __str__(self) -> str:
+        """
+        返回STRM对象的字符串表示
+
+        Returns:
+            字符串表示
+        """
+        return f"StrmModel({self.name})"
 
 
 class LinkModel(BaseModel):

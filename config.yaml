@@ -3,6 +3,14 @@ log_level: INFO
 log_file: logs/quark_strm.log
 colored_log: true
 timeout: 30
+
+# 夸克网盘配置
+quark:
+  cookie: "b-user-id=3c9239b4-d24f-e711-5f69-966d40497b28; _UP_A4A_11_=wb9cf11e82834257892366e215a67362; tfstk=gGEou12q9zu5xcKWr9m5r32JWG_Yw0iQYWKK9DhFujlj9TwLLD-U9Jn-8_wLiXlqQzE-T4ln-AkMUX5CZSX3wJtKabEKx2PtGTGeYaTq35VMzXWB4xl4tAVnRTGKTXVLLzBAXGe7FDiEt1IOX0FZK7PnUDkr39ktEXWxz021CaiF61IvkKu5wDy8UbaE0-ljKX-ezWoquAhqLUoUTjuqQAdrYDPFnEkICX-rY4S23jMEYXPEYt2qGvmETWoFn-kbZLl_YyrVOercDn4ColHorfyra8eY0guMP-hDYHr0o4cNxjxeYoDuhIBgjhbK_PG-WqFVD3m33vV-M5Swmmug5JH3Zgxr2rzbV0EAsdgutb3acqj2ixq0BPkbnNYn_uw4fmuAbO24c7e7mJpFYxFtg8ZrxGWsq0lrqugXMEFI4jo8cq9yV5yYBugbx1AqOzHs0Ae5qnmaUvSPxE8wZtKI39E2Regrhxc93UP5gzLRJB6cnFLIzxMi6tXDRegrhxcOntY9R4kjIfC..; _UP_D_=pc; __pus=11e8078958ca4c1b4fab60f23521c822AATS1DJcysTPLfVLTjdadLtpYjInuXTFhvF9roeIsal8Kt7AEEUNIX1QG0W3HJqzxcxAZ48KXnTyjKGF4qu4vTf8; __kp=85753770-fa98-11f0-87b0-91cc95cee016; __kps=AAQooyndM7NO1QRpNsFejD1S; __ktd=J6K/LrsnTZp7VmzqHd5R3Q==; __uid=AAQooyndM7NO1QRpNsFejD1S; __sdid=AASieEVY/XSj39ZFMEfUYVoQKKG1tzFzxtOjVMiCDR5v2xo0RUxnh2rJHLyvoDsANrE=; isg=BGtrJpAyhsj9dtWsAHFwMqVQ-o9VgH8CzlH3-t3o_aoBfIreZVLFUuff0rwS3Nf6; __puus=eeead5fe51ecb9c9b6dfc47b5b1d2699AAQhpq2dpTHR77lWpMw6zS0s/QlPr1R8Ydvx2zvnxIn12FD9vrbZ3VEMGxwdXqIjRwDDU430aWUz5pvLATqTDfAreHtfqRpBwEnjEcNyzOaAjx58dsNivWgQBiwHC6xOsK/ObrjC2uRiJEhxze2zitdxasd6S4Z2uFw27FlmqK9Y4SDE9af9XCb2vhwo6BeUTmZoW/vlS8m25/MhqKaAFRLa"
+  referer: "https://pan.quark.cn/"
+  root_id: "0"
+  only_video: true
+
 exts:
   - .mp4
   - .mkv
@@ -16,12 +24,14 @@ alt_exts:
   - .ssa
 create_sub_directory: false
 endpoints:
-  - base_url: http://localhost:5244
+  - base_url: http://localhost:8000
     token: ""
     username: ""
     password: ""
     insecure_tls_verify: false
     max_connections: 5
+    emby_url: http://192.168.100.66:18096
+    emby_api_key: "0be957f3e00f4133b550efa05df5b3bc"
     dirs:
       - local_directory: ./strm
         remote_directories:
@@ -30,3 +40,8 @@ endpoints:
         create_sub_directory: false
         disabled: false
         force_refresh: false
+
+# API密钥配置
+api_keys:
+  ai_api_key: "62aac2d7a5fe40e7b24e0d51a119c75c.UA3mC0lj6EB3ZUrb"
+  tmdb_api_key: "7b260e96dd9e320fa427eab26fbbf528"

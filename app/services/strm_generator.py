@@ -1,257 +1,253 @@
 """
-STRM生成器
+STRM文件生成器
 
-参考: AlistAutoStrm mission.go:31-158
+用于从夸克网盘生成STRM文件
 """
 
-import asyncio
 import os
-from typing import List, Optional
-from app.models.strm import StrmModel
-from app.models.quark import FileModel
+import asyncio
+from pathlib import Path
+from typing import List, Dict, Any, Optional
 from app.services.quark_service import QuarkService
-from app.core.database import Database
+from app.models.quark import FileModel
+from app.core.config_manager import get_config
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class StrmGenerator:
-    """
-    STRM生成器
-
-    参考: AlistAutoStrm Mission结构
-    """
+class STRMGenerator:
+    """STRM文件生成器"""
 
     def __init__(
         self,
-        quark_service: QuarkService,
-        database: Database,
-        base_url: str,
-        exts: List[str],
-        alt_exts: List[str],
-        create_sub_directory: bool = False,
-        recursive: bool = True,
-        force_refresh: bool = False
+        cookie: str,
+        output_dir: str = "./strm",
+        base_url: str = "http://localhost:8000",
+        use_transcoding: bool = True
     ):
         """
         初始化STRM生成器
 
         Args:
-            quark_service: 夸克服务
-            database: 数据库实例
-            base_url: 基础URL
-            exts: 视频扩展名列表
-            alt_exts: 字幕扩展名列表
-            create_sub_directory: 是否创建子目录
-            recursive: 是否递归扫描
-            force_refresh: 是否强制刷新
+            cookie: 夸克Cookie
+            output_dir: STRM文件输出目录
+            base_url: API基础URL
+            use_transcoding: 是否使用转码链接
         """
-        self.quark_service = quark_service
-        self.database = database
-        self.base_url = base_url
-        self.exts = exts
-        self.alt_exts = alt_exts
-        self.create_sub_directory = create_sub_directory
-        self.recursive = recursive
-        self.force_refresh = force_refresh
-        self.semaphore = None
-        self.strms: List[StrmModel] = []
+        self.cookie = cookie
+        self.output_dir = Path(output_dir)
+        self.base_url = base_url.rstrip("/")
+        self.use_transcoding = use_transcoding
+        self.service = QuarkService(cookie=cookie)
 
-    async def scan_directory(
+        # 确保输出目录存在
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"STRMGenerator initialized, output dir: {self.output_dir}")
+
+    async def generate_strm_files(
         self,
-        remote_path: str,
-        local_path: str,
-        concurrent_limit: int = 5
-    ) -> List[StrmModel]:
+        root_id: str = "0",
+        remote_path: str = "",
+        only_video: bool = True
+    ) -> Dict[str, Any]:
         """
-        扫描目录并生成STRM
-
-        参考: AlistAutoStrm mission.go:31-158
+        生成STRM文件
 
         Args:
-            remote_path: 远程目录路径
-            local_path: 本地目录路径
-            concurrent_limit: 并发限制
+            root_id: 根目录ID
+            remote_path: 远程路径前缀
+            only_video: 是否只处理视频文件
 
         Returns:
-            STRM模型列表
+            生成结果统计
         """
-        self.strms = []
-        self.semaphore = asyncio.Semaphore(concurrent_limit)
+        stats = {
+            "total_files": 0,
+            "generated_files": 0,
+            "skipped_files": 0,
+            "failed_files": 0,
+            "errors": []
+        }
 
-        logger.info(f"Starting scan: {remote_path} -> {local_path}")
-
-        await self._scan_recursive(remote_path, local_path, use_semaphore=True)
-
-        logger.info(f"Scan completed: {len(self.strms)} STRMs generated")
-        return self.strms
-
-    async def _scan_recursive(
-        self,
-        remote_path: str,
-        local_path: str,
-        use_semaphore: bool = False
-    ):
-        """
-        递归扫描目录
-
-        参考: AlistAutoStrm mission.go:31-158
-
-        Args:
-            remote_path: 远程目录路径
-            local_path: 本地目录路径
-            use_semaphore: 是否使用信号量
-        """
-        if use_semaphore:
-            async with self.semaphore:
-                await self._process_directory(remote_path, local_path)
-        else:
-            await self._process_directory(remote_path, local_path)
-
-    async def _process_directory(
-        self,
-        remote_path: str,
-        local_path: str
-    ):
-        """
-        处理目录
-
-        Args:
-            remote_path: 远程目录路径
-            local_path: 本地目录路径
-        """
         try:
-            files = await self.quark_service.get_files(remote_path)
-            logger.debug(f"Got {len(files)} files from {remote_path}")
+            # 递归获取所有文件
+            all_files = await self._get_all_files(root_id, remote_path, only_video)
+            stats["total_files"] = len(all_files)
 
-            for file in files:
-                if file.is_dir and self.recursive:
-                    logger.debug(f"Found directory: {remote_path}/{file.name}")
-
-                    # 增量更新检查
-                    full_remote_path = f"{remote_path}/{file.name}"
-                    if not self.force_refresh:
-                        records = self.database.get_records()
-                        if full_remote_path in records:
-                            logger.debug(f"Directory {full_remote_path} already processed, skip")
-                            continue
-
-                    # 计算本地路径
-                    if self.create_sub_directory:
-                        new_local_path = os.path.join(local_path, file.name)
-                    else:
-                        new_local_path = local_path
-
-                    # 递归扫描子目录
-                    await self._scan_recursive(full_remote_path, new_local_path, use_semaphore=False)
-
-                elif not file.is_dir:
-                    # 处理文件
-                    ext = os.path.splitext(file.name)[1].lower()
-
-                    if ext in self.exts:
-                        # 生成STRM
-                        await self._generate_strm(file, remote_path, local_path)
-                    elif ext in self.alt_exts:
-                        # 下载字幕文件
-                        await self._download_subtitle(file, remote_path, local_path)
-
-        except Exception as e:
-            logger.error(f"Failed to scan {remote_path}: {str(e)}")
-
-    async def _generate_strm(
-        self,
-        file: FileModel,
-        remote_path: str,
-        local_path: str
-    ):
-        """
-        生成STRM
-
-        参考: AlistAutoStrm mission.go:72-88
-
-        Args:
-            file: 文件对象
-            remote_path: 远程目录路径
-            local_path: 本地目录路径
-        """
-        try:
-            # 获取下载直链
-            link = await self.quark_service.get_download_link(file.id)
-
-            # 生成STRM文件名
-            name = os.path.splitext(file.name)[0] + ".strm"
-
-            # 创建STRM模型
-            strm = StrmModel(
-                name=name,
-                local_dir=local_path,
-                remote_dir=remote_path,
-                raw_url=link.url
-            )
-
-            # 保存到数据库
-            self.database.save_strm(
-                strm.key,
-                strm.name,
-                strm.local_dir,
-                strm.remote_dir,
-                strm.raw_url
-            )
+            logger.info(f"Found {len(all_files)} files to process")
 
             # 生成STRM文件
-            strm.gen_strm_file(overwrite=True)
-
-            self.strms.append(strm)
-            logger.debug(f"Generated STRM: {strm.full_path}")
+            for file_info in all_files:
+                try:
+                    result = await self._generate_single_strm(file_info)
+                    if result:
+                        stats["generated_files"] += 1
+                    else:
+                        stats["skipped_files"] += 1
+                except Exception as e:
+                    stats["failed_files"] += 1
+                    error_msg = f"Failed to generate STRM for {file_info.get('name', 'unknown')}: {str(e)}"
+                    stats["errors"].append(error_msg)
+                    logger.error(error_msg)
 
         except Exception as e:
-            logger.error(f"Failed to generate STRM for {file.name}: {str(e)}")
+            logger.error(f"Failed to generate STRM files: {str(e)}")
+            stats["errors"].append(str(e))
 
-    async def _download_subtitle(
+        return stats
+
+    async def _get_all_files(
         self,
-        file: FileModel,
+        parent_id: str,
         remote_path: str,
-        local_path: str
-    ):
+        only_video: bool
+    ) -> List[Dict[str, Any]]:
         """
-        下载字幕文件
-
-        参考: AlistAutoStrm mission.go:89-154
+        递归获取所有文件
 
         Args:
-            file: 文件对象
-            remote_path: 远程目录路径
-            local_path: 本地目录路径
+            parent_id: 父目录ID
+            remote_path: 远程路径
+            only_video: 是否只获取视频文件
+
+        Returns:
+            文件列表
         """
+        files = []
+
         try:
-            file_path = os.path.join(local_path, file.name)
+            # 获取当前目录的文件列表
+            file_models = await self.service.get_files(
+                parent=parent_id,
+                only_video=False  # 获取所有文件以便递归
+            )
 
-            # 检查文件是否已存在
-            if os.path.exists(file_path):
-                logger.debug(f"Subtitle file {file_path} already exists, skip")
-                return
+            for file_model in file_models:
+                file_name = file_model.file_name
+                file_id = file_model.fid
+                is_dir = file_model.is_dir
 
-            # 获取下载直链
-            link = await self.quark_service.get_download_link(file.id)
+                # 构建远程路径
+                current_remote_path = f"{remote_path}/{file_name}" if remote_path else file_name
 
-            # 下载文件
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    link.url,
-                    headers=link.headers
-                ) as response:
-                    if response.status == 200:
-                        os.makedirs(local_path, exist_ok=True)
-                        with open(file_path, 'wb') as f:
-                            async for chunk in response.content.iter_chunked(8192):
-                                f.write(chunk)
+                if is_dir:
+                    # 递归处理子目录
+                    sub_files = await self._get_all_files(
+                        file_id,
+                        current_remote_path,
+                        only_video
+                    )
+                    files.extend(sub_files)
+                else:
+                    # 检查是否为视频文件
+                    if only_video and file_model.category != 1:
+                        continue
 
-                        logger.debug(f"Downloaded subtitle: {file_path}")
-                    else:
-                        logger.error(f"Failed to download subtitle {file.name}: status {response.status}")
+                    files.append({
+                        "id": file_id,
+                        "name": file_name,
+                        "remote_path": current_remote_path,
+                        "size": file_model.size,
+                        "category": file_model.category
+                    })
 
         except Exception as e:
-            logger.error(f"Failed to download subtitle {file.name}: {str(e)}")
+            logger.error(f"Failed to get files from {parent_id}: {str(e)}")
+
+        return files
+
+    async def _generate_single_strm(self, file_info: Dict[str, Any]) -> bool:
+        """
+        生成单个STRM文件
+
+        Args:
+            file_info: 文件信息
+
+        Returns:
+            是否成功生成
+        """
+        file_name = file_info["name"]
+        file_id = file_info["id"]
+        remote_path = file_info["remote_path"]
+
+        # 构建STRM文件路径
+        strm_path = self.output_dir / f"{remote_path}.strm"
+
+        # 检查文件是否已存在
+        if strm_path.exists():
+            logger.debug(f"STRM file already exists: {strm_path}")
+            return False
+
+        # 确保父目录存在
+        strm_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 获取直链URL
+        try:
+            if self.use_transcoding:
+                link = await self.service.get_transcoding_link(file_id)
+            else:
+                link = await self.service.get_download_link(file_id)
+
+            video_url = link.url
+
+            # 写入STRM文件
+            with open(strm_path, 'w', encoding='utf-8') as f:
+                f.write(video_url)
+
+            logger.info(f"Generated STRM file: {strm_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to get link for {file_name}: {str(e)}")
+            raise
+
+    async def close(self):
+        """关闭服务"""
+        await self.service.close()
+        logger.debug("STRMGenerator closed")
+
+
+async def generate_strm_from_quark(
+    cookie: str = None,
+    output_dir: str = "./strm",
+    root_id: str = None,
+    only_video: bool = None
+) -> Dict[str, Any]:
+    """
+    从夸克网盘生成STRM文件的便捷函数
+
+    Args:
+        cookie: 夸克Cookie（可选，默认从配置文件读取）
+        output_dir: 输出目录
+        root_id: 根目录ID（可选，默认从配置文件读取）
+        only_video: 是否只处理视频文件（可选，默认从配置文件读取）
+
+    Returns:
+        生成结果
+    """
+    config = get_config()
+
+    # 使用传入的参数或配置文件中的值
+    cookie = cookie or config.get_quark_cookie()
+    root_id = root_id or config.get_quark_root_id()
+    if only_video is None:
+        only_video = config.get_quark_only_video()
+
+    if not cookie:
+        raise ValueError("Cookie is required. Please provide cookie parameter or set it in config.yaml")
+
+    generator = STRMGenerator(
+        cookie=cookie,
+        output_dir=output_dir
+    )
+
+    try:
+        result = await generator.generate_strm_files(
+            root_id=root_id,
+            only_video=only_video
+        )
+        return result
+    finally:
+        await generator.close()

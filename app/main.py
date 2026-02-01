@@ -7,7 +7,7 @@ FastAPI主应用
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import quark, strm, proxy
+from app.api import quark, strm, proxy, emby, tasks, strm_validator, quark_sdk, search, rename
 from app.config.settings import AppConfig
 from app.core.logging import setup_logging, get_logger
 import os
@@ -64,6 +64,12 @@ app.add_middleware(
 app.include_router(quark.router)
 app.include_router(strm.router)
 app.include_router(proxy.router)
+app.include_router(emby.router)
+app.include_router(tasks.router)
+app.include_router(strm_validator.router)
+app.include_router(quark_sdk.router)
+app.include_router(search.router)
+app.include_router(rename.router)
 
 
 @app.get("/")
