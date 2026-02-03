@@ -16,6 +16,68 @@
       </div>
     </div>
 
+    <!-- Configuration Section -->
+    <div class="configuration-section">
+      <!-- Algorithm Selection Card -->
+      <div class="config-card glass-card">
+        <div class="card-header">
+          <div class="header-title">
+            <el-icon class="header-icon"><Cpu /></el-icon>
+            <h3>重命名算法</h3>
+          </div>
+          <el-tooltip content="选择适合您需求的解析算法" placement="top">
+            <el-icon class="help-icon"><InfoFilled /></el-icon>
+          </el-tooltip>
+        </div>
+        
+        <div class="config-content">
+          <el-radio-group v-model="selectedAlgorithm" size="large" class="algorithm-group">
+            <el-radio-button 
+              v-for="algo in algorithms" 
+              :key="algo.value" 
+              :value="algo.value"
+            >
+              <div class="algorithm-option">
+                <div class="algo-header">
+                  <span class="algo-name">{{ algo.label }}</span>
+                  <el-tag v-if="algo.recommended" type="success" size="small" class="recommend-tag">推荐</el-tag>
+                </div>
+                <div class="algo-desc">{{ algo.description }}</div>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
+
+      <!-- Naming Standard Card -->
+      <div class="config-card glass-card">
+        <div class="card-header">
+          <div class="header-title">
+            <el-icon class="header-icon"><Document /></el-icon>
+            <h3>命名标准</h3>
+          </div>
+          <el-tooltip content="选择媒体服务器兼容的命名规范" placement="top">
+            <el-icon class="help-icon"><InfoFilled /></el-icon>
+          </el-tooltip>
+        </div>
+        
+        <div class="config-content">
+          <el-radio-group v-model="selectedStandard" size="large" class="standard-group">
+            <el-radio-button 
+              v-for="std in namingStandards" 
+              :key="std.value" 
+              :value="std.value"
+            >
+              <div class="standard-option">
+                <span class="std-name">{{ std.label }}</span>
+                <span class="std-desc">{{ std.description }}</span>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content -->
     <div class="rename-container">
       <!-- Step 1: Select Path -->
@@ -479,7 +541,8 @@ import {
   Delete,
   Warning,
   CircleCheck,
-  CircleClose
+  CircleClose,
+  Cpu
 } from '@element-plus/icons-vue'
 import { previewRename, executeRename, type RenameTask, type ProgressMessage } from '@/api/rename'
 
@@ -490,6 +553,23 @@ const analyzing = ref(false)
 const executing = ref(false)
 const selectAll = ref(false)
 const filterType = ref<'all' | 'pending' | 'confirmed'>('all')
+
+// Algorithm and Naming Standard
+const selectedAlgorithm = ref('ai_enhanced')
+const selectedStandard = ref('emby')
+
+const algorithms = ref([
+  { value: 'standard', label: '标准本地算法', description: '使用正则表达式解析，速度快', recommended: false },
+  { value: 'ai_enhanced', label: 'AI 增强算法', description: '正则+AI智能解析，准确性高', recommended: true },
+  { value: 'ai_only', label: '纯 AI 算法', description: '完全AI解析，准确性最高', recommended: false }
+])
+
+const namingStandards = ref([
+  { value: 'emby', label: 'Emby 标准', description: '兼容 Emby 媒体服务器' },
+  { value: 'plex', label: 'Plex 标准', description: '兼容 Plex 媒体服务器' },
+  { value: 'kodi', label: 'Kodi 标准', description: '兼容 Kodi 媒体中心' },
+  { value: 'custom', label: '自定义', description: '使用自定义命名模板' }
+])
 
 const options = reactive({
   recursive: true,
@@ -724,6 +804,89 @@ const resetWorkflow = () => {
 .page-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+/* Configuration Section */
+.configuration-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.config-card {
+  padding: 24px;
+  border-radius: 12px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-icon {
+  color: var(--el-color-primary);
+  font-size: 20px;
+}
+
+.help-icon {
+  color: var(--el-text-color-secondary);
+  cursor: help;
+}
+
+.config-content {
+  padding: 8px 0;
+}
+
+.algorithm-group,
+.standard-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+
+.algorithm-option,
+.standard-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  min-width: 180px;
+}
+
+.algo-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.algo-name,
+.std-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+
+.algo-desc,
+.std-desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.recommend-tag {
+  margin-left: 4px;
 }
 
 /* Step Section */

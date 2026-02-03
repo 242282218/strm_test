@@ -12,113 +12,244 @@
       <div class="header-actions">
         <el-button type="primary" size="large" @click="showSettings = true">
           <el-icon><Setting /></el-icon>
-          配置规则
+          高级配置
+        </el-button>
+        <el-button type="info" size="large" @click="showHelp = true">
+          <el-icon><QuestionFilled /></el-icon>
+          使用帮助
         </el-button>
       </div>
     </div>
 
-    <!-- Algorithm Selection Card -->
-    <div class="algorithm-card glass-card">
-      <div class="card-header">
-        <h3>
-          <el-icon><Cpu /></el-icon>
-          选择重命名算法
-        </h3>
-        <el-tooltip content="选择适合您需求的解析算法">
-          <el-icon><InfoFilled /></el-icon>
-        </el-tooltip>
-      </div>
-      
-      <div class="algorithm-options">
-        <el-radio-group v-model="selectedAlgorithm" size="large">
-          <el-radio-button 
-            v-for="algo in algorithms" 
-            :key="algo.algorithm" 
-            :value="algo.algorithm"
-            :class="{ 'recommended': algo.recommended }"
-          >
-            <div class="algorithm-option">
-              <span class="algo-name">{{ algo.name }}</span>
-              <el-tag v-if="algo.recommended" type="success" size="small">推荐</el-tag>
-            </div>
-          </el-radio-button>
-        </el-radio-group>
+    <!-- Configuration Section -->
+    <div class="configuration-section">
+      <!-- Algorithm Selection Card -->
+      <div class="config-card glass-card">
+        <div class="card-header">
+          <div class="header-title">
+            <el-icon class="header-icon"><Cpu /></el-icon>
+            <h3>重命名算法</h3>
+          </div>
+          <el-tooltip content="选择适合您需求的解析算法" placement="top">
+            <el-icon class="help-icon"><InfoFilled /></el-icon>
+          </el-tooltip>
+        </div>
         
-        <div class="algorithm-description" v-if="currentAlgorithm">
-          <p>{{ currentAlgorithm.description }}</p>
-          <div class="algorithm-features">
-            <el-tag 
-              v-for="feature in currentAlgorithm.features" 
-              :key="feature"
-              type="info"
-              size="small"
-              effect="plain"
+        <div class="config-content">
+          <el-radio-group v-model="selectedAlgorithm" size="large" class="algorithm-group">
+            <el-radio-button 
+              v-for="algo in algorithms" 
+              :key="algo.algorithm" 
+              :value="algo.algorithm"
+              :class="{ 'recommended': algo.recommended }"
             >
-              {{ feature }}
-            </el-tag>
+              <div class="algorithm-option">
+                <div class="algo-header">
+                  <span class="algo-name">{{ algo.name }}</span>
+                  <el-tag v-if="algo.recommended" type="success" size="small" class="recommend-tag">推荐</el-tag>
+                </div>
+                <div class="algo-desc">{{ algo.description }}</div>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+          
+          <div class="algorithm-details" v-if="currentAlgorithm">
+            <div class="details-header">
+              <span class="details-title">算法特性</span>
+            </div>
+            <div class="features-grid">
+              <div 
+                v-for="feature in currentAlgorithm.features" 
+                :key="feature"
+                class="feature-item"
+              >
+                <el-icon class="feature-icon"><Check /></el-icon>
+                <span class="feature-text">{{ feature }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Naming Standard Card -->
-    <div class="standard-card glass-card">
-      <div class="card-header">
-        <h3>
-          <el-icon><Document /></el-icon>
-          命名标准
-        </h3>
-      </div>
-      
-      <div class="standard-options">
-        <el-radio-group v-model="selectedStandard" size="large">
-          <el-radio-button 
-            v-for="std in namingStandards" 
-            :key="std.standard" 
-            :value="std.standard"
-          >
-            {{ std.name }}
-          </el-radio-button>
-        </el-radio-group>
+      <!-- Naming Standard Card -->
+      <div class="config-card glass-card">
+        <div class="card-header">
+          <div class="header-title">
+            <el-icon class="header-icon"><Document /></el-icon>
+            <h3>命名标准</h3>
+          </div>
+          <el-tooltip content="选择媒体服务器兼容的命名规范" placement="top">
+            <el-icon class="help-icon"><InfoFilled /></el-icon>
+          </el-tooltip>
+        </div>
         
-        <div class="standard-examples" v-if="currentStandard">
-          <div class="example-item">
-            <span class="example-label">电影:</span>
-            <code class="example-code">{{ currentStandard.movie_example }}</code>
+        <div class="config-content">
+          <el-radio-group v-model="selectedStandard" size="large" class="standard-group">
+            <el-radio-button 
+              v-for="std in namingStandards" 
+              :key="std.standard" 
+              :value="std.standard"
+            >
+              <div class="standard-option">
+                <span class="std-name">{{ std.name }}</span>
+                <span class="std-desc">{{ std.description }}</span>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+          
+          <div class="standard-examples" v-if="currentStandard">
+            <div class="examples-header">
+              <span class="examples-title">命名示例</span>
+            </div>
+            <div class="examples-grid">
+              <div class="example-card">
+                <div class="example-type">
+                  <el-icon><VideoCamera /></el-icon>
+                  电影
+                </div>
+                <div class="example-path">{{ currentStandard.movie_example }}</div>
+              </div>
+              <div class="example-card">
+                <div class="example-type">
+                  <el-icon><Monitor /></el-icon>
+                  剧集
+                </div>
+                <div class="example-path">{{ currentStandard.tv_example }}</div>
+              </div>
+              <div class="example-card">
+                <div class="example-type">
+                  <el-icon><Star /></el-icon>
+                  特别篇
+                </div>
+                <div class="example-path">{{ currentStandard.specials_example }}</div>
+              </div>
+            </div>
           </div>
-          <div class="example-item">
-            <span class="example-label">剧集:</span>
-            <code class="example-code">{{ currentStandard.tv_example }}</code>
+        </div>
+      </div>
+
+      <!-- Advanced Options Card -->
+      <div class="config-card glass-card">
+        <div class="card-header">
+          <div class="header-title">
+            <el-icon class="header-icon"><Tools /></el-icon>
+            <h3>高级选项</h3>
           </div>
-          <div class="example-item">
-            <span class="example-label">特别篇:</span>
-            <code class="example-code">{{ currentStandard.specials_example }}</code>
+          <el-tooltip content="配置重命名的高级参数" placement="top">
+            <el-icon class="help-icon"><InfoFilled /></el-icon>
+          </el-tooltip>
+        </div>
+        
+        <div class="config-content">
+          <div class="options-grid">
+            <div class="option-group">
+              <label class="option-label">文件处理</label>
+              <div class="option-items">
+                <el-checkbox v-model="options.recursive" class="option-item">
+                  包含子文件夹
+                </el-checkbox>
+                <el-checkbox v-model="options.createFolders" class="option-item">
+                  创建文件夹结构
+                </el-checkbox>
+                <el-checkbox v-model="options.autoConfirm" class="option-item">
+                  自动确认高置信度匹配 (≥90%)
+                </el-checkbox>
+              </div>
+            </div>
+            
+            <div class="option-group">
+              <label class="option-label">命名规则</label>
+              <div class="option-items">
+                <el-checkbox v-model="options.includeQuality" class="option-item">
+                  包含质量信息
+                </el-checkbox>
+                <el-checkbox v-model="options.includeSource" class="option-item">
+                  包含来源信息
+                </el-checkbox>
+                <el-checkbox v-model="options.includeTmdbId" class="option-item">
+                  包含 TMDB ID
+                </el-checkbox>
+              </div>
+            </div>
+            
+            <div class="option-group">
+              <label class="option-label">安全设置</label>
+              <div class="option-items">
+                <el-checkbox v-model="options.backupBeforeRename" class="option-item">
+                  重命名前备份
+                </el-checkbox>
+                <el-checkbox v-model="options.dryRun" class="option-item">
+                  仅预览不执行
+                </el-checkbox>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="rename-container">
+    <!-- Operation Flow -->
+    <div class="operation-flow">
+      <!-- Step Progress -->
+      <div class="step-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: progressWidth }"></div>
+        </div>
+        <div class="step-indicators">
+          <div class="step-indicator" :class="{ 'active': currentStep >= 1, 'completed': currentStep > 1 }">
+            <div class="step-circle">1</div>
+            <span class="step-label">选择路径</span>
+          </div>
+          <div class="step-indicator" :class="{ 'active': currentStep >= 2, 'completed': currentStep > 2 }">
+            <div class="step-circle">2</div>
+            <span class="step-label">预览结果</span>
+          </div>
+          <div class="step-indicator" :class="{ 'active': currentStep >= 3, 'completed': currentStep > 3 }">
+            <div class="step-circle">3</div>
+            <span class="step-label">执行重命名</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Step 1: Select Path -->
       <div class="step-section glass-card" :class="{ 'active': currentStep >= 1 }">
         <div class="step-header">
-          <div class="step-number">1</div>
           <div class="step-info">
-            <h3>选择文件夹</h3>
-            <p>选择需要整理的媒体文件夹</p>
+            <div class="step-title">
+              <el-icon><FolderOpened /></el-icon>
+              <h3>选择媒体文件夹</h3>
+            </div>
+            <p class="step-description">选择包含需要整理的媒体文件的文件夹路径</p>
           </div>
-          <el-tag v-if="selectedPath" type="success" effect="dark">
-            <el-icon><Check /></el-icon>
-            已选择
-          </el-tag>
+          <div class="step-status">
+            <el-tag v-if="selectedPath" type="success" effect="dark" class="status-tag">
+              <el-icon><Check /></el-icon>
+              已选择
+            </el-tag>
+            <el-tag v-else type="info" effect="plain" class="status-tag">
+              <el-icon><Clock /></el-icon>
+              等待选择
+            </el-tag>
+          </div>
         </div>
         
         <div class="step-content" v-show="currentStep >= 1">
           <div class="path-selector">
+            <div class="selector-header">
+              <span class="selector-label">文件夹路径</span>
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click="openPathSelector"
+                class="browse-btn"
+              >
+                <el-icon><FolderOpened /></el-icon>
+                浏览文件夹
+              </el-button>
+            </div>
             <el-input
               v-model="selectedPath"
-              placeholder="点击选择文件夹..."
+              placeholder="请选择包含媒体文件的文件夹..."
               readonly
               size="large"
               class="path-input"
@@ -126,25 +257,7 @@
               <template #prefix>
                 <el-icon><Folder /></el-icon>
               </template>
-              <template #append>
-                <el-button @click="openPathSelector">
-                  <el-icon><FolderOpened /></el-icon>
-                  浏览
-                </el-button>
-              </template>
             </el-input>
-          </div>
-          
-          <div class="path-options">
-            <el-checkbox v-model="options.recursive">
-              包含子文件夹
-            </el-checkbox>
-            <el-checkbox v-model="options.createFolders">
-              创建文件夹结构
-            </el-checkbox>
-            <el-checkbox v-model="options.autoConfirm">
-              自动确认高置信度匹配 (≥90%)
-            </el-checkbox>
           </div>
           
           <div class="step-actions">
@@ -154,9 +267,20 @@
               :disabled="!selectedPath"
               :loading="analyzing"
               @click="startAnalysis"
+              class="action-btn"
             >
-              <el-icon><VideoPlay /></el-icon>
-              开始分析
+              <el-icon><Search /></el-icon>
+              扫描媒体文件
+            </el-button>
+            <el-button
+              type="info"
+              size="large"
+              @click="resetSelection"
+              :disabled="!selectedPath"
+              class="action-btn"
+            >
+              <el-icon><Refresh /></el-icon>
+              重新选择
             </el-button>
           </div>
         </div>
@@ -165,103 +289,145 @@
       <!-- Step 2: Preview Results -->
       <div class="step-section glass-card" :class="{ 'active': currentStep >= 2, 'disabled': currentStep < 2 }">
         <div class="step-header">
-          <div class="step-number">2</div>
           <div class="step-info">
-            <h3>预览重命名</h3>
-            <p>查看识别的媒体信息并确认</p>
+            <div class="step-title">
+              <el-icon><View /></el-icon>
+              <h3>预览重命名结果</h3>
+            </div>
+            <p class="step-description">查看识别的媒体信息，确认或修改重命名建议</p>
           </div>
-          <div class="step-stats" v-if="previewData">
-            <el-tag type="info">共 {{ previewData.total_items }} 个文件</el-tag>
-            <el-tag type="success">已匹配 {{ previewData.matched_items }}</el-tag>
-            <el-tag type="warning" v-if="previewData.needs_confirmation > 0">
-              {{ previewData.needs_confirmation }} 个待确认
-            </el-tag>
+          <div class="step-status" v-if="previewData">
+            <div class="stats-panel">
+              <div class="stat-item">
+                <span class="stat-label">总文件数</span>
+                <span class="stat-value">{{ previewData.total_items }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">已匹配</span>
+                <span class="stat-value success">{{ previewData.matched_items }}</span>
+              </div>
+              <div class="stat-item" v-if="previewData.needs_confirmation > 0">
+                <span class="stat-label">待确认</span>
+                <span class="stat-value warning">{{ previewData.needs_confirmation }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">置信度</span>
+                <span class="stat-value info">{{ Math.round(previewData.average_confidence * 100) }}%</span>
+              </div>
+            </div>
           </div>
         </div>
         
         <div class="step-content" v-show="currentStep >= 2 && previewData">
-          <!-- Algorithm Info Banner -->
-          <el-alert
-            v-if="previewData"
-            :title="`使用算法: ${getAlgorithmName(previewData.algorithm_used)} | 命名标准: ${getStandardName(previewData.naming_standard)}`"
-            type="info"
-            :closable="false"
-            class="algorithm-banner"
-          />
-
-          <!-- Task List -->
-          <div class="task-list" v-if="previewData && previewData.items.length > 0">
-            <div class="list-header">
-              <el-checkbox v-model="selectAll" @change="handleSelectAll">
-                全选
-              </el-checkbox>
-              <div class="header-filters">
-                <el-radio-group v-model="filterType" size="small">
-                  <el-radio-button value="all">全部</el-radio-button>
-                  <el-radio-button value="pending">待确认</el-radio-button>
-                  <el-radio-button value="confirmed">已确认</el-radio-button>
-                  <el-radio-button value="matched">已匹配</el-radio-button>
-                </el-radio-group>
+          <!-- Analysis Summary -->
+          <div class="summary-banner">
+            <div class="summary-info">
+              <div class="info-item">
+                <el-icon><Cpu /></el-icon>
+                <span>解析算法: {{ getAlgorithmName(previewData.algorithm_used) }}</span>
+              </div>
+              <div class="info-item">
+                <el-icon><Document /></el-icon>
+                <span>命名标准: {{ getStandardName(previewData.naming_standard) }}</span>
+              </div>
+              <div class="info-item">
+                <el-icon><Timer /></el-icon>
+                <span>分析耗时: {{ previewData.analysis_time }}s</span>
               </div>
             </div>
+            <div class="summary-actions">
+              <el-button type="info" size="small" @click="exportPreview">
+                <el-icon><Download /></el-icon>
+                导出预览
+              </el-button>
+              <el-button type="warning" size="small" @click="refreshPreview">
+                <el-icon><Refresh /></el-icon>
+                重新分析
+              </el-button>
+            </div>
+          </div>
 
-            <div class="task-items">
+          <!-- File List Controls -->
+          <div class="list-controls">
+            <div class="controls-left">
+              <el-checkbox v-model="selectAll" @change="handleSelectAll">
+                全选 ({{ selectedItems.length }}/{{ previewData.items.length }})
+              </el-checkbox>
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click="confirmSelected"
+                :disabled="selectedItems.length === 0"
+              >
+                <el-icon><Check /></el-icon>
+                批量确认
+              </el-button>
+              <el-button 
+                type="warning" 
+                size="small" 
+                @click="editSelected"
+                :disabled="selectedItems.length === 0"
+              >
+                <el-icon><Edit /></el-icon>
+                批量编辑
+              </el-button>
+            </div>
+            <div class="controls-right">
+              <el-input
+                v-model="searchKeyword"
+                placeholder="搜索文件名..."
+                size="small"
+                style="width: 200px;"
+                clearable
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+              <el-select v-model="filterType" size="small" style="width: 120px;">
+                <el-option label="全部文件" value="all" />
+                <el-option label="待确认" value="pending" />
+                <el-option label="已确认" value="confirmed" />
+                <el-option label="已匹配" value="matched" />
+                <el-option label="高置信度" value="high_confidence" />
+                <el-option label="低置信度" value="low_confidence" />
+              </el-select>
+              <el-select v-model="sortBy" size="small" style="width: 140px;">
+                <el-option label="按文件名排序" value="filename" />
+                <el-option label="按置信度排序" value="confidence" />
+                <el-option label="按文件类型排序" value="type" />
+                <el-option label="按状态排序" value="status" />
+              </el-select>
+            </div>
+          </div>
+
+          <!-- File List -->
+          <div class="file-list" v-if="previewData && previewData.items.length > 0">
+            <div class="list-container">
               <div
                 v-for="item in filteredItems"
                 :key="item.original_path"
-                class="task-item"
+                class="file-item"
                 :class="{
                   'needs-confirmation': item.needs_confirmation,
-                  'selected': selectedItems.includes(item.original_path)
+                  'selected': selectedItems.includes(item.original_path),
+                  'high-confidence': item.overall_confidence >= 0.9,
+                  'medium-confidence': item.overall_confidence >= 0.6 && item.overall_confidence < 0.9,
+                  'low-confidence': item.overall_confidence < 0.6
                 }"
               >
-                <el-checkbox
-                  v-model="selectedItems"
-                  :label="item.original_path"
-                  class="task-checkbox"
-                >
-                  {{ '' }}
-                </el-checkbox>
-
-                <div class="task-preview">
-                  <div class="file-info">
-                    <div class="original-name">
-                      <el-icon><Document /></el-icon>
-                      <span class="name-text" :title="item.original_path">
-                        {{ getFileName(item.original_path) }}
-                      </span>
-                    </div>
-                    <el-icon class="arrow-icon"><ArrowRight /></el-icon>
-                    <div class="new-name">
-                      <el-icon><DocumentChecked /></el-icon>
-                      <span class="name-text" :title="item.new_name">
-                        {{ item.new_name }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div class="media-info">
-                    <div class="info-tags">
+                <div class="item-header">
+                  <el-checkbox
+                    v-model="selectedItems"
+                    :label="item.original_path"
+                    class="item-checkbox"
+                  />
+                  <div class="item-info">
+                    <div class="file-type">
                       <el-tag size="small" :type="getMediaTypeColor(item.media_type)">
                         {{ getMediaTypeLabel(item.media_type) }}
                       </el-tag>
-                      <el-tag v-if="item.tmdb_year" size="small" type="info">
-                        {{ item.tmdb_year }}
-                      </el-tag>
-                      <el-tag v-if="item.season !== undefined" size="small" type="warning">
-                        S{{ String(item.season).padStart(2, '0') }}
-                      </el-tag>
-                      <el-tag v-if="item.episode !== undefined" size="small" type="warning">
-                        E{{ String(item.episode).padStart(2, '0') }}
-                      </el-tag>
-                      <el-tag v-if="item.tmdb_id" size="small" type="success">
-                        TMDB:{{ item.tmdb_id }}
-                      </el-tag>
-                      <el-tag size="small" type="info" effect="plain">
-                        {{ getAlgorithmShortName(item.used_algorithm) }}
-                      </el-tag>
                     </div>
-
                     <div class="confidence-indicator">
                       <el-tooltip :content="`置信度: ${Math.round(item.overall_confidence * 100)}%`">
                         <div class="confidence-bar">
@@ -275,30 +441,90 @@
                       <span class="confidence-value">{{ Math.round(item.overall_confidence * 100) }}%</span>
                     </div>
                   </div>
-
-                  <div class="task-status" v-if="item.needs_confirmation">
-                    <el-tooltip :content="item.confirmation_reason">
-                      <el-tag type="warning" size="small" effect="dark">
-                        <el-icon><Warning /></el-icon>
-                        需确认
-                      </el-tag>
-                    </el-tooltip>
-                  </div>
-
-                  <div class="task-status" v-else-if="item.tmdb_id">
-                    <el-tag type="success" size="small" effect="dark">
+                  <div class="item-status">
+                    <el-tag 
+                      v-if="item.needs_confirmation" 
+                      type="warning" 
+                      size="small" 
+                      effect="dark"
+                    >
+                      <el-icon><Warning /></el-icon>
+                      需确认
+                    </el-tag>
+                    <el-tag 
+                      v-else-if="item.tmdb_id" 
+                      type="success" 
+                      size="small" 
+                      effect="dark"
+                    >
                       <el-icon><Check /></el-icon>
                       已匹配
+                    </el-tag>
+                    <el-tag v-else type="info" size="small" effect="plain">
+                      未匹配
                     </el-tag>
                   </div>
                 </div>
 
-                <div class="task-actions">
+                <div class="item-content">
+                  <div class="file-preview">
+                    <div class="original-file">
+                      <div class="file-label">
+                        <el-icon><Document /></el-icon>
+                        原文件名
+                      </div>
+                      <div class="file-path" :title="item.original_path">
+                        {{ getFileName(item.original_path) }}
+                      </div>
+                    </div>
+                    <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+                    <div class="new-file">
+                      <div class="file-label">
+                        <el-icon><DocumentChecked /></el-icon>
+                        新文件名
+                      </div>
+                      <div class="file-path" :title="item.new_name">
+                        {{ item.new_name }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="media-details">
+                    <div class="details-grid">
+                      <div class="detail-item" v-if="item.tmdb_title">
+                        <span class="detail-label">标题:</span>
+                        <span class="detail-value">{{ item.tmdb_title }}</span>
+                      </div>
+                      <div class="detail-item" v-if="item.tmdb_year">
+                        <span class="detail-label">年份:</span>
+                        <span class="detail-value">{{ item.tmdb_year }}</span>
+                      </div>
+                      <div class="detail-item" v-if="item.season !== undefined">
+                        <span class="detail-label">季度:</span>
+                        <span class="detail-value">S{{ String(item.season).padStart(2, '0') }}</span>
+                      </div>
+                      <div class="detail-item" v-if="item.episode !== undefined">
+                        <span class="detail-label">集数:</span>
+                        <span class="detail-value">E{{ String(item.episode).padStart(2, '0') }}</span>
+                      </div>
+                      <div class="detail-item" v-if="item.tmdb_id">
+                        <span class="detail-label">TMDB ID:</span>
+                        <span class="detail-value">{{ item.tmdb_id }}</span>
+                      </div>
+                      <div class="detail-item">
+                        <span class="detail-label">解析算法:</span>
+                        <span class="detail-value">{{ getAlgorithmShortName(item.used_algorithm) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="item-actions">
                   <el-button
                     type="primary"
-                    text
                     size="small"
                     @click="editItem(item)"
+                    class="action-btn"
                   >
                     <el-icon><Edit /></el-icon>
                     编辑
@@ -892,6 +1118,7 @@ onMounted(() => {
 <style scoped>
 .smart-rename-page {
   min-height: 100%;
+  padding: 0 16px 32px;
 }
 
 /* Page Header */
@@ -899,8 +1126,13 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding: 0 8px;
+  margin-bottom: 32px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--el-border-color);
+}
+
+.header-content {
+  flex: 1;
 }
 
 .page-title {
@@ -912,110 +1144,332 @@ onMounted(() => {
   gap: 12px;
 }
 
+.gradient-text {
+  background: linear-gradient(135deg, var(--el-color-primary) 0%, var(--el-color-success) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 .version-tag {
   font-size: 12px;
 }
 
 .page-subtitle {
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--el-text-color-secondary);
 }
 
-/* Algorithm & Standard Cards */
-.algorithm-card,
-.standard-card {
-  margin-bottom: 24px;
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Configuration Section */
+.configuration-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.config-card {
   padding: 24px;
-  border-radius: var(--radius-xl);
+  border-radius: 12px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  box-shadow: var(--el-box-shadow-light);
 }
 
 .card-header {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header-title {
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+}
+
+.header-icon {
+  color: var(--el-color-primary);
+  font-size: 20px;
 }
 
 .card-header h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
+  margin: 0;
 }
 
-.algorithm-options,
-.standard-options {
+.help-icon {
+  color: var(--el-text-color-secondary);
+  cursor: help;
+}
+
+.config-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+}
+
+/* Algorithm Group */
+.algorithm-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .algorithm-option {
+  padding: 16px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.algorithm-option:hover {
+  background: var(--el-fill-color-light);
+}
+
+.algo-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 4px;
 }
 
 .algo-name {
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
 }
 
-.algorithm-description {
+.recommend-tag {
+  font-size: 12px;
+}
+
+.algo-desc {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+}
+
+.algorithm-details {
   padding: 16px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-lg);
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
 }
 
-.algorithm-description p {
+.details-header {
   margin-bottom: 12px;
-  color: var(--text-secondary);
 }
 
-.algorithm-features {
-  display: flex;
-  flex-wrap: wrap;
+.details-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.feature-icon {
+  color: var(--el-color-success);
+  font-size: 12px;
+}
+
+/* Standard Group */
+.standard-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.standard-option {
+  padding: 16px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.standard-option:hover {
+  background: var(--el-fill-color-light);
+}
+
+.std-name {
+  font-weight: 600;
+  font-size: 14px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.std-desc {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 .standard-examples {
   padding: 16px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-lg);
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
 }
 
-.example-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
+.examples-header {
+  margin-bottom: 12px;
 }
 
-.example-item:last-child {
-  margin-bottom: 0;
-}
-
-.example-label {
-  min-width: 60px;
-  color: var(--text-secondary);
+.examples-title {
+  font-weight: 600;
   font-size: 14px;
 }
 
-.example-code {
-  font-family: monospace;
+.examples-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.example-card {
+  padding: 12px;
+  background: var(--el-bg-color);
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color);
+}
+
+.example-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
-  color: var(--primary-600);
-  background: var(--bg-primary);
-  padding: 4px 8px;
-  border-radius: var(--radius-md);
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--el-text-color-secondary);
+}
+
+.example-path {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--el-color-primary);
+}
+
+/* Advanced Options */
+.options-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+
+.option-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-item {
+  margin: 0;
+}
+
+/* Operation Flow */
+.operation-flow {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.step-progress {
+  margin-bottom: 32px;
+  padding: 0 20px;
+}
+
+.progress-bar {
+  height: 4px;
+  background: var(--el-border-color);
+  border-radius: 2px;
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--el-color-primary);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.step-indicators {
+  display: flex;
+  justify-content: space-between;
+}
+
+.step-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--el-border-color);
+  color: var(--el-text-color-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.step-indicator.active .step-circle {
+  background: var(--el-color-primary);
+  color: white;
+}
+
+.step-indicator.completed .step-circle {
+  background: var(--el-color-success);
+  color: white;
+}
+
+.step-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+}
+
+.step-indicator.active .step-label,
+.step-indicator.completed .step-label {
+  color: var(--el-text-color-primary);
 }
 
 /* Step Section */
 .step-section {
   margin-bottom: 24px;
-  border-radius: var(--radius-xl);
+  border-radius: 12px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  box-shadow: var(--el-box-shadow-light);
   overflow: hidden;
-  transition: all var(--transition-normal);
+  transition: all 0.3s ease;
 }
 
 .step-section.disabled {
@@ -1024,158 +1478,392 @@ onMounted(() => {
 }
 
 .step-section.active {
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--el-box-shadow);
 }
 
 .step-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 16px;
   padding: 24px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.step-number {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--primary-500);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.step-section.disabled .step-number {
-  background: var(--gray-300);
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color);
 }
 
 .step-info {
   flex: 1;
 }
 
-.step-info h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: var(--text-primary);
-}
-
-.step-info p {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.step-stats {
+.step-title {
   display: flex;
+  align-items: center;
   gap: 8px;
+  margin-bottom: 4px;
+}
+
+.step-title h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.step-description {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin: 0;
+}
+
+.step-status {
+  display: flex;
+  gap: 12px;
+}
+
+.status-tag {
+  font-size: 12px;
 }
 
 .step-content {
   padding: 24px;
 }
 
-.step-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-color);
-}
-
-/* Algorithm Banner */
-.algorithm-banner {
-  margin-bottom: 16px;
-}
-
 /* Path Selector */
 .path-selector {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.selector-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.browse-btn {
+  font-size: 13px;
 }
 
 .path-input {
   font-size: 16px;
 }
 
-.path-options {
+.step-actions {
   display: flex;
-  gap: 24px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-top: 24px;
 }
 
-/* Task List */
-.list-header {
+.action-btn {
+  min-width: 120px;
+}
+
+/* Preview Results */
+.summary-banner {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  background: var(--el-color-info-light-9);
+  border: 1px solid var(--el-color-info-light-8);
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.summary-info {
+  display: flex;
+  gap: 24px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.summary-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.stats-panel {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.stat-value.success {
+  color: var(--el-color-success);
+}
+
+.stat-value.warning {
+  color: var(--el-color-warning);
+}
+
+.stat-value.info {
+  color: var(--el-color-info);
+}
+
+/* List Controls */
+.list-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
   margin-bottom: 16px;
 }
 
-.task-items {
+.controls-left {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 12px;
-  max-height: 500px;
+}
+
+.controls-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* File List */
+.file-list {
+  max-height: 600px;
   overflow-y: auto;
 }
 
-.task-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  border: 2px solid transparent;
-  transition: all var(--transition-fast);
-}
-
-.task-item:hover {
-  border-color: var(--primary-200);
-}
-
-.task-item.needs-confirmation {
-  border-color: var(--warning-200);
-  background: var(--warning-50);
-}
-
-.task-item.selected {
-  border-color: var(--primary-500);
-}
-
-.task-checkbox {
-  flex-shrink: 0;
-}
-
-.task-preview {
-  flex: 1;
+.list-container {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.file-info {
+.file-item {
+  padding: 16px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.file-item:hover {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.file-item.selected {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.file-item.needs-confirmation {
+  border-color: var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
+}
+
+.file-item.high-confidence {
+  border-left: 4px solid var(--el-color-success);
+}
+
+.file-item.medium-confidence {
+  border-left: 4px solid var(--el-color-warning);
+}
+
+.file-item.low-confidence {
+  border-left: 4px solid var(--el-color-danger);
+}
+
+.item-header {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: 12px;
 }
 
-.original-name,
-.new-name {
+.item-checkbox {
+  flex-shrink: 0;
+}
+
+.item-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.file-type {
+  flex-shrink: 0;
+}
+
+.confidence-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  max-width: 300px;
+}
+
+.confidence-bar {
+  width: 80px;
+  height: 6px;
+  background: var(--el-border-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.confidence-fill.high {
+  background: var(--el-color-success);
+}
+
+.confidence-fill.medium {
+  background: var(--el-color-warning);
+}
+
+.confidence-fill.low {
+  background: var(--el-color-danger);
+}
+
+.confidence-value {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 30px;
+}
+
+.item-status {
+  flex-shrink: 0;
+}
+
+.item-content {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.file-preview {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.original-file,
+.new-file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.file-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+
+.file-path {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.arrow-icon {
+  color: var(--el-text-color-secondary);
+  margin-top: 20px;
+}
+
+.media-details {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.detail-item {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  min-width: 60px;
+}
+
+.detail-value {
+  color: var(--el-text-color-primary);
+}
+
+.item-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.action-btn {
+  font-size: 12px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .configuration-section {
+    grid-template-columns: 1fr;
+  }
+  
+  .item-content {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .file-preview {
+    grid-template-columns: 1fr;
+  }
+  
+  .arrow-icon {
+    display: none;
+  }
+  
+  .list-controls {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .controls-left,
+  .controls-right {
+    justify-content: center;
+  }
 }
 
 .original-name {

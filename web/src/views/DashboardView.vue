@@ -172,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
@@ -182,8 +182,12 @@ import {
   DocumentAdd,
   Check,
   Setting,
-  ArrowRight
+  ArrowRight,
+  Folder,
+  List
 } from '@element-plus/icons-vue'
+import { getDashboardStats, getTaskTrends } from '@/api/dashboard'
+import type { DashboardData, TaskTrends, RecentTask, ServiceStatus, CacheDetail } from '@/api/dashboard'
 
 const router = useRouter()
 const taskChartRef = ref<HTMLElement>()
@@ -192,37 +196,31 @@ let taskChart: echarts.ECharts | null = null
 let fileChart: echarts.ECharts | null = null
 
 const timeRange = ref('week')
+const loading = ref(false)
 
 // 统计数据
 const stats = ref([
-  { title: 'STRM文件', value: '1,234', icon: 'Document', type: 'primary', trend: 12 },
-  { title: '网盘文件', value: '5,678', icon: 'Folder', type: 'success', trend: 8 },
-  { title: '任务数量', value: '42', icon: 'List', type: 'warning', trend: -3 },
-  { title: '缓存命中', value: '98.5%', icon: 'Refresh', type: 'info', trend: 5 }
+  { title: 'STRM文件', value: '0', icon: 'Document', type: 'primary', trend: 0 },
+  { title: '网盘文件', value: '0', icon: 'Folder', type: 'success', trend: 0 },
+  { title: '任务数量', value: '0', icon: 'List', type: 'warning', trend: 0 },
+  { title: '缓存命中', value: '0%', icon: 'Refresh', type: 'info', trend: 0 }
 ])
 
 // 最近任务
-const recentTasks = ref([
-  { name: '同步电影目录', type: 'sync', status: 'running', progress: 65, time: '2024-01-31 14:30' },
-  { name: '生成STRM文件', type: 'generate', status: 'success', progress: 100, time: '2024-01-31 13:15' },
-  { name: '验证文件有效性', type: 'validate', status: 'success', progress: 100, time: '2024-01-31 12:00' },
-  { name: '清理过期缓存', type: 'cleanup', status: 'pending', progress: 0, time: '2024-01-31 11:30' }
-])
+const recentTasks = ref<RecentTask[]>([])
 
 // 服务状态
-const services = ref([
-  { name: 'API服务', status: 'running' },
-  { name: '任务调度器', status: 'running' },
-  { name: '缓存服务', status: 'running' },
-  { name: 'Emby代理', status: 'running' }
-])
+const services = ref<ServiceStatus[]>([])
 
 // 缓存统计
-const cacheStats = ref({
-  size: 156,
-  hitRate: 94.2,
+const cacheStats = ref<CacheDetail>({
+  size: 0,
+  hitRate: 0,
   ttl: 600
 })
+
+// 文件类型分布
+const fileTypes = ref<Record<string, number>>({})
 
 // 任务类型标签
 const getTaskTypeTag = (type: string) => {
@@ -270,81 +268,206 @@ const getProgressStatus = (status: string) => {
   return status === 'success' ? 'success' : status === 'failed' ? 'exception' : ''
 }
 
+/**
+ * 获取仪表盘数据
+ */
+const fetchDashboardData = async () => {
+  loading.value = true
+  try {
+    const data = await getDashboardStats()
+
+    // 更新统计数据
+    stats.value = [
+      {
+        title: 'STRM文件',
+        value: formatNumber(data.stats.strm_count),
+        icon: 'Document',
+        type: 'primary',
+        trend: 0 // 后端暂未提供趋势数据
+      },
+      {
+        title: '任务数量',
+        value: formatNumber(data.stats.task_count),
+        icon: 'List',
+        type: 'warning',
+        trend: 0
+      },
+      {
+        title: '缓存条目',
+        value: formatNumber(data.stats.cache_entries),
+        icon: 'Refresh',
+        type: 'info',
+        trend: 0
+      },
+      {
+        title: '缓存命中',
+        value: data.stats.cache_hit_rate.toFixed(1) + '%',
+        icon: 'Check',
+        type: 'success',
+        trend: 0
+      }
+    ]
+
+    // 更新最近任务
+    recentTasks.value = data.recent_tasks.map(task => ({
+      ...task,
+      // 转换状态值以匹配前端显示
+      status: task.status === 'stopped' ? 'pending' : task.status
+    }))
+
+    // 更新服务状态
+    services.value = data.services
+
+    // 更新缓存统计
+    cacheStats.value = data.cache_detail
+
+    // 更新文件类型分布
+    fileTypes.value = data.file_types
+
+  } catch (error) {
+    console.error('获取仪表盘数据失败:', error)
+    ElMessage.error('获取仪表盘数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * 获取任务趋势数据
+ */
+const fetchTaskTrends = async () => {
+  try {
+    const days = timeRange.value === 'week' ? 7 : 30
+    const trends = await getTaskTrends(days)
+    updateTaskChart(trends)
+  } catch (error) {
+    console.error('获取任务趋势失败:', error)
+  }
+}
+
+/**
+ * 格式化数字显示
+ */
+const formatNumber = (num: number): string => {
+  if (num >= 10000) {
+    return (num / 10000).toFixed(1) + '万'
+  }
+  return num.toLocaleString()
+}
+
+/**
+ * 更新任务趋势图表
+ */
+const updateTaskChart = (trends: TaskTrends) => {
+  if (!taskChart) return
+
+  taskChart.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['成功', '失败'], bottom: 0 },
+    grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: trends.dates
+    },
+    yAxis: { type: 'value' },
+    series: [
+      {
+        name: '成功',
+        type: 'line',
+        smooth: true,
+        data: trends.success,
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+            { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
+          ])
+        },
+        itemStyle: { color: '#3b82f6' }
+      },
+      {
+        name: '失败',
+        type: 'line',
+        smooth: true,
+        data: trends.failed,
+        itemStyle: { color: '#ef4444' }
+      }
+    ]
+  })
+}
+
+/**
+ * 更新文件类型图表
+ */
+const updateFileTypeChart = () => {
+  if (!fileChart) return
+
+  const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#6b7280', '#ec4899', '#14b8a6']
+  const data = Object.entries(fileTypes.value).map(([name, value], index) => ({
+    name: name.toUpperCase(),
+    value,
+    itemStyle: { color: colors[index % colors.length] }
+  }))
+
+  // 如果没有数据，显示默认空状态
+  if (data.length === 0) {
+    fileChart.setOption({
+      title: {
+        text: '暂无数据',
+        left: 'center',
+        top: 'center',
+        textStyle: { color: '#999', fontSize: 14 }
+      },
+      series: []
+    })
+    return
+  }
+
+  fileChart.setOption({
+    title: { show: false },
+    tooltip: { trigger: 'item' },
+    legend: { bottom: '5%', left: 'center' },
+    series: [
+      {
+        name: '文件类型',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: { show: false, position: 'center' },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 20,
+            fontWeight: 'bold'
+          }
+        },
+        labelLine: { show: false },
+        data
+      }
+    ]
+  })
+}
+
 // 初始化图表
 const initCharts = () => {
   if (taskChartRef.value) {
     taskChart = echarts.init(taskChartRef.value)
-    taskChart.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-      },
-      yAxis: { type: 'value' },
-      series: [
-        {
-          name: '成功',
-          type: 'line',
-          smooth: true,
-          data: [12, 15, 8, 20, 18, 25, 22],
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
-              { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
-            ])
-          },
-          itemStyle: { color: '#3b82f6' }
-        },
-        {
-          name: '失败',
-          type: 'line',
-          smooth: true,
-          data: [2, 1, 3, 1, 2, 1, 0],
-          itemStyle: { color: '#ef4444' }
-        }
-      ]
-    })
   }
 
   if (fileChartRef.value) {
     fileChart = echarts.init(fileChartRef.value)
-    fileChart.setOption({
-      tooltip: { trigger: 'item' },
-      legend: { bottom: '5%', left: 'center' },
-      series: [
-        {
-          name: '文件类型',
-          type: 'pie',
-          radius: ['40%', '70%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 10,
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: { show: false, position: 'center' },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: 20,
-              fontWeight: 'bold'
-            }
-          },
-          labelLine: { show: false },
-          data: [
-            { value: 1048, name: '电影', itemStyle: { color: '#3b82f6' } },
-            { value: 735, name: '电视剧', itemStyle: { color: '#8b5cf6' } },
-            { value: 580, name: '动漫', itemStyle: { color: '#10b981' } },
-            { value: 484, name: '纪录片', itemStyle: { color: '#f59e0b' } },
-            { value: 300, name: '其他', itemStyle: { color: '#6b7280' } }
-          ]
-        }
-      ]
-    })
   }
 }
+
+// 监听时间范围变化
+watch(timeRange, () => {
+  fetchTaskTrends()
+})
 
 // 操作函数
 const clearCache = () => {
@@ -368,8 +491,18 @@ const openSettings = () => {
   router.push('/config')
 }
 
-onMounted(() => {
+onMounted(async () => {
   initCharts()
+
+  // 加载仪表盘数据
+  await fetchDashboardData()
+
+  // 加载任务趋势
+  await fetchTaskTrends()
+
+  // 更新文件类型图表
+  updateFileTypeChart()
+
   window.addEventListener('resize', () => {
     taskChart?.resize()
     fileChart?.resize()
