@@ -36,12 +36,8 @@ export interface SearchResponse {
   has_more: boolean
 }
 
-export interface FilteredSearchResponse extends SearchResponse {
-  filters: {
-    min_score: number
-    min_confidence: number
-  }
-}
+// FilteredSearchResponse 已简化，使用 SearchResponse 替代
+export type FilteredSearchResponse = SearchResponse
 
 export interface SearchStatus {
   available: boolean
@@ -51,35 +47,32 @@ export interface SearchStatus {
 /**
  * 搜索资源
  * 
+ * 仅返回夸克网盘资源，按评分降序排序
+ * 
  * @param params 搜索参数
  * @returns 搜索结果
  */
 export const searchResources = (params: {
   keyword: string
-  cloud_types?: string[]
-  sources?: string[]
   page?: number
   page_size?: number
-  sort_by?: string
-  sort_order?: string
 }): Promise<SearchResponse> => {
   return api.get('/search', { params })
 }
 
 /**
- * 带过滤条件的资源搜索
+ * 带过滤条件的资源搜索（已简化）
  * 
- * @param params 搜索参数（含过滤条件）
- * @returns 过滤后的搜索结果
+ * 仅返回夸克网盘资源，按评分降序排序
+ * 
+ * @param params 搜索参数
+ * @returns 搜索结果
  */
 export const searchResourcesFiltered = (params: {
   keyword: string
-  min_score?: number
-  min_confidence?: number
-  cloud_types?: string[]
   page?: number
   page_size?: number
-}): Promise<FilteredSearchResponse> => {
+}): Promise<SearchResponse> => {
   return api.get('/search/filtered', { params })
 }
 

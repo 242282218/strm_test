@@ -50,7 +50,13 @@ const router = createRouter({
           path: '/rename',
           name: 'Rename',
           component: () => import('@/views/RenameView.vue'),
-          meta: { title: '智能重命名', icon: 'EditPen' }
+          meta: { title: '基础重命名', icon: 'EditPen' }
+        },
+        {
+          path: '/smart-rename',
+          name: 'SmartRename',
+          component: () => import('@/views/SmartRenameView.vue'),
+          meta: { title: '智能重命名', icon: 'Magic' }
         },
         {
           path: '/cloud',

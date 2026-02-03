@@ -57,57 +57,14 @@
       </div>
     </div>
 
-    <!-- Filter Panel -->
-    <div class="filter-panel glass-card" v-show="hasSearched">
-      <div class="filter-header">
-        <div class="filter-title">
-          <el-icon><Filter /></el-icon>
-          <span>筛选条件</span>
-        </div>
-        <el-button type="primary" text @click="resetFilters">
-          <el-icon><Refresh /></el-icon>
-          重置
-        </el-button>
+    <!-- Results Info Bar -->
+    <div class="results-info-bar glass-card" v-show="hasSearched">
+      <div class="results-info">
+        <el-icon><Collection /></el-icon>
+        <span>仅展示夸克网盘资源</span>
       </div>
-      
-      <div class="filter-content">
-        <div class="filter-group">
-          <label class="filter-label">资源类型</label>
-          <el-checkbox-group v-model="filters.cloudTypes">
-            <el-checkbox-button value="quark">夸克网盘</el-checkbox-button>
-            <el-checkbox-button value="baidu">百度网盘</el-checkbox-button>
-            <el-checkbox-button value="aliyun">阿里云盘</el-checkbox-button>
-            <el-checkbox-button value="other">其他</el-checkbox-button>
-          </el-checkbox-group>
-        </div>
-        
-        <div class="filter-group">
-          <label class="filter-label">内容质量</label>
-          <el-slider
-            v-model="filters.minScore"
-            :max="100"
-            :step="10"
-            show-stops
-            :marks="{0: '全部', 50: '一般', 80: '优质', 100: '极佳'}"
-          />
-        </div>
-        
-        <div class="filter-group">
-          <label class="filter-label">排序方式</label>
-          <el-radio-group v-model="filters.sortBy">
-            <el-radio-button value="time">时间</el-radio-button>
-            <el-radio-button value="size">大小</el-radio-button>
-            <el-radio-button value="quality">质量</el-radio-button>
-          </el-radio-group>
-        </div>
-        
-        <div class="filter-group">
-          <label class="filter-label">排序顺序</label>
-          <el-radio-group v-model="filters.sortOrder">
-            <el-radio-button value="desc">降序</el-radio-button>
-            <el-radio-button value="asc">升序</el-radio-button>
-          </el-radio-group>
-        </div>
+      <div class="results-sort">
+        <span class="sort-label">默认按评分排序</span>
       </div>
     </div>
 
@@ -284,7 +241,7 @@
               <el-icon :size="80" color="var(--text-tertiary)"><Search /></el-icon>
             </div>
           </template>
-          <p class="empty-hint">尝试使用不同的关键词或调整筛选条件</p>
+          <p class="empty-hint">尝试使用不同的关键词搜索</p>
         </el-empty>
       </div>
     </div>
@@ -326,12 +283,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Search,
-  Filter,
-  Refresh,
   Grid,
   List,
   Collection,
@@ -340,7 +295,7 @@ import {
   Download,
   Star
 } from '@element-plus/icons-vue'
-import { searchResources, searchResourcesFiltered, type SearchResult } from '@/api/search'
+import { searchResources, type SearchResult } from '@/api/search'
 
 // Search state
 const searchQuery = ref('')
@@ -355,13 +310,7 @@ const searchTime = ref(0)
 const hasMore = ref(false)
 const currentPage = ref(1)
 
-// Filters
-const filters = reactive({
-  cloudTypes: [] as string[],
-  minScore: 0,
-  sortBy: 'time' as 'time' | 'size' | 'quality',
-  sortOrder: 'desc' as 'asc' | 'desc'
-})
+// 筛选功能已移除，后端固定返回夸克网盘资源并按评分排序
 
 // Hot tags
 const hotTags = ['流浪地球', '三体', '狂飙', '奥本海默', '芭比', '封神']
@@ -382,11 +331,8 @@ const handleSearch = async () => {
   try {
     const response = await searchResources({
       keyword: searchQuery.value,
-      cloud_types: filters.cloudTypes.length > 0 ? filters.cloudTypes : undefined,
       page: currentPage.value,
-      page_size: 20,
-      sort_by: filters.sortBy,
-      sort_order: filters.sortOrder
+      page_size: 20
     })
 
     searchResults.value = response.results
@@ -408,11 +354,8 @@ const loadMore = async () => {
   try {
     const response = await searchResources({
       keyword: searchQuery.value,
-      cloud_types: filters.cloudTypes.length > 0 ? filters.cloudTypes : undefined,
       page: currentPage.value,
-      page_size: 20,
-      sort_by: filters.sortBy,
-      sort_order: filters.sortOrder
+      page_size: 20
     })
 
     searchResults.value.push(...response.results)
@@ -424,16 +367,7 @@ const loadMore = async () => {
   }
 }
 
-// Reset filters
-const resetFilters = () => {
-  filters.cloudTypes = []
-  filters.minScore = 0
-  filters.sortBy = 'time'
-  filters.sortOrder = 'desc'
-  if (hasSearched.value) {
-    handleSearch()
-  }
-}
+
 
 // Open cloud link
 const openCloudLink = (link: { url: string; password?: string }) => {
@@ -674,46 +608,31 @@ const formatDate = (dateStr: string) => {
   opacity: 0.05;
 }
 
-/* Filter Panel */
-.filter-panel {
-  padding: 24px;
+/* Results Info Bar */
+.results-info-bar {
+  padding: 16px 24px;
   margin-bottom: 24px;
   border-radius: var(--radius-xl);
-}
-
-.filter-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
 }
 
-.filter-title {
+.results-info {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.filter-content {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-}
-
-.filter-group {
-  flex: 1;
-  min-width: 200px;
-}
-
-.filter-label {
-  display: block;
   font-size: 14px;
-  font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 12px;
+}
+
+.results-sort {
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+.sort-label {
+  font-weight: 500;
 }
 
 /* Results Section */
@@ -1089,12 +1008,10 @@ const formatDate = (dateStr: string) => {
     justify-content: flex-end;
   }
 
-  .filter-content {
+  .results-info-bar {
     flex-direction: column;
-  }
-
-  .filter-group {
-    min-width: 100%;
+    gap: 8px;
+    text-align: center;
   }
 }
 </style>
