@@ -4,6 +4,7 @@ STRM API路由
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.services.strm_service import StrmService
+from app.core.database import resolve_db_path
 from app.core.database import Database
 from app.core.logging import get_logger
 from app.core.dependencies import get_quark_cookie
@@ -34,7 +35,7 @@ async def scan_directory(
     try:
         remote_path = validate_path(remote_path, "remote_path")
         local_path = validate_path(local_path, "local_path")
-        database = Database("quark_strm.db")
+        database = Database(resolve_db_path())
         service = StrmService(
             cookie=cookie,
             database=database,

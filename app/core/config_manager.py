@@ -26,16 +26,20 @@ class ConfigManager:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance.config_path = config_path
-                    cls._instance.load_config()
-                    try:
-                        from app.services.config_service import get_config_service
-                        get_config_service(config_path).register_change_callback(
-                            cls._instance.reload
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to register config callback: {e}")
+                    cls._instance._initialized = False
         return cls._instance
+
+    def __init__(self, config_path: str = "config.yaml"):
+        if getattr(self, "_initialized", False) and self.config_path == config_path:
+            return
+        self.config_path = config_path
+        self.load_config()
+        try:
+            from app.services.config_service import get_config_service
+            get_config_service(config_path).register_change_callback(self.reload)
+        except Exception as e:
+            logger.warning(f"Failed to register config callback: {e}")
+        self._initialized = True
 
     def load_config(self):
         """加载配置文件"""
@@ -137,11 +141,19 @@ class ConfigManager:
 config_manager = ConfigManager()
 
 
-def get_config() -> ConfigManager:
-    """
-    获取配置管理器实例
+_config_manager_instance: Optional[ConfigManager] = None
 
-    Returns:
-        配置管理器实例
+
+def get_config(config_path: Optional[str] = None) -> ConfigManager:
     """
-    return config_manager
+    ?????????
+    Returns:
+        ???????
+    """
+    global _config_manager_instance
+    resolved_path = config_path or os.getenv("CONFIG_PATH", "config.yaml")
+    if _config_manager_instance is None:
+        _config_manager_instance = ConfigManager(resolved_path)
+    else:
+        _config_manager_instance = ConfigManager(resolved_path)
+    return _config_manager_instance

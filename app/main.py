@@ -24,6 +24,7 @@ from app.core.exceptions import AppException, app_exception_handler, general_exc
 from app.core.constants import REQUEST_ID_HEADER
 from app.core.validators import InputValidationError
 from app.services.cache_service import get_cache_service
+from app.services.link_cache import get_link_cache_service
 from app.services.cron_service import get_cron_service
 from app.services.notification_service import get_notification_service
 from app.services.webdav.service import get_webdav_app
@@ -105,6 +106,10 @@ async def lifespan(app: FastAPI):
         cache_service = get_cache_service()
         await cache_service.start()
         logger.info("Cache service started")
+
+        link_cache = get_link_cache_service()
+        await link_cache.start()
+        logger.info("Link cache started")
         
         # 启动定时任务服务
         cron_service = get_cron_service()
@@ -139,6 +144,9 @@ async def lifespan(app: FastAPI):
         await cron_service.stop()
         logger.info("Cron service stopped")
         
+        await link_cache.stop()
+        logger.info("Link cache stopped")
+
         await cache_service.stop()
         logger.info("Cache service stopped")
 

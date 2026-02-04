@@ -1,11 +1,16 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-import os
+from app.core.database import resolve_db_path
 
-# 确保数据目录存在
-os.makedirs("data", exist_ok=True)
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./data/quark_strm.db"
+def _build_sqlalchemy_url() -> str:
+    """构建SQLAlchemy连接URL"""
+    db_path = resolve_db_path()
+    normalized = db_path.replace("\\", "/")
+    return f"sqlite:///{normalized}"
+
+
+SQLALCHEMY_DATABASE_URL = _build_sqlalchemy_url()
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}

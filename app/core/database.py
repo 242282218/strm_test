@@ -5,10 +5,13 @@
 """
 
 import sqlite3
+import os
+from pathlib import Path
 from contextlib import contextmanager
 from typing import Optional, List, Dict
 from datetime import datetime
 from app.core.logging import get_logger
+from app.services.config_service import get_config_service
 
 logger = get_logger(__name__)
 
@@ -27,7 +30,7 @@ class Database:
         Args:
             db_path: 数据库文件路径
         """
-        self.db_path = db_path
+        self.db_path = resolve_db_path(db_path)
         self._init_db()
         logger.info(f"Database initialized: {db_path}")
 
@@ -259,3 +262,26 @@ class Database:
         由于使用上下文管理器，此方法主要用于兼容性
         """
         logger.debug(f"Database connection closed: {self.db_path}")
+
+
+
+def resolve_db_path(db_path: Optional[str] = None) -> str:
+    """
+    ?????????
+
+    ??: ??SQLite???????
+    ??:
+        - db_path (Optional[str]): ????????
+    ??:
+        - str: ?????????
+    ???:
+        - ??data?????????????
+    """
+    if not db_path:
+        config = get_config_service().get_config()
+        db_path = config.database
+    if os.path.isabs(db_path):
+        return str(Path(db_path).resolve())
+    data_dir = Path("data")
+    data_dir.mkdir(exist_ok=True)
+    return str((data_dir / db_path).resolve())

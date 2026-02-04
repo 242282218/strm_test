@@ -5,7 +5,7 @@
 """
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any, List
-from app.core.database import Database
+from app.core.database import Database, resolve_db_path
 from app.core.logging import get_logger
 from app.services.task_scheduler import TaskScheduler
 from app.services.link_cache import LinkCache
@@ -27,7 +27,7 @@ def get_db() -> Database:
     """获取数据库实例"""
     global _db
     if _db is None:
-        _db = Database("quark_strm.db")
+        _db = Database(resolve_db_path())
     return _db
 
 

@@ -9,6 +9,7 @@
 import aiohttp
 from typing import Optional, Dict, Any
 from app.services.quark_service import QuarkService
+from app.services.link_cache import get_link_cache_service
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
 
@@ -20,19 +21,7 @@ class LinkResolver:
         self.quark_service = quark_service
         self.alist_config = config_mgr.get_alist_config()
         self.config_mgr = config_mgr
-    
-        # 0. Check Cache
-        from app.services.link_cache import LinkCache
-        # Using a singleton-like pattern or passing cache instance would be better
-        # For now, we'll instantiate it or use a global instance if available.
-        # But wait, LinkCache is a class, we need an instance.
-        # Let's import the singleton instance if defined in link_cache (it's not).
-        # We will create a class-level variable or simple singleton here for now.
-        
-        # NOTE: Ideally LinkCache should be a singleton service managed by the app container.
-        # Given current constraints, I'll check if I can use a global cache.
-        # Let's assume we modify this class to accept a cache instance or manage one.
-        pass # Placeholder for thought
+        self.link_cache = get_link_cache_service()
         
     async def resolve(self, file_id: str, path: str = None) -> str:
         """
@@ -43,16 +32,7 @@ class LinkResolver:
         1. 尝试使用 QuarkService 获取直链 (file_id)
         2. 如果失败且配置了 AList，尝试使用 AList API 获取直链 (path)
         """
-        # Init simple cache instance (should be global)
-        if not hasattr(LinkResolver, '_cache_instance'):
-             from app.services.link_cache import LinkCache
-             LinkResolver._cache_instance = LinkCache()
-             # We should probably start it? It has start/stop methods for cleanup loop.
-             # Ideally app startup starts it. For now, lazy start without cleanup task or simple usage.
-             # The existing LinkCache requires async start for cleanup loop. 
-             # Let's just use it as a passive store for now to avoid task lifecycle issues in this quick edit.
-        
-        cache = LinkResolver._cache_instance
+        cache = self.link_cache
         
         # Check cache
         cached_entry = await cache.get(file_id)

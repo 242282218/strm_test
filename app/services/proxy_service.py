@@ -9,7 +9,7 @@ import aiohttp
 
 from typing import Optional, Tuple
 from app.services.quark_service import QuarkService
-from app.services.link_cache import LinkCache
+from app.services.link_cache import LinkCache, get_link_cache_service
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -22,7 +22,8 @@ class ProxyService:
         self,
         cookie: str,
         cache_ttl: int = 600,
-        max_cache_size: int = 1000
+        max_cache_size: int = 1000,
+        link_cache: Optional[LinkCache] = None
     ):
         """
         初始化代理服务
@@ -35,25 +36,25 @@ class ProxyService:
         """
         self.cookie = cookie
         self.quark_service = QuarkService(cookie)
-        self.link_cache = LinkCache(
+        self.link_cache = link_cache or get_link_cache_service(
             default_ttl=cache_ttl,
             max_size=max_cache_size
         )
-        self.semaphore = asyncio.Semaphore(50) # 默认限制50并发
+        if not hasattr(ProxyService, "_global_semaphore"):
+            ProxyService._global_semaphore = asyncio.Semaphore(50)
+        self.semaphore = ProxyService._global_semaphore
         logger.info("ProxyService initialized")
 
     async def __aenter__(self):
         """
         异步上下文管理器进入方法
         """
-        await self.link_cache.start()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """
         异步上下文管理器退出方法
         """
-        await self.link_cache.stop()
         await self.close()
 
     async def get_download_url(self, file_id: str) -> str:

@@ -1,7 +1,6 @@
 import asyncio
 import re
 import os
-import aiofiles
 from typing import List, Optional, Tuple, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +14,11 @@ from app.services.emby_api_client import EmbyAPIClient
 from app.services.notification_service import get_notification_service, NotificationType
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
+from app.utils.strm_url import (
+    extract_file_id_from_proxy_url,
+    extract_file_id_from_strm_content,
+    read_strm_file_content,
+)
 from app.services.cron_service import get_cron_service
 
 logger = get_logger(__name__)
@@ -548,20 +552,18 @@ class EmbyService:
         # 1. 尝试从Path解析 (如果是 strm 且包含 proxy url)
         # 例如: http://localhost:8000/api/proxy/video/{file_id}
         # file_id 通常就是 pickcode (对于v2 api)
-        match_proxy = re.search(r'/api/proxy/(?:video|stream)/([a-zA-Z0-9]+)', path)
-        if match_proxy:
-            return match_proxy.group(1)
+        file_id = extract_file_id_from_proxy_url(path)
+        if file_id:
+            return file_id
             
         # 2. 如果是本地STRM文件，读取内容
         if path.lower().endswith('.strm') and os.path.exists(path):
             try:
-                async with aiofiles.open(path, 'r', encoding='utf-8') as f:
-                    content = await f.read()
-                    # 再次尝试匹配URL中的pickcode
-                    match_url = re.search(r'/api/proxy/(?:video|stream)/([a-zA-Z0-9]+)', content)
-                    if match_url:
-                        return match_url.group(1)
-            except Exception as e:
+                content = await read_strm_file_content(path)
+                file_id = extract_file_id_from_strm_content(content)
+                if file_id:
+                    return file_id
+            except Exception:
                 pass
                 
         # 3. 尝试从 MediaSources 路径解析

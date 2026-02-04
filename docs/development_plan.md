@@ -2732,10 +2732,45 @@ python-dotenv>=1.0.0
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
-httpx>=0.24.1
 
 # 工具
 python-dateutil>=2.8.2
+
+# 任务调度
+apscheduler>=3.10.0
+
+# 缓存
+cachetools>=5.3.0
+
+# 异步文件
+aiofiles>=23.0.0
+
+# 兼容层
+asgiref>=3.7.0
+
+# 加密
+cryptography>=41.0.0
+
+# WebDAV
+wsgidav>=4.3.0
+
+# 直链校验
+requests>=2.31.0
+
+# 可靠重试
+tenacity>=8.2.0
+
+# Redis异步客户端
+aioredis>=2.0.0
+
+# NFO/XML生成
+lxml>=4.9.0
+
+# 指标采集
+psutil>=5.9.0
+
+# 缓存统计图表
+matplotlib>=3.7.0
 ```
 
 ### 7.3 技术栈对比

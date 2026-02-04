@@ -293,17 +293,26 @@ class ConfigService:
 _config_service_instance: Optional[ConfigService] = None
 
 
-def get_config_service(config_path: str = "config.yaml") -> ConfigService:
+def get_config_service(config_path: Optional[str] = None) -> ConfigService:
     """
-    获取配置服务实例
+    ????????
 
     Args:
-        config_path: 配置文件路径，默认为 config.yaml
+        config_path: ?????????? CONFIG_PATH ????? config.yaml
 
     Returns:
-        ConfigService: 配置服务单例实例
+        ConfigService: ????????
     """
     global _config_service_instance
+    resolved_path = config_path or os.getenv("CONFIG_PATH", "config.yaml")
     if _config_service_instance is None:
-        _config_service_instance = ConfigService(config_path)
+        _config_service_instance = ConfigService(resolved_path)
+    elif _config_service_instance.config_path != resolved_path:
+        logger.warning(
+            "ConfigService path changed from %s to %s, reloading instance",
+            _config_service_instance.config_path,
+            resolved_path,
+        )
+        ConfigService._instance = None
+        _config_service_instance = ConfigService(resolved_path)
     return _config_service_instance

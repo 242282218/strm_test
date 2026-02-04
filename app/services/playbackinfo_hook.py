@@ -5,10 +5,17 @@ PlaybackInfo Hook服务模块
 """
 
 import asyncio
+import os
 from typing import Dict, Any, Optional
 from app.services.emby_api_client import EmbyAPIClient
 from app.services.quark_service import QuarkService
 from app.core.logging import get_logger
+from app.utils.strm_url import (
+    build_proxy_url,
+    extract_file_id_from_proxy_url,
+    extract_file_id_from_strm_content,
+    read_strm_file_content,
+)
 
 logger = get_logger(__name__)
 
@@ -134,7 +141,14 @@ class PlaybackInfoHook:
 
             # 设置DirectStreamUrl
             media_source_id = source.get("Id", "")
-            new_url = f"{self.proxy_base_url}/api/proxy/stream/{media_source_id}?Static=true"
+            file_id = None
+            if path:
+                file_id = extract_file_id_from_proxy_url(path)
+                if not file_id and path.lower().endswith(".strm") and os.path.exists(path):
+                    content = await read_strm_file_content(path)
+                    file_id = extract_file_id_from_strm_content(content)
+            target_id = file_id or media_source_id
+            new_url = f"{build_proxy_url(self.proxy_base_url, target_id, mode='stream')}?Static=true"
             source["DirectStreamUrl"] = new_url
 
             # 禁用转码

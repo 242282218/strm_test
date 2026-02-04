@@ -318,3 +318,23 @@ class LinkCache:
             "cleanup_interval": self.cleanup_interval,
             "running": self._running
         }
+
+_global_link_cache: Optional["LinkCache"] = None
+
+
+def get_link_cache_service(
+    default_ttl: int = 600,
+    max_size: int = 1000,
+    cleanup_interval: int = 300
+) -> "LinkCache":
+    """
+    ????????????
+    """
+    global _global_link_cache
+    if _global_link_cache is None:
+        _global_link_cache = LinkCache(
+            default_ttl=default_ttl,
+            max_size=max_size,
+            cleanup_interval=cleanup_interval
+        )
+    return _global_link_cache

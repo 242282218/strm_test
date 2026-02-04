@@ -6,12 +6,18 @@ Emby反代服务模块
 """
 
 import aiohttp
+import os
 from typing import Optional, Dict, Any
 from app.services.emby_api_client import EmbyAPIClient
 from app.services.playbackinfo_hook import PlaybackInfoHook
 from app.services.quark_service import QuarkService
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
+from app.utils.strm_url import (
+    extract_file_id_from_proxy_url,
+    extract_file_id_from_strm_content,
+    read_strm_file_content,
+)
 
 logger = get_logger(__name__)
 
@@ -147,7 +153,7 @@ class EmbyProxyService:
             # 如果提供了文件路径，直接使用
             if file_path and file_path.lower().endswith('.strm'):
                 # 从STRM文件解析文件ID
-                file_id = self._extract_file_id_from_strm(file_path)
+                file_id = await self._extract_file_id_from_strm(file_path)
                 if file_id:
                     return await self._get_stream_url_with_fallback(file_id)
 
@@ -216,7 +222,7 @@ class EmbyProxyService:
             logger.debug(f"URL check failed for {url[:50]}...: {e}")
             return False
 
-    def _extract_file_id_from_strm(self, file_path: str) -> Optional[str]:
+    async def _extract_file_id_from_strm(self, file_path: str) -> Optional[str]:
         """
         从STRM文件路径提取文件ID
 
@@ -227,18 +233,18 @@ class EmbyProxyService:
             文件ID或None
         """
         try:
-            # 假设STRM文件名格式为: {name}_{file_id}.strm
-            # 例如: movie_123456789.strm
-            import os
+            content = await read_strm_file_content(file_path)
+            file_id = extract_file_id_from_strm_content(content)
+            if file_id:
+                return file_id
+            file_id = extract_file_id_from_proxy_url(content)
+            if file_id:
+                return file_id
             filename = os.path.basename(file_path)
             name_without_ext = os.path.splitext(filename)[0]
-
-            # 尝试从文件名提取ID
-            # 这里需要根据实际情况调整
             parts = name_without_ext.rsplit('_', 1)
             if len(parts) == 2:
                 return parts[1]
-
             return None
         except Exception as e:
             logger.error(f"Failed to extract file ID from STRM: {str(e)}")
@@ -256,12 +262,11 @@ class EmbyProxyService:
         """
         try:
             # 读取STRM文件
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read().strip()
+            content = await read_strm_file_content(file_path)
 
             # 如果内容是夸克文件ID，获取直链
-            if content.startswith('quark://'):
-                file_id = content.replace('quark://', '')
+            file_id = extract_file_id_from_strm_content(content)
+            if file_id:
                 link = await self.quark_service.get_download_link(file_id)
                 return link.url
 
