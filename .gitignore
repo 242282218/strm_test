@@ -59,6 +59,9 @@ Thumbs.db
 .coverage
 htmlcov/
 .tox/
+tests/verify_*.py
+verify_*.py
+config.test*.yaml
 
 # Docker
 .dockerignore
