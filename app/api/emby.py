@@ -55,7 +55,7 @@ class EmbyTestRequest(BaseModel):
 
     url: Optional[str] = None
     api_key: Optional[str] = None
-    timeout: Optional[int] = Field(None, ge=1, le=300)
+    timeout: Optional[int] = Field(5, ge=1, le=300)
 
 
 class EmbyRefreshRequest(BaseModel):
@@ -163,6 +163,8 @@ async def test_connection(body: Optional[EmbyTestRequest] = None):
             kwargs["url"] = body.url
         if body.api_key:
             kwargs["api_key"] = body.api_key
+        if body.timeout:
+            kwargs["timeout"] = body.timeout
     return await service.test_connection(**kwargs)
 
 
@@ -199,7 +201,7 @@ async def refresh_history(limit: int = 20):
 
 
 @router.get("/status")
-async def get_status():
+async def get_status(probe: bool = False, probe_timeout: int = 5):
     """获取Emby集成状态"""
     service = get_emby_service()
     app_config = config_service.get_config()
@@ -221,8 +223,13 @@ async def get_status():
         },
     }
 
-    if service.is_enabled:
-        conn = await service.test_connection()
+    if probe and service.is_enabled:
+        # 避免因Emby不可达导致接口阻塞过久
+        if probe_timeout < 1:
+            probe_timeout = 1
+        if probe_timeout > 30:
+            probe_timeout = 30
+        conn = await service.test_connection(timeout=probe_timeout)
         status["connected"] = bool(conn.get("success"))
         status["server_info"] = conn.get("server_info")
 

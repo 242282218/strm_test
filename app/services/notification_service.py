@@ -116,11 +116,17 @@ class ChannelHandlerAdapter:
 class TelegramHandler:
     """Telegram Bot通知适配器"""
 
-    def __init__(self, bot_token: str, chat_id: str, proxy_url: Optional[str] = None):
+    def __init__(
+        self,
+        bot_token: str,
+        chat_id: str,
+        proxy: Optional[str] = None,
+        proxy_url: Optional[str] = None
+    ):
         self.notifier = TelegramNotifier(
             token=bot_token,
             chat_id=chat_id,
-            proxy_url=proxy_url
+            proxy_url=proxy_url or proxy
         )
 
     async def send(self, message: NotificationMessage) -> bool:

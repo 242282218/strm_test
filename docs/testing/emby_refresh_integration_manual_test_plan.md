@@ -72,6 +72,36 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 - `API_BASE=http://localhost:8000`
 
+### 3.3 Windows PowerShell 注意事项（重要）
+
+在 PowerShell 中，`curl` 默认是 `Invoke-WebRequest` 的别名，`curl -X ...` 这类写法会报错。
+
+推荐使用以下任一方式：
+
+1) 使用 `curl.exe`（Windows 自带）
+
+```powershell
+curl.exe -sS http://127.0.0.1:8000/health
+```
+
+2) 使用 `Invoke-RestMethod`（更适合 JSON）
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/health -Method GET -TimeoutSec 10
+```
+
+此外，如遇 `localhost` 超时，建议统一改用 `127.0.0.1` 进行测试，避免本机 DNS/IPv6 解析差异导致的干扰。
+
+### 3.4 端口占用排查（若出现请求超时）
+
+如果出现“端口监听但请求超时/无响应”，可能是残留进程或重复启动导致。
+
+```powershell
+netstat -ano | findstr :8000
+tasklist /FI "PID eq <PID>"
+taskkill /F /PID <PID>
+```
+
 ---
 
 ## 4. 手工测试用例（按执行顺序）
@@ -297,4 +327,3 @@ curl -X POST "%API_BASE%/api/emby/config" ^
 - “指定库刷新”的可观测行为依赖 Emby 版本与 UI 表现；如 UI 不明显，建议以 Emby 日志或扫描时间为准。
 - 刷新历史为进程内内存记录：服务重启后会清空（当前实现如此）。
 - 首次启用必须提供 `url/api_key`；后续更新配置时 `api_key` 为空代表“保持原值不变”。
-

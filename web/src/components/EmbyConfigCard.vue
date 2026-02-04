@@ -133,7 +133,7 @@ const loadLibraries = async () => {
 const testConnection = async () => {
   testing.value = true
   try {
-    const result = await embyApi.testConnection({ url: form.url, api_key: form.api_key })
+    const result = await embyApi.testConnection({ url: form.url, api_key: form.api_key, timeout: form.timeout })
     if (result.success) {
       ElMessage.success('连接成功')
       connected.value = true
@@ -178,7 +178,7 @@ const manualRefresh = async () => {
 onMounted(async () => {
   loading.value = true
   try {
-    const status = await embyApi.getStatus()
+    const status = await embyApi.getStatus({ probe: true, probe_timeout: 3 })
     form.enabled = status.configuration.enabled
     form.url = status.configuration.url || ''
     // 后端返回的是脱敏的 api_key；这里不回填，避免误覆盖
@@ -241,4 +241,3 @@ onMounted(async () => {
   border-top: 1px solid #ebeef5;
 }
 </style>
-

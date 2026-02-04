@@ -42,11 +42,11 @@ export interface EmbyConfigUpdate {
 }
 
 export const embyApi = {
-  getStatus(): Promise<EmbyStatus> {
-    return api.get('/emby/status')
+  getStatus(params?: { probe?: boolean; probe_timeout?: number }): Promise<EmbyStatus> {
+    return api.get('/emby/status', { params: params || {} })
   },
 
-  testConnection(payload?: { url?: string; api_key?: string }): Promise<{
+  testConnection(payload?: { url?: string; api_key?: string; timeout?: number }): Promise<{
     success: boolean
     message: string
     server_info: EmbyServerInfo | null
@@ -66,4 +66,3 @@ export const embyApi = {
     return api.post('/emby/config', payload)
   }
 }
-

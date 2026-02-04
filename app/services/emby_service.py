@@ -144,18 +144,30 @@ class EmbyService:
         settings = self._get_effective_settings()
         return EmbyAPIClient(settings["url"] or "http://localhost:8096", settings["api_key"], timeout=settings["timeout"])
 
-    async def test_connection(self, *, url: Optional[str] = None, api_key: Optional[str] = None) -> Dict[str, Any]:
+    async def test_connection(
+        self,
+        *,
+        url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        timeout: Optional[int] = None
+    ) -> Dict[str, Any]:
         """测试Emby连接，返回服务器信息"""
         settings = self._get_effective_settings()
         test_url = (url or settings["url"] or "").strip()
         test_key = (api_key or settings["api_key"] or "").strip()
-        timeout = int(settings["timeout"] or 30)
+        request_timeout = int(timeout or settings["timeout"] or 30)
 
         if not test_url or not test_key:
             return {"success": False, "message": "Emby配置不完整", "server_info": None}
 
         try:
-            data = await self._request_json("GET", "/System/Info", url=test_url, api_key=test_key, timeout=timeout)
+            data = await self._request_json(
+                "GET",
+                "/System/Info",
+                url=test_url,
+                api_key=test_key,
+                timeout=request_timeout,
+            )
             return {
                 "success": True,
                 "message": "连接成功",
