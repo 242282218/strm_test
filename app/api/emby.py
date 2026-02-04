@@ -157,7 +157,7 @@ async def test_connection(body: Optional[EmbyTestRequest] = None):
     - 传入 url/api_key：用于临时测试（不写入配置）
     """
     service = get_emby_service()
-    kwargs = {}
+    kwargs = {"timeout": 5}
     if body:
         if body.url:
             kwargs["url"] = body.url

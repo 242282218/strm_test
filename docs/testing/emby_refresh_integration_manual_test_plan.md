@@ -127,6 +127,9 @@ curl -X POST "%API_BASE%/api/emby/config" ^
 curl "%API_BASE%/api/emby/status"
 ```
 
+> 如需让状态接口顺便探测 Emby 连通性（会发起网络请求），可使用：  
+> `GET /api/emby/status?probe=true&probe_timeout=3`
+
 **期望结果**
 - `POST /api/emby/config` 返回：`{"success": true}`
 - `config.yaml` 中 `emby.enabled/url/api_key/...` 已写入
