@@ -21,7 +21,7 @@ async def scan_directory(
     recursive: bool = Query(True),
     concurrent_limit: int = Query(5, ge=MIN_CONCURRENT_LIMIT, le=MAX_CONCURRENT_LIMIT),
     base_url: str = Query("http://localhost:8000", description="代理服务器基础URL"),
-    strm_url_mode: str = Query("redirect", description="URL模式: redirect/stream/direct"),
+    strm_url_mode: str = Query("redirect", description="URL模式: redirect/stream/direct/webdav"),
     cookie: str = Depends(get_quark_cookie)
 ):
     """

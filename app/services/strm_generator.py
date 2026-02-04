@@ -3,10 +3,11 @@ STRM文件生成器
 
 用于从夸克网盘生成STRM文件
 
-支持三种URL模式：
+支持四种URL模式：
 - redirect: 使用302重定向代理URL（推荐，解决直链过期问题）
 - stream: 使用流代理URL（服务器中转，占用带宽）
 - direct: 使用夸克直链URL（不推荐，会过期）
+- webdav: 使用 WebDAV 访问URL（适合 Emby/Jellyfin 直接拉取）
 """
 
 import os
@@ -21,7 +22,7 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 # STRM URL模式类型
-StrmUrlMode = Literal["redirect", "stream", "direct"]
+StrmUrlMode = Literal["redirect", "stream", "direct", "webdav"]
 
 
 class STRMGenerator:
@@ -48,6 +49,7 @@ class STRMGenerator:
                 - "redirect": 使用302重定向代理（推荐）
                 - "stream": 使用流代理（服务器中转）
                 - "direct": 使用直链（不推荐，会过期）
+                - "webdav": 使用 WebDAV 访问URL（适合播放器直接拉取）
         输出: 无
         副作用: 
             - 创建输出目录（如不存在）
@@ -70,7 +72,9 @@ class STRMGenerator:
         root_id: str = "0",
         remote_path: str = "",
         only_video: bool = True,
-        max_files: int = 50
+        max_files: int = 0,
+        recursive: bool = True,
+        concurrent_limit: int = 5,
     ) -> Dict[str, Any]:
         """
         生成STRM文件
@@ -89,12 +93,13 @@ class STRMGenerator:
             "generated_files": 0,
             "skipped_files": 0,
             "failed_files": 0,
-            "errors": []
+            "errors": [],
+            "files": []
         }
 
         try:
             # 递归获取所有文件
-            all_files = await self._get_all_files(root_id, remote_path, only_video)
+            all_files = await self._get_all_files(root_id, remote_path, only_video, recursive=recursive)
             stats["total_files"] = len(all_files)
 
             logger.info(f"Found {len(all_files)} files to process")
@@ -104,19 +109,35 @@ class STRMGenerator:
                 logger.info(f"Limiting processing to {max_files} files out of {len(all_files)} total")
                 all_files = all_files[:max_files]
 
-            # 生成STRM文件
-            for file_info in all_files:
-                try:
-                    result = await self._generate_single_strm(file_info)
-                    if result:
-                        stats["generated_files"] += 1
-                    else:
-                        stats["skipped_files"] += 1
-                except Exception as e:
+            # 生成 STRM 文件（可并发）
+            if concurrent_limit <= 0:
+                concurrent_limit = 1
+
+            semaphore = asyncio.Semaphore(concurrent_limit)
+
+            async def _run_one(info: Dict[str, Any]):
+                async with semaphore:
+                    return await self._generate_single_strm(info)
+
+            results = await asyncio.gather(
+                *(_run_one(file_info) for file_info in all_files),
+                return_exceptions=True,
+            )
+
+            for file_info, result in zip(all_files, results):
+                if isinstance(result, Exception):
                     stats["failed_files"] += 1
-                    error_msg = f"Failed to generate STRM for {file_info.get('name', 'unknown')}: {str(e)}"
+                    error_msg = f"Failed to generate STRM for {file_info.get('name', 'unknown')}: {str(result)}"
                     stats["errors"].append(error_msg)
                     logger.error(error_msg)
+                    continue
+
+                rel_path = result
+                if rel_path:
+                    stats["generated_files"] += 1
+                    stats["files"].append(rel_path)
+                else:
+                    stats["skipped_files"] += 1
 
         except Exception as e:
             logger.error(f"Failed to generate STRM files: {str(e)}")
@@ -128,7 +149,8 @@ class STRMGenerator:
         self,
         parent_id: str,
         remote_path: str,
-        only_video: bool
+        only_video: bool,
+        recursive: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         递归获取所有文件
@@ -159,13 +181,15 @@ class STRMGenerator:
                 current_remote_path = f"{remote_path}/{file_name}" if remote_path else file_name
 
                 if is_dir:
-                    # 递归处理子目录
-                    sub_files = await self._get_all_files(
-                        file_id,
-                        current_remote_path,
-                        only_video
-                    )
-                    files.extend(sub_files)
+                    if recursive:
+                        # 递归处理子目录
+                        sub_files = await self._get_all_files(
+                            file_id,
+                            current_remote_path,
+                            only_video,
+                            recursive=recursive,
+                        )
+                        files.extend(sub_files)
                 else:
                     # 检查是否为视频文件
                     if only_video and file_model.category != 1:
@@ -184,7 +208,7 @@ class STRMGenerator:
 
         return files
 
-    async def _generate_single_strm(self, file_info: Dict[str, Any]) -> bool:
+    async def _generate_single_strm(self, file_info: Dict[str, Any]) -> Optional[str]:
         """
         生成单个STRM文件
 
@@ -192,7 +216,7 @@ class STRMGenerator:
         输入:
             - file_info (Dict): 文件信息，包含id, name, remote_path等
         输出:
-            - bool: 是否成功生成（文件已存在返回False）
+            - Optional[str]: 生成成功返回相对 output_dir 的 STRM 路径；文件已存在返回 None
         副作用:
             - 在output_dir下创建.strm文件
             - 若strm_url_mode为direct，会调用夸克API获取直链
@@ -207,7 +231,7 @@ class STRMGenerator:
         # 检查文件是否已存在
         if strm_path.exists():
             logger.debug(f"STRM file already exists: {strm_path}")
-            return False
+            return None
 
         # 确保父目录存在
         strm_path.parent.mkdir(parents=True, exist_ok=True)
@@ -221,11 +245,34 @@ class STRMGenerator:
                 f.write(video_url)
 
             logger.info(f"Generated STRM file: {strm_path} -> {video_url[:80]}...")
-            return True
+            return strm_path.relative_to(self.output_dir).as_posix()
 
         except Exception as e:
             logger.error(f"Failed to generate STRM for {file_name}: {str(e)}")
             raise
+
+    async def generate_single_file_strm(self, file_id: str, remote_path: str) -> Optional[str]:
+        """
+        为单个文件生成 STRM。
+
+        Args:
+            file_id: 夸克文件 ID
+            remote_path: 远端完整路径（允许以 / 开头）
+
+        Returns:
+            生成成功返回相对 output_dir 的 STRM 路径；文件已存在返回 None
+        """
+        clean_remote_path = (remote_path or "").lstrip("/")
+        file_name = clean_remote_path.split("/")[-1] if clean_remote_path else file_id
+        return await self._generate_single_strm(
+            {
+                "id": file_id,
+                "name": file_name,
+                "remote_path": clean_remote_path,
+                "size": 0,
+                "category": 1,
+            }
+        )
 
     async def _generate_video_url(self, file_id: str, remote_path: str = None) -> str:
         """
@@ -267,6 +314,30 @@ class STRMGenerator:
                 link = await self.service.get_download_link(file_id)
             logger.warning(f"Using direct link mode for {file_id}, link may expire!")
             return link.url
+
+        elif self.strm_url_mode == "webdav":
+            # WebDAV 模式：生成指向 WebDAV 的访问 URL
+            # 通常用于 Emby/Jellyfin 直接拉取 WebDAV 路径（也可配合内置 WebDAV 服务）。
+            from urllib.parse import quote, urlparse, urlunparse
+
+            webdav_cfg = get_config().get_webdav_config()
+            mount_path = (webdav_cfg.get("mount_path") or "/dav").rstrip("/")
+            if not mount_path.startswith("/"):
+                mount_path = "/" + mount_path
+
+            username = webdav_cfg.get("username", "")
+            password = webdav_cfg.get("password", "")
+
+            parsed = urlparse(self.base_url)
+            netloc = parsed.netloc
+            if username and password and "@" not in netloc:
+                netloc = f"{quote(username)}:{quote(password)}@{netloc}"
+
+            base = urlunparse((parsed.scheme, netloc, parsed.path.rstrip("/"), "", "", "")).rstrip("/")
+            safe_path = "/" + (remote_path or "").lstrip("/")
+            encoded_path = quote(safe_path, safe="/")
+
+            return f"{base}{mount_path}{encoded_path}"
         
         else:
             raise ValueError(f"Unknown strm_url_mode: {self.strm_url_mode}")

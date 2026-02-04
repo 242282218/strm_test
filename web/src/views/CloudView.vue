@@ -432,11 +432,12 @@
         </el-form-item>
         <el-form-item label="基础 URL">
           <el-input v-model="strmForm.baseUrl" />
-          <div class="form-tip">代理服务器的访问地址 (用于重定向)</div>
+          <div class="form-tip">代理服务器的访问地址 (用于重定向/WebDAV)</div>
         </el-form-item>
         <el-form-item label="URL 模式">
           <el-select v-model="strmForm.strmUrlMode">
             <el-option label="302 重定向 (推荐)" value="redirect" />
+            <el-option label="WebDAV (适合直连拉取)" value="webdav" />
             <el-option label="直接直链 (不稳定)" value="direct" />
             <el-option label="流式传输 (消耗流量)" value="stream" />
           </el-select>
@@ -533,7 +534,7 @@ const shareResult = reactive({
 const strmForm = reactive({
   localPath: './strm',
   baseUrl: window.location.origin,
-  strmUrlMode: 'redirect' as 'redirect' | 'stream' | 'direct',
+  strmUrlMode: 'redirect' as 'redirect' | 'stream' | 'direct' | 'webdav',
   recursive: true
 })
 

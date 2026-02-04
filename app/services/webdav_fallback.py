@@ -29,47 +29,52 @@ class WebDAVFallback:
             return None
             
         base_url = self.webdav_config.get('url', 'http://localhost:5244/dav').rstrip('/')
-        mount_path = self.webdav_config.get('mount_path', '/').rstrip('/')
+        mount_path = self.webdav_config.get('mount_path', '/')
         username = self.webdav_config.get('username', '')
         password = self.webdav_config.get('password', '')
-        
-        # 拼接路径
-        clean_path = path.lstrip('/')
-        full_path_str = f"{mount_path}/{clean_path}" if mount_path else f"/{clean_path}"
-        
-        # URL 编码路径部分 (WebDAV 对特殊字符敏感)
-        # 注意：quote 会转义 /，我们需要保留路径分隔符
-        # 通常 WebDAV 客户端希望每个 path segment 被编码，但保留 /
-        encoded_path = quote(full_path_str) 
-        # 上面的 quote 默认 safe='/'，所以 / 不会被转义，符合预期
-        # 但如果 path 中包含已编码字符，可能需要先解码? 假设传入的是原始路径
-        
-        # 构造 URL
-        # 如果需要认证，可以在 URL 中嵌入 (不推荐但部分播放器支持) 
-        # 或者仅仅返回 URL，播放器之后会弹窗? 
-        # Emby 对 strm 中的 http auth 支持有限，但如果是 redirect 302 到 WebDAV Endpoint...
-        
-        # 最佳实践：
-        # 如果是 302 重定向给 Emby，Emby 会作为客户端请求该 URL。
-        # 如果 WebDAV 需要密码，Emby 可能无法自动提供（除非 URL 里带了）
-        # 格式: http://user:pass@host/dav/...
-        
+
+        def _norm_prefix(p: str) -> str:
+            v = (p or "").strip()
+            if not v or v == "/":
+                return ""
+            if not v.startswith("/"):
+                v = "/" + v
+            return v.rstrip("/")
+
+        # clean and join path parts:
+        # - base_url may already contain '/dav'
+        # - mount_path may also be configured as '/dav'
+        # avoid producing '/dav/dav/...'
+        clean_path = (path or "").lstrip("/")
+
         from urllib.parse import urlparse, urlunparse
-        
+
         parsed = urlparse(base_url)
+        base_path = _norm_prefix(parsed.path)
+        mount_prefix = _norm_prefix(mount_path)
+
+        if not mount_prefix:
+            prefix = base_path
+        elif not base_path:
+            prefix = mount_prefix
+        elif base_path == mount_prefix:
+            prefix = base_path
+        elif mount_prefix.startswith(base_path + "/"):
+            prefix = mount_prefix
+        elif base_path.startswith(mount_prefix + "/"):
+            prefix = base_path
+        else:
+            prefix = base_path + mount_prefix
+
+        file_path = "/" + clean_path if clean_path else ""
+        final_path = f"{prefix}{file_path}" if prefix else (file_path or "/")
+        encoded_path = quote(final_path, safe="/")
+
         netloc = parsed.netloc
-        
-        if username and password:
-            # 插入 user:pass
-            if '@' not in netloc:
-                netloc = f"{quote(username)}:{quote(password)}@{netloc}"
-        
-        # 重新组装 base_url
-        final_base = urlunparse((parsed.scheme, netloc, parsed.path, '', '', ''))
-        final_base = final_base.rstrip('/')
-        
-        # 最终 URL
-        fallback_url = f"{final_base}{encoded_path}"
+        if username and password and '@' not in netloc:
+            netloc = f"{quote(username)}:{quote(password)}@{netloc}"
+
+        fallback_url = urlunparse((parsed.scheme, netloc, encoded_path, '', '', ''))
         
         logger.debug(f"Generated WebDAV fallback URL: {fallback_url}")
         return fallback_url

@@ -16,7 +16,7 @@ export const scanDirectory = (params: {
     recursive?: boolean
     concurrent_limit?: number
     base_url?: string
-    strm_url_mode?: 'redirect' | 'stream' | 'direct'
+    strm_url_mode?: 'redirect' | 'stream' | 'direct' | 'webdav'
 }): Promise<ScanResult> => {
     return api.post('/strm/scan', null, { params })
 }
