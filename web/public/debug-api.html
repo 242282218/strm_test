@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>API 调试</title>
+</head>
+
+<body>
+    <h1>打开浏览器控制台查看结果</h1>
+    <script>
+        async function testAPI() {
+            try {
+                // 测试原始 fetch
+                console.log('=== 1. 原始 fetch 测试 ===');
+                const rawResponse = await fetch('/api/quark/browse?pdir_fid=0&page=1&size=2');
+                const rawData = await rawResponse.json();
+                console.log('Raw response:', rawData);
+                console.log('Raw response.data:', rawData.data);
+                console.log('Raw response.data.items:', rawData.data?.items);
+
+                // 测试 axios
+                console.log('\n=== 2. Axios 测试 ===');
+                const axios = (await import('https://cdn.jsdelivr.net/npm/axios@1.6.0/+esm')).default;
+
+                const axiosInstance = axios.create({
+                    baseURL: '/api',
+                    timeout: 30000
+                });
+
+                // 添加响应拦截器（模拟你的代码）
+                axiosInstance.interceptors.response.use(
+                    (response) => {
+                        console.log('Interceptor receives:', response);
+                        console.log('Interceptor returns:', response.data);
+                        return response.data;
+                    }
+                );
+
+                const axiosResponse = await axiosInstance.get('/api/quark/browse', {
+                    params: { pdir_fid: '0', page: 1, size: 2 }
+                });
+
+                console.log('After interceptor:', axiosResponse);
+                console.log('axiosResponse.data:', axiosResponse.data);
+                console.log('axiosResponse.data.items:', axiosResponse.data?.items);
+
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        testAPI();
+    </script>
+</body>
+
+</html>

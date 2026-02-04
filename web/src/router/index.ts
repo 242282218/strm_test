@@ -25,7 +25,7 @@ const router = createRouter({
         {
           path: '/files',
           name: 'Files',
-          component: () => import('@/views/FilesView.vue'),
+          component: () => import('@/views/FileManagerView.vue'),
           meta: { title: '文件管理', icon: 'Folder' }
         },
         {
@@ -77,7 +77,7 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
-  
+
   if (!to.meta.public && !authStore.isAuthenticated) {
     next('/login')
   } else if (to.path === '/login' && authStore.isAuthenticated) {

@@ -355,6 +355,56 @@ class QuarkAPIClient:
             logger.error(f"Save share failed: {e}")
             raise
 
+    async def delete_files(self, fids: List[str]):
+        """删除文件/文件夹"""
+        data = {
+            "filelist": fids  # 夸克 API 使用 filelist
+        }
+        try:
+            await self.request("/file/delete", method="POST", data=data)
+        except Exception as e:
+            logger.error(f"Delete files failed: {e}")
+            raise
+
+    async def create_directory(self, parent_fid: str, name: str) -> Dict[str, Any]:
+        """创建文件夹"""
+        data = {
+            "pdir_fid": parent_fid,
+            "file_name": name
+        }
+        try:
+            result = await self.request("/file", method="POST", data=data)
+            return result.get("data", {})
+        except Exception as e:
+            logger.error(f"Create directory failed: {e}")
+            raise
+
+    async def rename_file(self, fid: str, new_name: str) -> Dict[str, Any]:
+        """重命名文件/文件夹"""
+        data = {
+            "fid": fid,
+            "file_name": new_name
+        }
+        try:
+            result = await self.request("/file/rename", method="POST", data=data)
+            return result.get("data", {})
+        except Exception as e:
+            logger.error(f"Rename file failed: {e}")
+            raise
+
+    async def move_files(self, fids: List[str], to_pdir_fid: str) -> Dict[str, Any]:
+        """移动文件/文件夹"""
+        data = {
+            "filelist": fids,  # 夸克 API 使用 filelist 而不是 fids
+            "to_pdir_fid": to_pdir_fid
+        }
+        try:
+            result = await self.request("/file/move", method="POST", data=data)
+            return result.get("data", {})
+        except Exception as e:
+            logger.error(f"Move files failed: {e}")
+            raise
+
     async def close(self):
         """关闭session"""
         if self.session and not self.session.closed:

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>夸克 API 测试</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        #result { margin-top: 20px; padding: 10px; background: #f0f0f0; white-space: pre-wrap; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>夸克云盘 API 测试</h1>
+    
+    <button onclick="testBrowse()">测试浏览目录 API</button>
+    <button onclick="clearResult()">清除结果</button>
+    
+    <div id="result"></div>
+
+    <script>
+        function clearResult() {
+            document.getElementById('result').innerHTML = '';
+        }
+
+        async function testBrowse() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '正在调用 API...\n';
+            
+            try {
+                const response = await fetch('/api/quark/browse?pdir_fid=0&page=1&size=10');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<span class="success">✅ API 调用成功！</span>\n\n`;
+                    resultDiv.innerHTML += `状态码: ${response.status}\n\n`;
+                    resultDiv.innerHTML += `响应数据:\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ API 调用失败</span>\n\n`;
+                    resultDiv.innerHTML += `状态码: ${response.status}\n\n`;
+                    resultDiv.innerHTML += `错误信息:\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ 请求失败</span>\n\n`;
+                resultDiv.innerHTML += `错误: ${error.message}\n\n`;
+                resultDiv.innerHTML += `详细信息: ${error.stack}`;
+            }
+        }
+
+        // 页面加载时自动测试
+        window.onload = function() {
+            console.log('页面已加载，可以点击按钮测试 API');
+        };
+    </script>
+</body>
+</html>

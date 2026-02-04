@@ -9,9 +9,13 @@ from app.models.strm import LinkModel
 from app.services.quark_api_client_v2 import QuarkAPIClient
 from app.core.logging import get_logger
 from html import unescape
-from typing import List
+from typing import List, Dict, Any, Optional
+import asyncio
 
 logger = get_logger(__name__)
+
+# 视频文件扩展名
+VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m2ts', '.strm'}
 
 
 class QuarkService:
@@ -192,3 +196,223 @@ class QuarkService:
         """关闭客户端"""
         await self.client.close()
         logger.debug("QuarkService closed")
+
+    async def list_files(
+        self,
+        pdir_fid: str = "0",
+        page: int = 1,
+        size: int = 100
+    ) -> Dict[str, Any]:
+        """
+        获取文件列表（分页）
+        
+        用途: 获取指定目录下的文件和文件夹列表，支持分页
+        输入:
+            - pdir_fid (str): 父目录ID，默认为"0"（根目录）
+            - page (int): 页码，从1开始
+            - size (int): 每页数量
+        输出:
+            - Dict[str, Any]: 包含文件列表和元数据的字典
+              {
+                "list": [...],  # 文件列表
+                "metadata": {"_total": ...}  # 元数据
+              }
+        副作用: 调用夸克 API，可能更新 Cookie
+        """
+        try:
+            params = {
+                "pdir_fid": pdir_fid,
+                "_size": str(size),
+                "_fetch_total": "1",
+                "fetch_all_file": "1",
+                "fetch_risk_file_name": "1",
+                "_page": str(page)
+            }
+
+            result = await self.client.request("/file/sort", params=params)
+            data = result.get("data", {})
+            file_list = data.get("list", [])
+            metadata = data.get("metadata", {})
+
+            # HTML转义处理
+            for file_data in file_list:
+                file_data["file_name"] = unescape(file_data.get("file_name", ""))
+
+            return {
+                "list": file_list,
+                "metadata": metadata
+            }
+
+        except Exception as e:
+            logger.error(f"List files failed for pdir_fid={pdir_fid}: {str(e)}")
+            raise
+
+    async def rename_file(
+        self,
+        fid: str,
+        new_name: str
+    ) -> Dict[str, Any]:
+        """
+        重命名云盘文件
+        
+        用途: 重命名云盘中的文件或文件夹
+        输入:
+            - fid (str): 文件ID
+            - new_name (str): 新文件名
+        输出:
+            - Dict[str, Any]: 重命名结果
+              {
+                "fid": "...",
+                "file_name": "...",
+                "status": "success"
+              }
+        副作用: 修改云盘中的文件名
+        """
+        try:
+            # 添加请求间隔避免限流
+            await asyncio.sleep(0.1)
+
+            data = {
+                "fid": fid,
+                "file_name": new_name
+            }
+
+            result = await self.client.request("/file/rename", method="POST", data=data)
+            
+            logger.info(f"Renamed file {fid} to {new_name}")
+            
+            return {
+                "fid": fid,
+                "file_name": new_name,
+                "status": "success",
+                "data": result.get("data", {})
+            }
+
+        except Exception as e:
+            logger.error(f"Rename file failed for fid={fid}: {str(e)}")
+            raise
+
+    async def move_file(
+        self,
+        fid: str,
+        to_pdir_fid: str,
+        new_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        移动文件到指定目录
+        
+        用途: 移动文件到指定目录，可选择同时重命名
+        输入:
+            - fid (str): 文件ID
+            - to_pdir_fid (str): 目标目录ID
+            - new_name (Optional[str]): 新文件名（可选，不提供则保持原名）
+        输出:
+            - Dict[str, Any]: 移动结果
+              {
+                "fid": "...",
+                "pdir_fid": "...",
+                "status": "success"
+              }
+        副作用: 修改云盘中文件的位置
+        """
+        try:
+            # 添加请求间隔避免限流
+            await asyncio.sleep(0.1)
+
+            # 修正：调用 client.move_files，它使用 fids 数组，这是夸克 API 的标准格式
+            await self.client.move_files([fid], to_pdir_fid)
+            
+            logger.info(f"Moved file {fid} to {to_pdir_fid}")
+            
+            return {
+                "fid": fid,
+                "to_pdir_fid": to_pdir_fid,
+                "status": "success"
+            }
+
+        except Exception as e:
+            logger.error(f"Move file failed for fid={fid}: {str(e)}")
+            raise
+
+    async def delete_file(self, fid: str):
+        """删除文件/文件夹"""
+        await self.client.delete_files([fid])
+
+    async def mkdir(self, parent_fid: str, name: str) -> Dict[str, Any]:
+        """创建文件夹"""
+        return await self.client.create_directory(parent_fid, name)
+
+    def is_video_file(self, file_name: str) -> bool:
+        """
+        检查是否为视频文件
+        
+        用途: 根据文件扩展名判断是否为视频文件
+        输入:
+            - file_name (str): 文件名
+        输出:
+            - bool: 是否为视频文件
+        副作用: 无
+        """
+        ext = file_name.lower().split('.')[-1] if '.' in file_name else ''
+        return f".{ext}" in VIDEO_EXTENSIONS
+
+    async def get_all_video_files(
+        self,
+        pdir_fid: str = "0",
+        recursive: bool = True,
+        max_files: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """
+        递归获取所有视频文件
+        
+        用途: 获取指定目录下的所有视频文件，支持递归子目录
+        输入:
+            - pdir_fid (str): 父目录ID
+            - recursive (bool): 是否递归子目录
+            - max_files (int): 最大返回文件数
+        输出:
+            - List[Dict]: 视频文件列表
+        副作用: 调用夸克 API
+        """
+        all_video_files = []
+        
+        async def scan_directory(dir_fid: str, depth: int = 0):
+            """递归扫描目录"""
+            if len(all_video_files) >= max_files:
+                return
+            
+            if depth > 10:  # 防止过深递归
+                logger.warning(f"递归深度超过10层，停止扫描: {dir_fid}")
+                return
+            
+            try:
+                # 获取当前目录的文件
+                result = await self.list_files(pdir_fid=dir_fid, page=1, size=100)
+                items = result.get("list", [])
+                
+                for item in items:
+                    if len(all_video_files) >= max_files:
+                        break
+                    
+                    file_type = item.get("file_type")
+                    file_name = item.get("file_name", "")
+                    
+                    # 如果是视频文件，添加到列表
+                    if file_type == 1 and self.is_video_file(file_name):
+                        all_video_files.append(item)
+                    
+                    # 如果是文件夹且需要递归，扫描子目录
+                    elif file_type == 0 and recursive:
+                        sub_fid = item.get("fid")
+                        if sub_fid:
+                            await scan_directory(sub_fid, depth + 1)
+                            await asyncio.sleep(0.1)  # 限流
+                
+            except Exception as e:
+                logger.error(f"扫描目录失败 {dir_fid}: {str(e)}")
+        
+        # 开始扫描
+        await scan_directory(pdir_fid)
+        
+        logger.info(f"递归扫描完成，找到 {len(all_video_files)} 个视频文件")
+        return all_video_files[:max_files]

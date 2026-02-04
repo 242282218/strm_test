@@ -318,7 +318,7 @@
           </div>
         </div>
         
-        <div class="step-content" v-show="currentStep >= 2 && previewData">
+        <div class="step-content" v-if="currentStep >= 2 && previewData">
           <!-- Analysis Summary -->
           <div class="summary-banner">
             <div class="summary-info">
@@ -775,19 +775,25 @@
           <span class="result-label">跳过</span>
         </div>
       </div>
-      
+
       <template #footer>
         <el-button type="primary" @click="resultDialogVisible = false; resetWorkflow()">
           完成
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Quark File Browser -->
+    <QuarkFileBrowser
+      v-model="showQuarkBrowser"
+      @select="handleCloudFolderSelect"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Setting,
   Check,
@@ -816,6 +822,12 @@ import {
   type AlgorithmInfo,
   type NamingStandardInfo
 } from '@/api/smartRename'
+import {
+  smartRenameCloudFiles,
+  executeCloudRename,
+  type QuarkRenameItem
+} from '@/api/quark'
+import QuarkFileBrowser from '@/components/QuarkFileBrowser.vue'
 
 // State
 const currentStep = ref(1)
@@ -824,6 +836,11 @@ const analyzing = ref(false)
 const executing = ref(false)
 const selectAll = ref(false)
 const filterType = ref<'all' | 'pending' | 'confirmed' | 'matched'>('all')
+
+// 云盘模式状态
+const isCloudMode = ref(false)
+const selectedCloudFid = ref('')
+const showQuarkBrowser = ref(false)
 
 const selectedAlgorithm = ref('ai_enhanced')
 const selectedStandard = ref('emby')
@@ -906,6 +923,19 @@ const filteredItems = computed(() => {
   return items
 })
 
+/**
+ * 进度条宽度
+ *
+ * 用途: 根据当前步骤计算进度条宽度百分比
+ * 输入: 无
+ * 输出: 宽度百分比字符串
+ * 副作用: 无
+ */
+const progressWidth = computed(() => {
+  const stepPercentages = ['0%', '50%', '100%']
+  return stepPercentages[currentStep.value - 1] || '0%'
+})
+
 // Methods
 const loadAlgorithms = async () => {
   try {
@@ -932,11 +962,82 @@ const loadStatus = async () => {
   }
 }
 
+/**
+ * 打开路径选择器
+ *
+ * 用途: 显示模式选择对话框，让用户选择夸克云盘或本地文件
+ * 输入: 无
+ * 输出: 无
+ * 副作用: 根据用户选择显示文件浏览器或提示信息
+ */
 const openPathSelector = () => {
-  ElMessage.info('文件夹选择功能开发中')
-  selectedPath.value = '/media/movies'
+  // 显示模式选择
+  ElMessageBox.confirm(
+    '请选择文件来源',
+    '选择模式',
+    {
+      distinguishCancelAndClose: true,
+      confirmButtonText: '夸克云盘',
+      cancelButtonText: '本地文件',
+      type: 'info'
+    }
+  ).then(() => {
+    // 选择夸克云盘
+    isCloudMode.value = true
+    showQuarkBrowser.value = true
+  }).catch((action) => {
+    if (action === 'cancel') {
+      // 选择本地文件
+      isCloudMode.value = false
+      ElMessage.info('本地文件浏览功能开发中')
+      // 临时设置一个测试路径
+      selectedPath.value = '/media/movies'
+    }
+  })
 }
 
+/**
+ * 处理云盘文件夹选择
+ *
+ * 用途: 当用户在 QuarkFileBrowser 中选择文件夹后调用
+ * 输入:
+ *   - fid: 选中的文件夹ID
+ *   - path: 文件夹路径
+ * 输出: 无
+ * 副作用: 更新选中路径和云盘文件夹ID
+ */
+const handleCloudFolderSelect = (fid: string, path: string) => {
+  selectedCloudFid.value = fid
+  selectedPath.value = `夸克云盘: ${path}`
+  ElMessage.success('已选择云盘文件夹')
+}
+
+/**
+ * 重置选择
+ *
+ * 用途: 清除当前选择的路径和相关状态
+ * 输入: 无
+ * 输出: 无
+ * 副作用: 重置路径、云盘文件夹ID和步骤状态
+ */
+const resetSelection = () => {
+  selectedPath.value = ''
+  selectedCloudFid.value = ''
+  isCloudMode.value = false
+  currentStep.value = 1
+  previewData.value = null
+  selectedItems.value = []
+  ElMessage.info('已重置选择')
+}
+
+/**
+ * 开始分析
+ *
+ * 用途: 根据选择的模式（本地/云盘）执行智能重命名预览
+ * 输入: 无
+ * 输出: 无
+ * 副作用: 调用 API 获取预览结果
+ */
 const startAnalysis = async () => {
   if (!selectedPath.value) {
     ElMessage.warning('请先选择文件夹')
@@ -947,23 +1048,71 @@ const startAnalysis = async () => {
   currentStep.value = 2
 
   try {
-    const response = await previewSmartRename({
-      target_path: selectedPath.value,
-      algorithm: selectedAlgorithm.value as any,
-      naming_standard: selectedStandard.value as any,
-      recursive: options.recursive,
-      create_folders: options.createFolders,
-      auto_confirm_high_confidence: options.autoConfirm,
-      ai_confidence_threshold: options.aiThreshold / 100,
-      naming_config: namingConfig
-    })
+    if (isCloudMode.value) {
+      // 云盘模式
+      const response = await smartRenameCloudFiles({
+        pdir_fid: selectedCloudFid.value,
+        algorithm: selectedAlgorithm.value as any,
+        naming_standard: selectedStandard.value as any,
+        force_ai_parse: false,
+        options: {
+          recursive: options.recursive,
+          create_folders: options.createFolders,
+          auto_confirm_high_confidence: options.autoConfirm,
+          ai_confidence_threshold: options.aiThreshold / 100
+        }
+      })
 
-    previewData.value = response
-    
-    // Auto-select all items
-    selectedItems.value = response.items.map(i => i.original_path)
-    
-    ElMessage.success(`分析完成，共发现 ${response.total_items} 个媒体文件`)
+      // 转换云盘响应格式为本地格式
+      previewData.value = {
+        batch_id: response.batch_id,
+        items: response.items.map((item: QuarkRenameItem) => ({
+          original_path: item.fid,
+          original_name: item.original_name,
+          new_name: item.new_name,
+          tmdb_id: item.tmdb_id,
+          tmdb_title: item.tmdb_title,
+          tmdb_year: item.tmdb_year,
+          media_type: item.media_type,
+          season: item.season,
+          episode: item.episode,
+          overall_confidence: item.overall_confidence,
+          used_algorithm: item.used_algorithm,
+          needs_confirmation: item.needs_confirmation,
+          status: item.status
+        })),
+        total_items: response.total_items,
+        matched_items: response.matched_items,
+        needs_confirmation: response.needs_confirmation,
+        algorithm_used: response.algorithm_used,
+        naming_standard: response.naming_standard,
+        analysis_time: 0 // 云盘模式暂不返回分析时间
+      }
+
+      // Auto-select all items (使用 fid 作为标识)
+      selectedItems.value = response.items.map((i: QuarkRenameItem) => i.fid)
+
+      ElMessage.success(`分析完成，共发现 ${response.total_items} 个媒体文件`)
+    } else {
+      // 本地模式
+      const response = await previewSmartRename({
+        target_path: selectedPath.value,
+        algorithm: selectedAlgorithm.value as any,
+        naming_standard: selectedStandard.value as any,
+        recursive: options.recursive,
+        create_folders: options.createFolders,
+        auto_confirm_high_confidence: options.autoConfirm,
+        ai_confidence_threshold: options.aiThreshold / 100,
+        naming_config: namingConfig
+      })
+
+      previewData.value = response
+
+      // Auto-select all items
+      selectedItems.value = response.items.map(i => i.original_path)
+
+      ElMessage.success(`分析完成，共发现 ${response.total_items} 个媒体文件`)
+    }
   } catch (error) {
     ElMessage.error('分析失败')
     currentStep.value = 1
@@ -1074,23 +1223,61 @@ const saveSettings = () => {
   showSettings.value = false
 }
 
+/**
+ * 执行重命名
+ *
+ * 用途: 根据选择的模式（本地/云盘）执行批量重命名
+ * 输入: 无
+ * 输出: 无
+ * 副作用: 调用 API 执行重命名操作
+ */
 const executeRename = async () => {
   if (!previewData.value?.batch_id) return
-  
+
   executing.value = true
 
   try {
-    const response = await executeSmartRename({
-      batch_id: previewData.value.batch_id
-    })
+    if (isCloudMode.value) {
+      // 云盘模式 - 构建操作列表
+      const operations = selectedItems.value.map(fid => {
+        const item = previewData.value?.items.find(i => i.original_path === fid)
+        return {
+          fid: fid,
+          new_name: item?.new_name || ''
+        }
+      }).filter(op => op.new_name)
 
-    executeResult.value = response
-    resultDialogVisible.value = true
-    
-    if (response.failed_items === 0) {
-      ElMessage.success('所有文件重命名成功')
+      const response = await executeCloudRename({
+        batch_id: previewData.value.batch_id,
+        operations: operations
+      })
+
+      executeResult.value = {
+        success_items: response.success,
+        failed_items: response.failed,
+        skipped_items: response.total - response.success - response.failed
+      }
+      resultDialogVisible.value = true
+
+      if (response.failed === 0) {
+        ElMessage.success('所有文件重命名成功')
+      } else {
+        ElMessage.warning(`${response.failed} 个文件重命名失败`)
+      }
     } else {
-      ElMessage.warning(`${response.failed_items} 个文件重命名失败`)
+      // 本地模式
+      const response = await executeSmartRename({
+        batch_id: previewData.value.batch_id
+      })
+
+      executeResult.value = response
+      resultDialogVisible.value = true
+
+      if (response.failed_items === 0) {
+        ElMessage.success('所有文件重命名成功')
+      } else {
+        ElMessage.warning(`${response.failed_items} 个文件重命名失败`)
+      }
     }
   } catch {
     ElMessage.error('执行失败')

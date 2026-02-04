@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from asgiref.wsgi import WsgiToAsgi
-from app.api import quark, strm, proxy, emby, tasks, strm_validator, quark_sdk, search, rename, dashboard, tmdb, monitoring, smart_rename
+from app.api import quark, strm, proxy, emby, tasks, strm_validator, quark_sdk, search, rename, dashboard, tmdb, monitoring, smart_rename, file_manager
 from app.api.v1 import api_router as v1_router
 from app.config.settings import AppConfig
 from app.services.config_service import get_config_service
@@ -191,6 +191,7 @@ app.include_router(search.router)
 app.include_router(rename.router)
 app.include_router(smart_rename.router)
 app.include_router(dashboard.router)
+app.include_router(file_manager.router, prefix="/api", tags=["FileManager"])
 from app.api import transfer
 app.include_router(transfer.router)
 
