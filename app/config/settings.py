@@ -113,15 +113,44 @@ class WeChatConfig(BaseModel):
     send_key: str = Field("", description="SendKey", max_length=2048)
 
 
-class WebDAVConfig(BaseModel):
-    """WebDAV配置"""
+
+class AListConfig(BaseModel):
+    """AList配置"""
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(True, description="是否启用内置WebDAV")
-    mount_path: str = Field("/dav", description="挂载路径")
-    username: str = Field("admin", description="WebDAV认证用户名", max_length=128)
-    password: str = Field("password", description="WebDAV认证密码", max_length=256)
-    read_only: bool = Field(True, description="是否只读")
+    enabled: bool = Field(False, description="是否启用AList集成")
+    url: str = Field("http://localhost:5244", description="AList服务地址", max_length=MAX_URL_LENGTH)
+    token: str = Field("", description="AList Token", max_length=2048)
+    mount_path: str = Field("/", description="夸克网盘在AList中的挂载路径")
+
+    @field_validator('url')
+    @classmethod
+    def validate_url(cls, v):
+        if not v:
+            return "http://localhost:5244"
+        v = v.rstrip('/')
+        validate_http_url(v, "alist.url")
+        return v
+    
+    @field_validator('mount_path')
+    @classmethod
+    def validate_mount_path(cls, v):
+        if not v:
+            return "/"
+        return v
+
+
+class WebDAVConfig(BaseModel):
+    """WebDAV配置（用于兜底播放）"""
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(False, description="是否启用WebDAV兜底功能")
+    fallback_enabled: bool = Field(True, description="是否启用故障自动切换")
+    url: str = Field("http://localhost:5244/dav", description="WebDAV服务地址", max_length=MAX_URL_LENGTH)
+    username: str = Field("", description="WebDAV用户名", max_length=128)
+    password: str = Field("", description="WebDAV密码", max_length=256)
+    mount_path: str = Field("/", description="夸克网盘在WebDAV中的挂载路径")
+    read_only: bool = Field(True, description="是否只读（仅用于内置WebDAV服务，此处无用但保留兼容）")
 
     @field_validator('username')
     @classmethod
@@ -136,16 +165,21 @@ class WebDAVConfig(BaseModel):
         if v and v.startswith("encrypted:"):
             return get_decrypted_config_value(v)
         return v
+    
+    @field_validator('url')
+    @classmethod
+    def validate_url(cls, v):
+        if not v:
+            return "http://localhost:5244/dav"
+        v = v.rstrip('/')
+        validate_http_url(v, "webdav.url")
+        return v
 
     @field_validator('mount_path')
     @classmethod
     def validate_mount_path(cls, v):
         if not v:
-            return "/dav"
-        if not v.startswith("/"):
-            v = f"/{v}"
-        if v != "/" and v.endswith("/"):
-            v = v.rstrip("/")
+            return "/"
         return v
 
 
@@ -239,6 +273,7 @@ class AppConfig(BaseModel):
     telegram: TelegramConfig = Field(default_factory=TelegramConfig, description="Telegram通知配置")
     wechat: WeChatConfig = Field(default_factory=WeChatConfig, description="微信通知配置")
     webdav: WebDAVConfig = Field(default_factory=WebDAVConfig, description="WebDAV配置")
+    alist: AListConfig = Field(default_factory=AListConfig, description="AList配置")
     
     # 新增字段
     quark: QuarkConfig = Field(default_factory=QuarkConfig, description="夸克网盘配置")

@@ -2,18 +2,26 @@
 STRM文件生成器
 
 用于从夸克网盘生成STRM文件
+
+支持三种URL模式：
+- redirect: 使用302重定向代理URL（推荐，解决直链过期问题）
+- stream: 使用流代理URL（服务器中转，占用带宽）
+- direct: 使用夸克直链URL（不推荐，会过期）
 """
 
 import os
 import asyncio
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from app.services.quark_service import QuarkService
 from app.models.quark import FileModel
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# STRM URL模式类型
+StrmUrlMode = Literal["redirect", "stream", "direct"]
 
 
 class STRMGenerator:
@@ -24,27 +32,38 @@ class STRMGenerator:
         cookie: str,
         output_dir: str = "./strm",
         base_url: str = "http://localhost:8000",
-        use_transcoding: bool = True
+        use_transcoding: bool = True,
+        strm_url_mode: StrmUrlMode = "redirect"
     ):
         """
         初始化STRM生成器
 
-        Args:
-            cookie: 夸克Cookie
-            output_dir: STRM文件输出目录
-            base_url: API基础URL
-            use_transcoding: 是否使用转码链接
+        用途: 创建STRM生成器实例，配置输出目录和URL模式
+        输入:
+            - cookie (str): 夸克Cookie，用于API认证
+            - output_dir (str): STRM文件输出目录，默认./strm
+            - base_url (str): API基础URL，用于生成代理URL
+            - use_transcoding (bool): 是否使用转码链接，默认True
+            - strm_url_mode (StrmUrlMode): STRM URL模式
+                - "redirect": 使用302重定向代理（推荐）
+                - "stream": 使用流代理（服务器中转）
+                - "direct": 使用直链（不推荐，会过期）
+        输出: 无
+        副作用: 
+            - 创建输出目录（如不存在）
+            - 初始化QuarkService
         """
         self.cookie = cookie
         self.output_dir = Path(output_dir)
         self.base_url = base_url.rstrip("/")
         self.use_transcoding = use_transcoding
+        self.strm_url_mode = strm_url_mode
         self.service = QuarkService(cookie=cookie)
 
         # 确保输出目录存在
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"STRMGenerator initialized, output dir: {self.output_dir}")
+        logger.info(f"STRMGenerator initialized, output dir: {self.output_dir}, url_mode: {strm_url_mode}")
 
     async def generate_strm_files(
         self,
@@ -169,17 +188,20 @@ class STRMGenerator:
         """
         生成单个STRM文件
 
-        Args:
-            file_info: 文件信息
-
-        Returns:
-            是否成功生成
+        用途: 为单个视频文件创建对应的STRM文件
+        输入:
+            - file_info (Dict): 文件信息，包含id, name, remote_path等
+        输出:
+            - bool: 是否成功生成（文件已存在返回False）
+        副作用:
+            - 在output_dir下创建.strm文件
+            - 若strm_url_mode为direct，会调用夸克API获取直链
         """
         file_name = file_info["name"]
         file_id = file_info["id"]
         remote_path = file_info["remote_path"]
 
-        # 构建STRM文件路径
+        # 构建STRM文件路径（保持夸克目录结构）
         strm_path = self.output_dir / f"{remote_path}.strm"
 
         # 检查文件是否已存在
@@ -190,25 +212,64 @@ class STRMGenerator:
         # 确保父目录存在
         strm_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 获取直链URL
         try:
-            if self.use_transcoding:
-                link = await self.service.get_transcoding_link(file_id)
-            else:
-                link = await self.service.get_download_link(file_id)
-
-            video_url = link.url
+            # 根据URL模式生成视频URL
+            video_url = await self._generate_video_url(file_id, remote_path)
 
             # 写入STRM文件
             with open(strm_path, 'w', encoding='utf-8') as f:
                 f.write(video_url)
 
-            logger.info(f"Generated STRM file: {strm_path}")
+            logger.info(f"Generated STRM file: {strm_path} -> {video_url[:80]}...")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to get link for {file_name}: {str(e)}")
+            logger.error(f"Failed to generate STRM for {file_name}: {str(e)}")
             raise
+
+    async def _generate_video_url(self, file_id: str, remote_path: str = None) -> str:
+        """
+        根据URL模式生成视频URL
+
+        用途: 根据strm_url_mode配置生成不同类型的视频URL
+        输入:
+            - file_id (str): 夸克文件ID
+            - remote_path (str): 文件远程路径（可选，用于拼接兜底参数）
+        输出:
+            - str: 视频URL
+                - redirect模式: http://base_url/api/proxy/redirect/{file_id}
+                - stream模式: http://base_url/api/proxy/stream/{file_id}
+                - direct模式: 夸克直链URL（会过期）
+        副作用:
+            - direct模式会调用夸克API
+        """
+        if self.strm_url_mode == "redirect":
+            # 302重定向模式（推荐）
+            # Emby请求此URL时，后端会302重定向到实时获取的夸克直链
+            url = f"{self.base_url}/api/proxy/redirect/{file_id}"
+            if remote_path:
+                from urllib.parse import quote
+                # 附加 path 参数，用于 WebDAV 兜底
+                encoded_path = quote(remote_path)
+                url += f"?path={encoded_path}"
+            return url
+        
+        elif self.strm_url_mode == "stream":
+            # 流代理模式
+            # Emby请求此URL时，后端会代理视频流数据（占用服务器带宽）
+            return f"{self.base_url}/api/proxy/stream/{file_id}"
+        
+        elif self.strm_url_mode == "direct":
+            # 直链模式（不推荐，链接会过期）
+            if self.use_transcoding:
+                link = await self.service.get_transcoding_link(file_id)
+            else:
+                link = await self.service.get_download_link(file_id)
+            logger.warning(f"Using direct link mode for {file_id}, link may expire!")
+            return link.url
+        
+        else:
+            raise ValueError(f"Unknown strm_url_mode: {self.strm_url_mode}")
 
     async def close(self):
         """关闭服务"""
@@ -221,20 +282,27 @@ async def generate_strm_from_quark(
     output_dir: str = "./strm",
     root_id: str = None,
     only_video: bool = None,
-    max_files: int = 50
+    max_files: int = 50,
+    base_url: str = "http://localhost:8000",
+    strm_url_mode: StrmUrlMode = "redirect"
 ) -> Dict[str, Any]:
     """
     从夸克网盘生成STRM文件的便捷函数
 
-    Args:
-        cookie: 夸克Cookie（可选，默认从配置文件读取）
-        output_dir: 输出目录
-        root_id: 根目录ID（可选，默认从配置文件读取）
-        only_video: 是否只处理视频文件（可选，默认从配置文件读取）
-        max_files: 最大处理文件数量（可选，默认50）
-
-    Returns:
-        生成结果
+    用途: 便捷地扫描夸克网盘并生成STRM文件
+    输入:
+        - cookie (str): 夸克Cookie（可选，默认从配置文件读取）
+        - output_dir (str): STRM输出目录
+        - root_id (str): 夸克根目录ID（可选，默认从配置文件读取）
+        - only_video (bool): 是否只处理视频文件（可选，默认从配置文件读取）
+        - max_files (int): 最大处理文件数量（可选，默认50）
+        - base_url (str): API基础URL，用于生成代理URL
+        - strm_url_mode (StrmUrlMode): URL模式，默认redirect
+    输出:
+        - Dict: 生成结果统计
+    副作用:
+        - 在output_dir下创建STRM文件
+        - 调用夸克API获取文件列表
     """
     config = get_config()
 
@@ -249,7 +317,9 @@ async def generate_strm_from_quark(
 
     generator = STRMGenerator(
         cookie=cookie,
-        output_dir=output_dir
+        output_dir=output_dir,
+        base_url=base_url,
+        strm_url_mode=strm_url_mode
     )
 
     try:

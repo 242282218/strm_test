@@ -7,8 +7,9 @@
 import os
 import threading
 from typing import Dict, Any, Optional
+from pydantic import ValidationError
 from app.core.logging import get_logger
-from app.config.settings import AppConfig
+from app.config.settings import AppConfig, AListConfig, WebDAVConfig
 
 logger = get_logger(__name__)
 
@@ -117,6 +118,14 @@ class ConfigManager:
             是否只获取视频文件
         """
         return self.get('quark.only_video', True)
+
+    def get_alist_config(self) -> Dict[str, Any]:
+        """获取AList配置"""
+        return self.get('alist', {})
+
+    def get_webdav_config(self) -> Dict[str, Any]:
+        """获取WebDAV配置"""
+        return self.get('webdav', {})
 
     def reload(self):
         """重新加载配置"""
