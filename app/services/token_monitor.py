@@ -11,12 +11,14 @@ import asyncio
 from app.services.quark_service import QuarkService
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
+from app.services.notification_service import get_notification_service, NotificationType, NotificationPriority
 
 logger = get_logger(__name__)
 
 class TokenMonitor:
     def __init__(self):
         self.config = get_config()
+        self.notifier = get_notification_service()
     
     async def check_token(self) -> bool:
         """
@@ -38,8 +40,20 @@ class TokenMonitor:
             logger.info("TokenMonitor: Cookie is valid")
             return True
         except Exception as e:
-            logger.error(f"TokenMonitor: Cookie check failed: {e}")
-            # 这里可以集成通知服务 (Telegram/WeChat)
+            error_msg = f"Quark Cookie check failed: {e}"
+            logger.error(f"TokenMonitor: {error_msg}")
+            
+            # 发送系统告警通知
+            try:
+                await self.notifier.send_notification(
+                    type=NotificationType.SYSTEM_ALERT,
+                    title="🚨 夸克 Token 失效",
+                    content=f"检测到 Quark Cookie 可能已失效，请及时更新。\n错误信息: {str(e)}",
+                    priority=NotificationPriority.HIGH
+                )
+            except Exception as notify_error:
+                logger.error(f"Failed to send token expiration notification: {notify_error}")
+                
             return False
         finally:
             if service:

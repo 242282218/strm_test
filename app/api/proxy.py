@@ -50,27 +50,25 @@ async def test_stream_endpoint():
 async def proxy_stream(
     request: Request,
     file_id: str,
-    range_header: str = None,
-    redirect: bool = True
+    range_header: str = None
 ):
     """
-    代理视频流
+    代理视频流 (Stream Mode)
 
-    参考: go-emby2openlist internal/service/emby/redirect.go
-
-    支持两种模式:
-    1. 302重定向模式 (redirect=true): 返回302重定向到夸克直链
-    2. 代理模式 (redirect=false): 代理视频流数据
+    通过服务器中转流量，适用于不支持302重定向的场景。
+    使用 StreamingResponse 实现流式传输。
 
     Args:
         request: FastAPI请求对象
         file_id: 文件ID
         range_header: Range请求头
-        redirect: 是否使用302重定向
 
     Returns:
-        302重定向响应或代理流响应
+        StreamingResponse
     """
+    import aiohttp
+    from fastapi.responses import StreamingResponse
+    
     cookie = config.get_quark_cookie()
 
     if not cookie:
@@ -78,23 +76,101 @@ async def proxy_stream(
 
     try:
         file_id = validate_identifier(file_id, "file_id")
-        if redirect:
-            # 302重定向模式
-            async with ProxyService(cookie=cookie) as service:
-                redirect_url = await service.redirect_302(file_id)
-                logger.info(f"302 redirect to: {redirect_url[:100]}...")
-                return RedirectResponse(url=redirect_url, status_code=302)
-        else:
-            # 代理模式
-            async with ProxyService(cookie=cookie) as service:
-                response, headers = await service.proxy_stream(file_id, range_header)
-                return Response(
-                    content=response.content,
-                    status_code=response.status,
-                    headers=headers,
-                    media_type=headers.get("Content-Type", "video/mp4")
-                )
-    except InputValidationError:
+        
+        # 1. 获取直链 URL
+        # 使用 ProxyService 获取带缓存的 URL
+        redirect_url = None
+        async with ProxyService(cookie=cookie) as service:
+            redirect_url = await service.get_download_url(file_id)
+            
+        if not redirect_url:
+             raise HTTPException(status_code=502, detail="Failed to resolve download URL")
+             
+        # 2. 准备请求头
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://pan.quark.cn/",
+        }
+        
+        # 优先使用 header 中的 Range，其次查找 query param (某些播放器可能不传 header)
+        if not range_header:
+            range_header = request.headers.get("Range")
+            
+        if range_header:
+            headers["Range"] = range_header
+            
+        logger.info(f"Stream proxy for {file_id}, range: {range_header}")
+
+        # 3. 创建生成器与响应
+        # 注意: 我们需要在生成器内部管理 session 生命周期
+        
+        # 预先发起请求获取响应头 (HEAD or GET stream)
+        # 为了简单且减少请求次数，我们直接开始 GET 请求，并利用 aiohttp 的 response
+        # 但是 StreamingResponse 需要先知道 Content-Type 等信息吗？ 
+        # StreamingResponse(content, status_code=200, headers=...)
+        # 如果我们等到 generator start 才知道 headers，那 fastAPI 已经把 response headers 发送出去了（默认 200/chunked）。
+        # 对于视频流，正确传递 Content-Type, Content-Length, Content-Range 至关重要。
+        # 因此，我们需要先建立连接，拿到 headers，然后构建 StreamingResponse。
+        
+        # 定义一个 holder 类来传递资源所有权
+        class StreamContext:
+            def __init__(self):
+                self.session = aiohttp.ClientSession()
+                self.resp = None
+                
+            async def setup(self, url, headers):
+                self.resp = await self.session.get(url, headers=headers, allow_redirects=True)
+                return self.resp
+                
+            async def close(self):
+                if self.resp:
+                    self.resp.close()
+                if self.session:
+                    await self.session.close()
+
+        stream_ctx = StreamContext()
+        upstream_resp = await stream_ctx.setup(redirect_url, headers)
+        
+        # 检查上游状态
+        if upstream_resp.status not in [200, 206]:
+            await stream_ctx.close()
+            # 尝试读取错误信息
+            # err_text = await upstream_resp.text()
+            raise HTTPException(status_code=upstream_resp.status, detail="Upstream error")
+
+        # 提取关键响应头
+        response_headers = {}
+        for k in ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified", "ETag"]:
+            if k in upstream_resp.headers:
+                response_headers[k] = upstream_resp.headers[k]
+        
+        # 强制允许跨域 (虽然 FastAPI CORSMiddleware 可能处理了，但代理流明确一下更好)
+        response_headers["Access-Control-Allow-Origin"] = "*"
+
+        # 定义生成器
+        async def iter_stream():
+            try:
+                # 64KB chunks
+                async for chunk in upstream_resp.content.iter_chunked(64 * 1024):
+                    yield chunk
+            except Exception as e:
+                logger.error(f"Stream interrupted: {e}")
+                raise
+            finally:
+                # 确保资源释放
+                logger.debug(f"Closing stream session for {file_id}")
+                await stream_ctx.close()
+
+        # 返回 StreamingResponse
+        # 注意: status_code 应跟随上游 (200 or 206)
+        return StreamingResponse(
+            iter_stream(),
+            status_code=upstream_resp.status,
+            headers=response_headers,
+            media_type=response_headers.get("Content-Type", "application/octet-stream")
+        )
+
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to proxy stream: {str(e)}")

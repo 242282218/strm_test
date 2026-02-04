@@ -24,7 +24,8 @@ class StrmService:
         alt_exts: list = None,
         create_sub_directory: bool = False,
         recursive: bool = True,
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        strm_url_mode: str = "redirect"
     ):
         """
         初始化STRM服务
@@ -38,6 +39,7 @@ class StrmService:
             create_sub_directory: 是否创建子目录
             recursive: 是否递归扫描
             force_refresh: 是否强制刷新
+            strm_url_mode: URL模式 (redirect/stream/direct)
         """
         if exts is None:
             exts = [".mp4", ".mkv", ".avi", ".mov"]
@@ -52,7 +54,8 @@ class StrmService:
         self.create_sub_directory = create_sub_directory
         self.recursive = recursive
         self.force_refresh = force_refresh
-        logger.info("StrmService initialized")
+        self.strm_url_mode = strm_url_mode
+        logger.info(f"StrmService initialized, mode: {strm_url_mode}")
 
     async def scan_directory(
         self,
@@ -81,7 +84,8 @@ class StrmService:
             alt_exts=self.alt_exts,
             create_sub_directory=self.create_sub_directory,
             recursive=self.recursive,
-            force_refresh=self.force_refresh
+            force_refresh=self.force_refresh,
+            strm_url_mode=self.strm_url_mode
         )
 
         strms = await generator.scan_directory(remote_path, local_path, concurrent_limit)

@@ -56,81 +56,18 @@ class ProxyService:
         await self.link_cache.stop()
         await self.close()
 
-    async def proxy_stream(
-        self,
-        file_id: str,
-        range_header: Optional[str] = None
-    ) -> Tuple[aiohttp.ClientResponse, Optional[dict]]:
+    async def get_download_url(self, file_id: str) -> str:
         """
-        代理视频流
-
-        参考: MediaHelp proxy.py
+        获取下载直链 (带缓存)
 
         Args:
             file_id: 文件ID
-            range_header: Range请求头
 
         Returns:
-            (响应对象, 响应头字典)
+            下载地址
         """
-        try:
-            # 检查缓存（忽略Range）
-            cached_entry = await self.link_cache.get(file_id, range_header=None)
-
-            if cached_entry:
-                logger.debug(f"Cache hit for {file_id}")
-                return cached_entry.value, cached_entry.headers
-
-            # 获取直链
-            async with self.semaphore:
-                link = await self.quark_service.get_download_link(file_id)
-
-            # 创建aiohttp客户端
-            async with aiohttp.ClientSession() as session:
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": "https://pan.quark.cn/",
-                    "Accept": "*/*",
-                }
-
-                # 处理Range请求
-                if range_header:
-                    headers["Range"] = range_header
-
-                async with session.get(
-                    link.url,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=30)
-                ) as response:
-                    if response.status != 200 and response.status != 206:
-                        error_msg = f"Failed to proxy stream: status {response.status}"
-                        logger.error(error_msg)
-                        raise Exception(error_msg)
-
-                    # 构建响应头
-                    response_headers = {
-                        "Content-Type": response.headers.get("Content-Type", "video/mp4"),
-                        "Accept-Ranges": response.headers.get("Accept-Ranges", "bytes"),
-                        "Content-Length": response.headers.get("Content-Length"),
-                        "Content-Range": response.headers.get("Content-Range"),
-                        "Cache-Control": f"public, max-age={self.link_cache.default_ttl}",
-                        "Access-Control-Allow-Origin": "*",
-                    }
-
-                    # 缓存响应（忽略Range）
-                    await self.link_cache.set(
-                        file_id=file_id,
-                        value=response,
-                        headers=response_headers,
-                        range_header=None
-                    )
-
-                    logger.debug(f"Proxied stream for {file_id}, status: {response.status}")
-                    return response, response_headers
-
-        except Exception as e:
-            logger.error(f"Failed to proxy stream {file_id}: {str(e)}")
-            raise
+        # 复用 redirect_302 的逻辑
+        return await self.redirect_302(file_id)
 
     async def redirect_302(self, file_id: str) -> str:
         """

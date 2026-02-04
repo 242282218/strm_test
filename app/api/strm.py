@@ -20,6 +20,8 @@ async def scan_directory(
     local_path: str = Query(..., min_length=1, max_length=MAX_PATH_LENGTH),
     recursive: bool = Query(True),
     concurrent_limit: int = Query(5, ge=MIN_CONCURRENT_LIMIT, le=MAX_CONCURRENT_LIMIT),
+    base_url: str = Query("http://localhost:8000", description="代理服务器基础URL"),
+    strm_url_mode: str = Query("redirect", description="URL模式: redirect/stream/direct"),
     cookie: str = Depends(get_quark_cookie)
 ):
     """
@@ -36,7 +38,9 @@ async def scan_directory(
         service = StrmService(
             cookie=cookie,
             database=database,
-            recursive=recursive
+            recursive=recursive,
+            base_url=base_url,
+            strm_url_mode=strm_url_mode
         )
         strms = await service.scan_directory(remote_path, local_path, concurrent_limit)
         return {"strms": strms, "count": len(strms)}

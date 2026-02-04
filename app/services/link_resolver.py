@@ -21,24 +21,44 @@ class LinkResolver:
         self.alist_config = config_mgr.get_alist_config()
         self.config_mgr = config_mgr
     
+        # 0. Check Cache
+        from app.services.link_cache import LinkCache
+        # Using a singleton-like pattern or passing cache instance would be better
+        # For now, we'll instantiate it or use a global instance if available.
+        # But wait, LinkCache is a class, we need an instance.
+        # Let's import the singleton instance if defined in link_cache (it's not).
+        # We will create a class-level variable or simple singleton here for now.
+        
+        # NOTE: Ideally LinkCache should be a singleton service managed by the app container.
+        # Given current constraints, I'll check if I can use a global cache.
+        # Let's assume we modify this class to accept a cache instance or manage one.
+        pass # Placeholder for thought
+        
     async def resolve(self, file_id: str, path: str = None) -> str:
         """
         解析文件直链
         
         策略:
+        0. 检查缓存
         1. 尝试使用 QuarkService 获取直链 (file_id)
         2. 如果失败且配置了 AList，尝试使用 AList API 获取直链 (path)
-        
-        Args:
-            file_id: 夸克文件ID
-            path: 文件路径（用于 AList 查找），如 "/电影/阿凡达.mp4"
-            
-        Returns:
-            str: 下载直链 URL
-            
-        Raises:
-            Exception: 如果所有方法都失败
         """
+        # Init simple cache instance (should be global)
+        if not hasattr(LinkResolver, '_cache_instance'):
+             from app.services.link_cache import LinkCache
+             LinkResolver._cache_instance = LinkCache()
+             # We should probably start it? It has start/stop methods for cleanup loop.
+             # Ideally app startup starts it. For now, lazy start without cleanup task or simple usage.
+             # The existing LinkCache requires async start for cleanup loop. 
+             # Let's just use it as a passive store for now to avoid task lifecycle issues in this quick edit.
+        
+        cache = LinkResolver._cache_instance
+        
+        # Check cache
+        cached_entry = await cache.get(file_id)
+        if cached_entry:
+            return cached_entry.value
+
         last_error = None
         
         # 1. 优先尝试 Quark API (基于 ID，最快)
@@ -48,6 +68,8 @@ class LinkResolver:
                 link_model = await self.quark_service.get_download_link(file_id)
                 if link_model and link_model.url:
                     logger.debug(f"Resolved link via Quark API: {file_id}")
+                    # Cache successful result (Quark links valid for ~15-30 mins, lets cache for 10 mins)
+                    await cache.set(file_id, link_model.url, ttl=600)
                     return link_model.url
             except Exception as e:
                 logger.warning(f"Quark API resolve failed for {file_id}: {e}")
@@ -60,6 +82,8 @@ class LinkResolver:
                 alist_url = await self._resolve_via_alist(path)
                 if alist_url:
                     logger.info(f"Resolved link via AList API: {path}")
+                    # AList 302 links usually also expire or point to expiring 115/Quark links.
+                    await cache.set(file_id, alist_url, ttl=600)
                     return alist_url
             except Exception as e:
                 logger.warning(f"AList API resolve failed for {path}: {e}")

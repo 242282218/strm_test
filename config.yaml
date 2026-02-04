@@ -70,3 +70,8 @@ wechat:
   send_key: ''
 zhipu:
   api_key: ''
+alist:
+  enabled: false
+  url: "http://localhost:5244"
+  token: ""
+  mount_path: "/"
