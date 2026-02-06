@@ -30,13 +30,31 @@ def _should_mask_key(key: str) -> bool:
     return any(name in key_lower for name in SENSITIVE_FIELD_NAMES)
 
 
+def mask_secret(value: str, prefix_len: int = 4, suffix_len: int = 4) -> str:
+    """Mask a secret value, keeping only prefix/suffix characters visible."""
+    if value is None:
+        return ""
+    text = str(value)
+    if not text:
+        return ""
+    keep = prefix_len + suffix_len
+    if len(text) <= keep:
+        return "*" * len(text)
+    return f"{text[:prefix_len]}{'*' * (len(text) - keep)}{text[-suffix_len:]}"
+
+
 def mask_sensitive_data(data: Any) -> Any:
     """Recursively mask sensitive fields in dicts/lists."""
     if isinstance(data, dict):
         masked = {}
         for k, v in data.items():
             if isinstance(k, str) and _should_mask_key(k):
-                masked[k] = "***"
+                if isinstance(v, str):
+                    masked[k] = mask_secret(v)
+                elif v is None:
+                    masked[k] = ""
+                else:
+                    masked[k] = "***"
             else:
                 masked[k] = mask_sensitive_data(v)
         return masked

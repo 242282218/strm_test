@@ -117,6 +117,10 @@
         <el-icon><Search /></el-icon>
         生成预览
       </el-button>
+      <el-button type="success" :loading="previewing || executing" :disabled="!canStartWorkflow" @click="startRenameWorkflow">
+        <el-icon><VideoPlay /></el-icon>
+        {{ startWorkflowLabel }}
+      </el-button>
       <el-button :disabled="!hasPreview || previewing" @click="refreshPreview">
         <el-icon><Refresh /></el-icon>
         重新扫描
@@ -134,6 +138,25 @@
         AI 连通性测试
       </el-button>
       <el-button :disabled="!hasPreview" @click="resetWorkspace">重置</el-button>
+    </section>
+    <p class="action-hint">{{ actionHint }}</p>
+
+    <section v-if="cloudWorkflowTask && sourceMode === 'cloud'" class="workflow-task-card">
+      <div class="workflow-task-head">
+        <strong>任务中心执行</strong>
+        <el-tag :type="cloudWorkflowStatusTag" round>{{ cloudWorkflowTask.status }}</el-tag>
+      </div>
+      <p class="minor">任务ID：{{ cloudWorkflowTask.task_id }}</p>
+      <p class="minor">阶段：{{ cloudWorkflowTask.stage }} · {{ cloudWorkflowTask.message }}</p>
+      <el-progress
+        :percentage="Math.max(0, Math.min(100, Number(cloudWorkflowTask.progress || 0)))"
+        :status="cloudWorkflowProgressStatus"
+        :stroke-width="10"
+      />
+      <div class="workflow-task-actions">
+        <el-button size="small" :disabled="!isCloudWorkflowRunning" @click="cancelCloudWorkflow">取消任务</el-button>
+        <el-button size="small" @click="refreshCloudWorkflowTask(true)">刷新状态</el-button>
+      </div>
     </section>
 
     <section v-if="aiConnectivityResult" class="ai-connectivity-strip">
@@ -161,7 +184,7 @@
       </div>
     </section>
 
-    <section v-if="hasPreview" class="workspace">
+    <section v-if="hasPreview" ref="workspaceRef" class="workspace">
       <div class="summary-grid">
         <div class="summary"><span>批次 ID</span><strong>{{ previewBatchId }}</strong></div>
         <div class="summary"><span>总项目</span><strong>{{ totalItems }}</strong></div>
@@ -371,7 +394,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleCheck,
@@ -383,7 +406,8 @@ import {
   InfoFilled,
   Refresh,
   RefreshRight,
-  Search
+  Search,
+  VideoPlay
 } from '@element-plus/icons-vue'
 import {
   executeSmartRename,
@@ -405,10 +429,14 @@ import {
   type ValidationResponse
 } from '@/api/smartRename'
 import {
+  cancelCloudRenameWorkflowTask,
+  createCloudRenameWorkflowTask,
   executeCloudRename,
+  getCloudRenameWorkflowTask,
   smartRenameCloudFiles,
   testCloudRenameAIConnectivity,
-  type QuarkRenameItem
+  type QuarkRenameItem,
+  type QuarkWorkflowTaskStatus
 } from '@/api/quark'
 import QuarkFileBrowser from '@/components/QuarkFileBrowser.vue'
 
@@ -476,6 +504,10 @@ const previewSourceMode = ref<SourceMode>('local')
 const previewAlgorithmUsed = ref('')
 const previewNamingUsed = ref('')
 const previewTargetLabel = ref('')
+const workspaceRef = ref<HTMLElement | null>(null)
+const cloudWorkflowTask = ref<QuarkWorkflowTaskStatus | null>(null)
+const cloudWorkflowNotified = ref(false)
+let cloudWorkflowPollTimer: ReturnType<typeof setInterval> | null = null
 
 const previewRows = ref<ViewRenameItem[]>([])
 const selectedRowIds = ref<string[]>([])
@@ -531,6 +563,8 @@ const hasPreview = computed(() => previewRows.value.length > 0)
 const canPreview = computed(() => sourceMode.value === 'local' ? localPath.value.trim().length > 0 : !!cloudFolderFid.value)
 const selectedRowSet = computed(() => new Set(selectedRowIds.value))
 const selectedRows = computed(() => previewRows.value.filter((row) => selectedRowSet.value.has(row.id)))
+const runnableRows = computed(() => previewRows.value.filter((row) => (row.new_name || '').trim().length > 0))
+const selectedRunnableRows = computed(() => selectedRows.value.filter((row) => (row.new_name || '').trim().length > 0))
 
 const totalItems = computed(() => previewRows.value.length)
 const pendingItems = computed(() => previewRows.value.filter((row) => row.needs_confirmation).length)
@@ -595,7 +629,56 @@ const displayRows = computed(() => {
 
 const allDisplayedSelected = computed(() => displayRows.value.length > 0 && displayRows.value.every((row) => selectedRowSet.value.has(row.id)))
 const partiallyDisplayedSelected = computed(() => displayRows.value.some((row) => selectedRowSet.value.has(row.id)) && !allDisplayedSelected.value)
-const canExecute = computed(() => !!previewBatchId.value && selectedRows.value.length > 0)
+const canExecute = computed(() => !!previewBatchId.value && selectedRunnableRows.value.length > 0)
+const isCloudWorkflowRunning = computed(() => {
+  if (sourceMode.value !== 'cloud') return false
+  const status = cloudWorkflowTask.value?.status
+  return status === 'pending' || status === 'running'
+})
+const canStartWorkflow = computed(() => {
+  if (isCloudWorkflowRunning.value) return false
+  if (previewing.value || executing.value) return false
+  if (!hasPreview.value) return canPreview.value
+  return !!previewBatchId.value && runnableRows.value.length > 0
+})
+const startWorkflowLabel = computed(() => {
+  if (sourceMode.value === 'cloud') {
+    return isCloudWorkflowRunning.value ? '任务执行中...' : '开始重命名（任务模式）'
+  }
+  return hasPreview.value ? '开始重命名' : '开始重命名（先生成预览）'
+})
+const actionHint = computed(() => {
+  if (!canPreview.value && !hasPreview.value) {
+    return sourceMode.value === 'local'
+      ? '请先输入本地目录路径，再点击“生成预览”或“开始重命名”。'
+      : '请先点击“浏览”选择云盘目录，再点击“生成预览”或“开始重命名”。'
+  }
+  if (sourceMode.value === 'cloud' && isCloudWorkflowRunning.value) {
+    return `任务进行中：${cloudWorkflowTask.value?.message || '处理中'}`
+  }
+  if (!hasPreview.value) {
+    return sourceMode.value === 'cloud'
+      ? '云盘任务模式会在后台自动执行“预览 + 重命名”，可在下方任务卡片查看进度。'
+      : '建议先生成预览核对结果，再执行重命名。也可直接点击“开始重命名”走一键流程。'
+  }
+  if (!selectedRows.value.length) {
+    return '未勾选项目时，“开始重命名”会自动勾选可执行项并继续。'
+  }
+  return `已勾选 ${selectedRows.value.length} 项，可直接执行重命名。`
+})
+const cloudWorkflowStatusTag = computed<'info' | 'warning' | 'success' | 'danger'>(() => {
+  const status = cloudWorkflowTask.value?.status
+  if (status === 'completed') return 'success'
+  if (status === 'failed') return 'danger'
+  if (status === 'cancelled') return 'warning'
+  return 'info'
+})
+const cloudWorkflowProgressStatus = computed<'success' | 'exception' | undefined>(() => {
+  const status = cloudWorkflowTask.value?.status
+  if (status === 'completed') return 'success'
+  if (status === 'failed' || status === 'cancelled') return 'exception'
+  return undefined
+})
 const canRollback = computed(() => {
   if (!previewBatchId.value) return false
   if (previewSourceMode.value === 'local') return true
@@ -642,12 +725,175 @@ function providerLabel(provider?: string): string {
   return provider || 'Unknown'
 }
 
+function stopCloudWorkflowPolling() {
+  if (cloudWorkflowPollTimer) {
+    clearInterval(cloudWorkflowPollTimer)
+    cloudWorkflowPollTimer = null
+  }
+}
+
+function applyCloudWorkflowPreview(preview: NonNullable<QuarkWorkflowTaskStatus['preview']>) {
+  if (previewBatchId.value === preview.batch_id && previewRows.value.length > 0) return
+  previewBatchId.value = preview.batch_id
+  previewSourceMode.value = 'cloud'
+  previewAlgorithmUsed.value = preview.algorithm_used
+  previewNamingUsed.value = preview.naming_standard
+  previewTargetLabel.value = cloudFolderLabel.value
+  previewRows.value = (preview.items || []).map(normalizeCloudItem)
+  selectedRowIds.value = previewRows.value.map((item) => item.id)
+  lastCloudExecution.value = []
+}
+
+function applyCloudWorkflowExecute(executeData: NonNullable<QuarkWorkflowTaskStatus['execute']>) {
+  executeSummary.value = {
+    batch_id: executeData.batch_id,
+    total_items: executeData.total,
+    success_items: executeData.success,
+    failed_items: executeData.failed,
+    skipped_items: executeData.skipped ?? Math.max(executeData.total - executeData.success - executeData.failed, 0)
+  }
+
+  const runnable = previewRows.value.filter((row) => (row.new_name || '').trim().length > 0)
+  lastCloudExecution.value = runnable.map((row) => ({
+    fid: row.id,
+    original_name: row.original_name,
+    executed_name: row.new_name
+  }))
+
+  const resultMap = new Map((executeData.results || []).map((item) => [item.fid, item]))
+  previewRows.value = previewRows.value.map((row) => {
+    const result = resultMap.get(row.id)
+    if (!result) return row
+    if (result.status === 'success') {
+      return {
+        ...row,
+        original_name: row.new_name,
+        status: 'success',
+        needs_confirmation: false,
+        confirmation_reason: undefined
+      }
+    }
+    if (result.status === 'skipped') {
+      return {
+        ...row,
+        status: 'skipped',
+        confirmation_reason: '目标名称与原名称一致，已跳过'
+      }
+    }
+    return {
+      ...row,
+      status: 'failed',
+      confirmation_reason: result.error || '执行失败'
+    }
+  })
+}
+
+async function refreshCloudWorkflowTask(showError: boolean = false) {
+  const taskId = cloudWorkflowTask.value?.task_id
+  if (!taskId) return
+
+  try {
+    const latest = await getCloudRenameWorkflowTask(taskId)
+    const previousStatus = cloudWorkflowTask.value?.status
+    cloudWorkflowTask.value = latest
+
+    if (latest.preview) applyCloudWorkflowPreview(latest.preview)
+    if (latest.execute) applyCloudWorkflowExecute(latest.execute)
+
+    if (latest.status === 'completed' || latest.status === 'failed' || latest.status === 'cancelled') {
+      stopCloudWorkflowPolling()
+      if (!cloudWorkflowNotified.value) {
+        cloudWorkflowNotified.value = true
+        if (latest.status === 'completed') {
+          if (latest.execute) showResultDialog.value = true
+          await loadBatchHistory()
+          ElMessage.success(latest.message || '任务完成')
+        } else if (latest.status === 'cancelled') {
+          ElMessage.warning(latest.message || '任务已取消')
+        } else {
+          ElMessage.error(latest.error || latest.message || '任务执行失败')
+        }
+      }
+    } else if (previousStatus !== latest.status) {
+      ElMessage.info(latest.message || '任务状态已更新')
+    }
+  } catch (error) {
+    if (showError) {
+      ElMessage.error(extractErrorMessage(error, '获取任务状态失败'))
+    }
+  }
+}
+
+function startCloudWorkflowPolling() {
+  stopCloudWorkflowPolling()
+  cloudWorkflowPollTimer = setInterval(() => {
+    void refreshCloudWorkflowTask(false)
+  }, 2000)
+}
+
+async function cancelCloudWorkflow() {
+  const taskId = cloudWorkflowTask.value?.task_id
+  if (!taskId) return
+  try {
+    await cancelCloudRenameWorkflowTask(taskId)
+    await refreshCloudWorkflowTask(false)
+    ElMessage.warning('已请求取消任务')
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '取消任务失败'))
+  }
+}
+
+async function startCloudWorkflowTask() {
+  if (!canPreview.value) {
+    ElMessage.warning('请先选择云盘目录')
+    return
+  }
+  if (isCloudWorkflowRunning.value) {
+    ElMessage.warning('已有任务在执行，请等待完成或先取消')
+    return
+  }
+
+  try {
+    previewBatchId.value = ''
+    previewRows.value = []
+    selectedRowIds.value = []
+    executeSummary.value = null
+    showResultDialog.value = false
+    lastCloudExecution.value = []
+
+    const task = await createCloudRenameWorkflowTask({
+      pdir_fid: cloudFolderFid.value,
+      algorithm: selectedAlgorithm.value as any,
+      naming_standard: selectedStandard.value as any,
+      force_ai_parse: options.forceAiParse,
+      auto_execute: true,
+      options: {
+        recursive: options.recursive,
+        create_folders: options.createFolders,
+        auto_confirm_high_confidence: options.autoConfirm,
+        ai_confidence_threshold: options.aiThreshold,
+        fast_mode: true,
+        parse_concurrency: 3,
+        ai_timeout_seconds: 6,
+        tmdb_timeout_seconds: 6
+      }
+    })
+    cloudWorkflowTask.value = task
+    cloudWorkflowNotified.value = false
+    startCloudWorkflowPolling()
+    await refreshCloudWorkflowTask(false)
+    ElMessage.success(`后台任务已创建：${task.task_id.slice(0, 8)}`)
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '创建后台任务失败'))
+  }
+}
+
 async function runAiConnectivityTest() {
   testingAiConnectivity.value = true
   try {
     const result = sourceMode.value === 'local'
-      ? await testSmartRenameAIConnectivity(8)
-      : await testCloudRenameAIConnectivity(8)
+      ? await testSmartRenameAIConnectivity()
+      : await testCloudRenameAIConnectivity()
 
     aiConnectivityResult.value = result
 
@@ -725,10 +971,10 @@ function normalizeCloudItem(item: QuarkRenameItem): ViewRenameItem {
     used_algorithm: item.used_algorithm
   }
 }
-async function runPreview() {
+async function runPreview(): Promise<boolean> {
   if (!canPreview.value) {
     ElMessage.warning('请先选择有效的数据源路径')
-    return
+    return false
   }
 
   previewing.value = true
@@ -768,7 +1014,11 @@ async function runPreview() {
           recursive: options.recursive,
           create_folders: options.createFolders,
           auto_confirm_high_confidence: options.autoConfirm,
-          ai_confidence_threshold: options.aiThreshold
+          ai_confidence_threshold: options.aiThreshold,
+          fast_mode: true,
+          parse_concurrency: 3,
+          ai_timeout_seconds: 6,
+          tmdb_timeout_seconds: 6
         }
       })
 
@@ -782,8 +1032,15 @@ async function runPreview() {
       lastCloudExecution.value = []
       ElMessage.success(`云盘预览完成：共 ${response.total_items} 项`)
     }
+
+    if (previewRows.value.length > 0) {
+      await nextTick()
+      workspaceRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    return true
   } catch (error) {
     ElMessage.error(extractErrorMessage(error, '预览失败'))
+    return false
   } finally {
     previewing.value = false
   }
@@ -793,7 +1050,41 @@ function refreshPreview() {
   runPreview()
 }
 
+async function startRenameWorkflow() {
+  if (sourceMode.value === 'cloud') {
+    await startCloudWorkflowTask()
+    return
+  }
+
+  if (!hasPreview.value) {
+    const ok = await runPreview()
+    if (!ok) return
+    const fallbackIds = runnableRows.value.map((row) => row.id)
+    if (!fallbackIds.length) {
+      ElMessage.warning('预览完成，但当前没有可执行的重命名项目')
+      return
+    }
+    selectedRowIds.value = fallbackIds
+    ElMessage.info(`预览完成，已自动勾选 ${fallbackIds.length} 项并继续执行`)
+    await nextTick()
+  }
+
+  if (!selectedRows.value.length) {
+    const fallbackIds = runnableRows.value.map((row) => row.id)
+    if (!fallbackIds.length) {
+      ElMessage.warning('当前没有可执行的重命名项目')
+      return
+    }
+    selectedRowIds.value = fallbackIds
+    ElMessage.info(`已自动勾选 ${fallbackIds.length} 项可执行内容`)
+    await nextTick()
+  }
+
+  await executeSelected()
+}
+
 function resetWorkspace() {
+  stopCloudWorkflowPolling()
   previewBatchId.value = ''
   previewRows.value = []
   selectedRowIds.value = []
@@ -803,6 +1094,8 @@ function resetWorkspace() {
   activeHistoryBatchId.value = ''
   historyItems.value = []
   lastCloudExecution.value = []
+  cloudWorkflowTask.value = null
+  cloudWorkflowNotified.value = false
 }
 
 function exportPreview() {
@@ -927,20 +1220,32 @@ async function validateSelectedName() {
 }
 
 async function executeSelected() {
-  if (!previewBatchId.value || !selectedRows.value.length) {
-    ElMessage.warning('请先选择待执行项目')
+  if (!previewBatchId.value) {
+    ElMessage.warning('请先生成预览批次')
     return
   }
 
-  const runnableRows = selectedRows.value.filter((row) => row.new_name.trim().length > 0)
-  if (!runnableRows.length) {
+  if (!selectedRows.value.length && runnableRows.value.length) {
+    selectedRowIds.value = runnableRows.value.map((row) => row.id)
+    await nextTick()
+    ElMessage.info(`未勾选项目，已自动选择 ${selectedRowIds.value.length} 项`)
+  }
+
+  const selected = selectedRows.value
+  if (!selected.length) {
+    ElMessage.warning('请先勾选待执行项目')
+    return
+  }
+
+  const runnable = selected.filter((row) => (row.new_name || '').trim().length > 0)
+  if (!runnable.length) {
     ElMessage.warning('勾选项中没有可执行的新文件名')
     return
   }
 
   const actionText = previewSourceMode.value === 'local' ? '本地重命名' : '云盘重命名'
   try {
-    await ElMessageBox.confirm(`即将执行 ${runnableRows.length} 项 ${actionText}，是否继续？`, '执行确认', {
+    await ElMessageBox.confirm(`即将执行 ${runnable.length} 项 ${actionText}，是否继续？`, '执行确认', {
       type: 'warning',
       confirmButtonText: '继续执行',
       cancelButtonText: '取消'
@@ -952,26 +1257,26 @@ async function executeSelected() {
   executing.value = true
   try {
     if (previewSourceMode.value === 'local') {
-      const operations = runnableRows.map((row) => ({ original_path: row.original_path, new_name: row.new_name.trim() }))
+      const operations = runnable.map((row) => ({ original_path: row.original_path, new_name: row.new_name.trim() }))
       const response = await executeSmartRename({ batch_id: previewBatchId.value, operations })
       executeSummary.value = response
       showResultDialog.value = true
 
-      const set = new Set(runnableRows.map((row) => row.id))
+      const set = new Set(runnable.map((row) => row.id))
       previewRows.value = previewRows.value.map((row) => set.has(row.id) ? { ...row, status: 'success', needs_confirmation: false } : row)
     } else {
-      const operations = runnableRows.map((row) => ({ fid: row.id, new_name: row.new_name.trim() }))
+      const operations = runnable.map((row) => ({ fid: row.id, new_name: row.new_name.trim() }))
       const response = await executeCloudRename({ batch_id: previewBatchId.value, operations })
       executeSummary.value = {
         batch_id: previewBatchId.value,
         total_items: response.total,
         success_items: response.success,
         failed_items: response.failed,
-        skipped_items: Math.max(response.total - response.success - response.failed, 0)
+        skipped_items: response.skipped ?? Math.max(response.total - response.success - response.failed, 0)
       }
       showResultDialog.value = true
 
-      lastCloudExecution.value = runnableRows.map((row) => ({
+      lastCloudExecution.value = runnable.map((row) => ({
         fid: row.id,
         original_name: row.original_name,
         executed_name: row.new_name
@@ -990,6 +1295,13 @@ async function executeSelected() {
             confirmation_reason: undefined
           }
         }
+        if (result.status === 'skipped') {
+          return {
+            ...row,
+            status: 'skipped',
+            confirmation_reason: '目标名称与原名称一致，已跳过'
+          }
+        }
         return {
           ...row,
           status: 'failed',
@@ -999,7 +1311,11 @@ async function executeSelected() {
     }
 
     await loadBatchHistory()
-    ElMessage.success('执行完成')
+    if (previewSourceMode.value === 'cloud') {
+      ElMessage.success('执行完成：云盘模式仅重命名原文件，不会新增文件')
+    } else {
+      ElMessage.success('执行完成')
+    }
   } catch (error) {
     ElMessage.error(extractErrorMessage(error, '执行失败'))
   } finally {
@@ -1063,6 +1379,7 @@ async function rollbackLatest() {
 }
 function statusText(row: ViewRenameItem): string {
   if (row.status === 'success') return '执行成功'
+  if (row.status === 'skipped') return '已跳过'
   if (row.status === 'failed') return '执行失败'
   if (row.status === 'rolled_back') return '已回滚'
   if (row.needs_confirmation) return '待确认'
@@ -1072,6 +1389,7 @@ function statusText(row: ViewRenameItem): string {
 
 function statusType(row: ViewRenameItem): 'success' | 'warning' | 'danger' | 'info' {
   if (row.status === 'success') return 'success'
+  if (row.status === 'skipped') return 'info'
   if (row.status === 'failed') return 'danger'
   if (row.needs_confirmation) return 'warning'
   return 'info'
@@ -1146,6 +1464,10 @@ watch(previewRows, () => {
 onMounted(async () => {
   loadRecentPaths()
   await Promise.all([loadBootstrap(), loadBatchHistory()])
+})
+
+onBeforeUnmount(() => {
+  stopCloudWorkflowPolling()
 })
 </script>
 
@@ -1349,6 +1671,33 @@ onMounted(async () => {
   border-radius: 14px;
   border: 1px solid rgba(230, 139, 31, 0.22);
   background: linear-gradient(135deg, var(--sand), #fffdf8);
+}
+.action-hint {
+  margin: 8px 4px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workflow-task-card {
+  margin-top: 10px;
+  border: 1px solid rgba(10, 141, 118, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f1fbf8, #fff);
+  box-shadow: 0 8px 26px rgba(12, 56, 42, 0.08);
+  padding: 14px 16px;
+}
+
+.workflow-task-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.workflow-task-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
 }
 
 .ai-connectivity-strip {

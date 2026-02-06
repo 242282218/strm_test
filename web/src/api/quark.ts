@@ -69,6 +69,10 @@ export interface QuarkRenameOptions {
   auto_confirm_high_confidence?: boolean
   /** AI解析置信度阈值 */
   ai_confidence_threshold?: number
+  parse_concurrency?: number
+  ai_timeout_seconds?: number
+  tmdb_timeout_seconds?: number
+  fast_mode?: boolean
 }
 
 /**
@@ -178,10 +182,14 @@ export interface QuarkRenameExecuteRequest {
 export interface QuarkRenameResult {
   /** 文件ID */
   fid: string
-  /** 状态：success/failed */
+  /** 状态：success/skipped/failed */
   status: string
+  /** 原文件名（可选） */
+  old_name?: string
   /** 新文件名（成功时） */
   new_name?: string
+  /** 后端是否完成改名校验 */
+  verified?: boolean
   /** 错误信息（失败时） */
   error?: string
 }
@@ -200,6 +208,8 @@ export interface QuarkRenameExecuteResponse {
     success: number
     /** 失败数量 */
     failed: number
+    /** 跳过数量（例如新旧名称相同） */
+    skipped?: number
     /** 每个操作的结果 */
     results: QuarkRenameResult[]
   }
@@ -220,6 +230,39 @@ export interface QuarkAIConnectivityResponse {
   interface: string
   all_connected: boolean
   providers: QuarkAIConnectivityProviderResult[]
+}
+
+export interface QuarkWorkflowTaskPreviewSummary {
+  batch_id: string
+  total_items: number
+  matched_items: number
+  parsed_items: number
+  needs_confirmation: number
+  algorithm_used: string
+  naming_standard: string
+  items: QuarkRenameItem[]
+}
+
+export interface QuarkWorkflowTaskExecuteSummary {
+  batch_id: string
+  total: number
+  success: number
+  failed: number
+  skipped?: number
+  results: QuarkRenameResult[]
+}
+
+export interface QuarkWorkflowTaskStatus {
+  task_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  stage: 'queued' | 'preview' | 'execute' | 'done' | 'failed' | 'cancelled'
+  progress: number
+  message: string
+  created_at: string
+  updated_at: string
+  error?: string
+  preview?: QuarkWorkflowTaskPreviewSummary
+  execute?: QuarkWorkflowTaskExecuteSummary
 }
 
 // ========== API 函数 ==========
@@ -263,7 +306,7 @@ export async function browseQuarkDirectory(
 export async function smartRenameCloudFiles(
   params: QuarkSmartRenameRequest
 ): Promise<QuarkSmartRenameResponse['data']> {
-  const response = await api.post<any>('/quark/smart-rename-cloud', params)
+  const response = await api.post<any>('/quark/smart-rename-cloud', params, { timeout: 180000 })
   return response.data
 }
 
@@ -281,7 +324,7 @@ export async function smartRenameCloudFiles(
 export async function executeCloudRename(
   params: QuarkRenameExecuteRequest
 ): Promise<QuarkRenameExecuteResponse['data']> {
-  const response = await api.post<any>('/quark/execute-cloud-rename', params)
+  const response = await api.post<any>('/quark/execute-cloud-rename', params, { timeout: 120000 })
   return response.data
 }
 
@@ -289,11 +332,27 @@ export async function executeCloudRename(
  * 测试云盘智能重命名 AI 连通性，固定测试 deepseek + glm
  */
 export async function testCloudRenameAIConnectivity(
-  timeoutSeconds: number = 8
+  timeoutSeconds: number = 30
 ): Promise<QuarkAIConnectivityResponse> {
   return api.get('/quark/ai-connectivity', {
     params: { timeout_seconds: timeoutSeconds }
   })
+}
+
+export async function createCloudRenameWorkflowTask(
+  params: QuarkSmartRenameRequest & { auto_execute?: boolean }
+): Promise<QuarkWorkflowTaskStatus> {
+  return api.post('/quark/smart-rename-cloud/workflow-tasks', params, {
+    timeout: 30000
+  })
+}
+
+export async function getCloudRenameWorkflowTask(taskId: string): Promise<QuarkWorkflowTaskStatus> {
+  return api.get(`/quark/smart-rename-cloud/workflow-tasks/${taskId}`)
+}
+
+export async function cancelCloudRenameWorkflowTask(taskId: string): Promise<{ success: boolean; task_id: string }> {
+  return api.post(`/quark/smart-rename-cloud/workflow-tasks/${taskId}/cancel`)
 }
 
 // ========== Compatibility API for legacy file view ==========

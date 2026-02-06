@@ -160,7 +160,12 @@ class MediaParser:
 
 
     @classmethod
-    async def parse_with_ai(cls, filename: str, force: bool = False) -> Dict[str, Any]:
+    async def parse_with_ai(
+        cls,
+        filename: str,
+        force: bool = False,
+        ai_timeout_seconds: int | None = None,
+    ) -> Dict[str, Any]:
         """
         带AI增强的解析 (异步，较慢但准确)
         :param force: 是否强制使用AI
@@ -182,7 +187,7 @@ class MediaParser:
         if not ai_service.has_available_provider():
             return info
             
-        ai_result = await ai_service.parse_filename(filename)
+        ai_result = await ai_service.parse_filename(filename, max_timeout_seconds=ai_timeout_seconds)
         
         if ai_result:
             # 合并结果 (优先使用 AI 结果)

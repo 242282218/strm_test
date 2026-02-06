@@ -189,7 +189,7 @@ export const getSmartRenameStatus = (): Promise<SmartRenameStatus> => {
  * 测试智能重命名（本地接口）AI连通性，固定测试 deepseek + glm
  */
 export const testSmartRenameAIConnectivity = (
-  timeoutSeconds: number = 8
+  timeoutSeconds: number = 30
 ): Promise<AIConnectivityResponse> => {
   return api.get('/smart-rename/ai-connectivity', {
     params: { timeout_seconds: timeoutSeconds }

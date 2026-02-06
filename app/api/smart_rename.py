@@ -531,7 +531,7 @@ async def get_smart_rename_status():
 
 @router.get("/ai-connectivity")
 async def test_smart_rename_ai_connectivity(
-    timeout_seconds: int = Query(8, ge=1, le=30),
+    timeout_seconds: int = Query(30, ge=1, le=120),
     _auth: None = Depends(require_api_key),
 ):
     """

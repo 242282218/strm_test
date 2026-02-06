@@ -1,0 +1,378 @@
+{
+  "timestamp": "2026-02-06 17:31:48",
+  "base": "http://127.0.0.1:8000/api/smart-rename",
+  "checks": [
+    {
+      "name": "status-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "available": true,
+          "smart_rename_service": true,
+          "tmdb_connected": true,
+          "ai_available": true,
+          "algorithms": [
+            "standard",
+            "ai_enhanced",
+            "ai_only"
+          ],
+          "naming_standards": [
+            "emby",
+            "plex",
+            "kodi",
+            "custom"
+          ]
+        }
+      }
+    },
+    {
+      "name": "algorithms-contains-standard",
+      "ok": true,
+      "detail": {
+        "algorithms": [
+          "standard",
+          "ai_enhanced",
+          "ai_only"
+        ],
+        "status_code": 200
+      }
+    },
+    {
+      "name": "standards-non-empty",
+      "ok": true,
+      "detail": {
+        "standards": [
+          "emby",
+          "plex",
+          "kodi",
+          "custom"
+        ],
+        "status_code": 200
+      }
+    },
+    {
+      "name": "validate-query-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "filename": "Movie.Name.2023.mkv",
+          "is_valid": true,
+          "suggestions": [],
+          "warnings": [
+            "建议包含年份信息，格式: Movie Name (2023).ext"
+          ]
+        }
+      }
+    },
+    {
+      "name": "validate-body-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "filename": "Movie.Name.2023.mkv",
+          "is_valid": true,
+          "suggestions": [],
+          "warnings": [
+            "建议包含年份信息，格式: Movie Name (2023).ext"
+          ]
+        }
+      }
+    },
+    {
+      "name": "preview-invalid-path-4xx",
+      "ok": false,
+      "detail": {
+        "status_code": 200,
+        "body": "{\"batch_id\":\"5d8d8db0-b020-4371-92b0-381e7c5ee1c1\",\"target_path\":\"tmp\\\\smart_rename_fullcover_1770370308\\\\not_exists\",\"total_items\":0,\"parsed_items\":0,\"matched_items\":0,\"skipped_items\":0,\"needs_confirmation\":0,\"items\":[],\"algorithm_used\":\"ai_enhanced\",\"naming_standard\":\"emby\"}"
+      }
+    },
+    {
+      "name": "flow-standard-emby-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3,
+        "needs_confirmation": 3
+      }
+    },
+    {
+      "name": "flow-standard-emby-execute-200",
+      "ok": true,
+      "detail": {
+        "batch_id": "a480f11b-b1e5-4cae-a706-67450888cc35",
+        "total_items": 3,
+        "success_items": 3,
+        "failed_items": 0,
+        "skipped_items": 0
+      }
+    },
+    {
+      "name": "flow-standard-emby-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "flow-standard-emby-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "a480f11b-b1e5-4cae-a706-67450888cc35",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-standard-plex-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3,
+        "needs_confirmation": 3
+      }
+    },
+    {
+      "name": "flow-standard-plex-execute-200",
+      "ok": true,
+      "detail": {
+        "batch_id": "17be4873-2b93-4ef9-afb6-2d6e9aa7e326",
+        "total_items": 3,
+        "success_items": 3,
+        "failed_items": 0,
+        "skipped_items": 0
+      }
+    },
+    {
+      "name": "flow-standard-plex-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "flow-standard-plex-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "17be4873-2b93-4ef9-afb6-2d6e9aa7e326",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3,
+        "needs_confirmation": 3
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-execute-200",
+      "ok": true,
+      "detail": {
+        "batch_id": "6ba4f559-3a3d-4031-8fa0-5b117aaeed83",
+        "total_items": 3,
+        "success_items": 3,
+        "failed_items": 0,
+        "skipped_items": 0
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "6ba4f559-3a3d-4031-8fa0-5b117aaeed83",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3,
+        "needs_confirmation": 2
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-execute-200",
+      "ok": true,
+      "detail": {
+        "batch_id": "726962c9-a04c-4b78-8f95-685cc7258dce",
+        "total_items": 3,
+        "success_items": 3,
+        "failed_items": 0,
+        "skipped_items": 0
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "726962c9-a04c-4b78-8f95-685cc7258dce",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3,
+        "needs_confirmation": 3
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-execute-200",
+      "ok": true,
+      "detail": {
+        "batch_id": "0dfeb00a-b480-4d6d-9dbc-db793faf4e06",
+        "total_items": 3,
+        "success_items": 3,
+        "failed_items": 0,
+        "skipped_items": 0
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "0dfeb00a-b480-4d6d-9dbc-db793faf4e06",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3,
+        "needs_confirmation": 3
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-execute-200",
+      "ok": true,
+      "detail": {
+        "batch_id": "d21791e2-5fa9-4a5d-94e6-1908a149e388",
+        "total_items": 3,
+        "success_items": 3,
+        "failed_items": 0,
+        "skipped_items": 0
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "d21791e2-5fa9-4a5d-94e6-1908a149e388",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "batches-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "count": 20
+      }
+    },
+    {
+      "name": "execute-invalid-input-4xx",
+      "ok": true,
+      "detail": {
+        "status_code": 422,
+        "body": "{\"code\":422,\"message\":\"参数校验失败\",\"detail\":null,\"error_code\":\"ERR_VALIDATION\",\"request_id\":\"04bb1d46-7c49-4175-b2bc-d63c867f155d\",\"errors\":[{\"loc\":[\"body\",\"batch_id\"],\"msg\":\"Value error, batch_id has invalid format\",\"type\":\"value_error\"},{\"loc\":[\"body\",\"operations\"],\"msg\":\"Value error, new_name is required\",\"type\":\"value_error\"}],\"data\":null,\"timestamp\":1770370367}"
+      }
+    },
+    {
+      "name": "no-double-extension",
+      "ok": true,
+      "detail": {
+        "target": {
+          "original_path": "tmp\\smart_rename_fullcover_1770370308\\shows\\Season 1\\Unknown_File_abcdefg.mp4",
+          "original_name": "Unknown_File_abcdefg.mp4",
+          "new_path": "tmp\\smart_rename_fullcover_1770370308\\shows\\Season 1\\Unknown_File_abcdefg\\Unknown_File_abcdefg.mp4",
+          "new_name": "Unknown_File_abcdefg.mp4",
+          "media_type": "movie",
+          "tmdb_id": null,
+          "tmdb_title": "Unknown_File_abcdefg",
+          "tmdb_year": null,
+          "season": null,
+          "episode": null,
+          "overall_confidence": 0.3,
+          "status": "parsed",
+          "needs_confirmation": true,
+          "confirmation_reason": "置信度较低 (30%)",
+          "used_algorithm": "standard"
+        }
+      }
+    }
+  ]
+}

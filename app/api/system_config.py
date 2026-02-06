@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.services.config_service import get_config_service, ConfigError
 from app.core.logging import get_logger
 from app.core.dependencies import require_api_key
+from app.core.security import mask_secret
 import os
 import aiohttp
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -71,6 +72,123 @@ async def update_config(config_data: dict, _auth: None = Depends(require_api_key
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to save config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SingleAIModelConfigUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str = Field("", max_length=2048)
+    base_url: str = Field(..., min_length=1, max_length=2048)
+    model: str = Field(..., min_length=1, max_length=256)
+    timeout: int = Field(..., ge=1, le=120)
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, v):
+        value = v.strip().rstrip("/")
+        validate_http_url(value, "base_url")
+        return value
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, v):
+        value = v.strip()
+        if not value:
+            raise ValueError("model cannot be empty")
+        return value
+
+
+class AIModelsConfigUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kimi: SingleAIModelConfigUpdate
+    deepseek: SingleAIModelConfigUpdate
+    glm: SingleAIModelConfigUpdate
+
+
+def _build_ai_models_response(config) -> dict:
+    glm_key = (
+        (config.glm.api_key if getattr(config, "glm", None) else "")
+        or (config.zhipu.api_key if getattr(config, "zhipu", None) else "")
+        or (config.api_keys.ai_api_key if config.api_keys else "")
+        or ""
+    )
+    deepseek_key = config.deepseek.api_key if getattr(config, "deepseek", None) else ""
+    kimi_key = config.kimi.api_key if getattr(config, "kimi", None) else ""
+
+    return {
+        "kimi": {
+            "configured": bool(kimi_key),
+            "api_key_masked": mask_secret(kimi_key),
+            "base_url": config.kimi.base_url,
+            "model": config.kimi.model,
+            "timeout": config.kimi.timeout,
+        },
+        "deepseek": {
+            "configured": bool(deepseek_key),
+            "api_key_masked": mask_secret(deepseek_key),
+            "base_url": config.deepseek.base_url,
+            "model": config.deepseek.model,
+            "timeout": config.deepseek.timeout,
+        },
+        "glm": {
+            "configured": bool(glm_key),
+            "api_key_masked": mask_secret(glm_key),
+            "base_url": config.glm.base_url,
+            "model": config.glm.model,
+            "timeout": config.glm.timeout,
+        },
+    }
+
+
+def _resolve_api_key_update(new_value: str, current_value: str) -> str:
+    value = (new_value or "").strip()
+    if not value:
+        return current_value
+    if "*" in value:
+        return current_value
+    return value
+
+
+@router.get("/ai-models")
+async def get_ai_models_config(_auth: None = Depends(require_api_key)):
+    """Get current AI model config with masked sensitive values."""
+    try:
+        config_service = get_config_service(CONFIG_PATH)
+        config = config_service.get_config()
+        return _build_ai_models_response(config)
+    except Exception as e:
+        logger.error(f"Failed to read AI model config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ai-models")
+async def update_ai_models_config(
+    payload: AIModelsConfigUpdateRequest,
+    _auth: None = Depends(require_api_key),
+):
+    """Update AI model config safely (blank/masked api_key keeps current value)."""
+    try:
+        config_service = get_config_service(CONFIG_PATH)
+        current = config_service.get_config()
+        config_dict = current.model_dump()
+
+        for provider in ("kimi", "deepseek", "glm"):
+            incoming = getattr(payload, provider)
+            current_key = config_dict.get(provider, {}).get("api_key", "")
+            config_dict[provider]["api_key"] = _resolve_api_key_update(incoming.api_key, current_key)
+            config_dict[provider]["base_url"] = incoming.base_url
+            config_dict[provider]["model"] = incoming.model
+            config_dict[provider]["timeout"] = incoming.timeout
+
+        updated = config_service.update_config(config_dict)
+        logger.info("AI model configuration updated")
+        return _build_ai_models_response(updated)
+    except ConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to update AI model config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

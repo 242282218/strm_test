@@ -1,0 +1,214 @@
+{
+  "timestamp": "2026-02-06 17:39:25",
+  "share_url": "https://pan.quark.cn/s/8ebadbe746e5",
+  "checks": [
+    {
+      "name": "mkdir-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "code": 200,
+          "message": "Success",
+          "data": {
+            "status": "success",
+            "result": {
+              "id": "252fe5aa5085452e845c503430d9f732",
+              "name": "Unknown",
+              "path": "252fe5aa5085452e845c503430d9f732",
+              "parent_path": null,
+              "file_type": "file",
+              "storage_type": "quark",
+              "mime_type": null,
+              "extension": null,
+              "size": 0,
+              "updated_at": null,
+              "thumbnail": null,
+              "preview_url": null,
+              "is_readable": true,
+              "is_writable": true,
+              "extra": {
+                "finish": true,
+                "fid": "252fe5aa5085452e845c503430d9f732"
+              }
+            }
+          },
+          "request_id": null,
+          "timestamp": "2026-02-06T17:39:26.283962"
+        }
+      }
+    },
+    {
+      "name": "mkdir-has-fid",
+      "ok": true,
+      "detail": {
+        "folder_fid": "252fe5aa5085452e845c503430d9f732",
+        "folder_name": "codex_smart_rename_cloud_1770370765"
+      }
+    },
+    {
+      "name": "mkdir-visible-by-path",
+      "ok": true,
+      "detail": {
+        "target_dir": "/codex_smart_rename_cloud_1770370765",
+        "wait_steps": 1
+      }
+    },
+    {
+      "name": "transfer-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "message": "Transfer successful"
+        }
+      }
+    },
+    {
+      "name": "transfer-has-videos",
+      "ok": true,
+      "detail": {
+        "video_count": 31,
+        "folder_fid": "252fe5aa5085452e845c503430d9f732"
+      }
+    },
+    {
+      "name": "cloud-preview-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "total_items": 31,
+        "needs_confirmation": 31
+      }
+    },
+    {
+      "name": "cloud-preview-has-items",
+      "ok": true,
+      "detail": {
+        "count": 31
+      }
+    },
+    {
+      "name": "cloud-execute-ops-prepared",
+      "ok": true,
+      "detail": {
+        "ops": [
+          {
+            "fid": "ffc8593910824eadbe28d99c7d17a54c",
+            "new_name": "彩蛋1_UT.mp4"
+          },
+          {
+            "fid": "525722fa10e44dc9b1f233ec88f5b313",
+            "new_name": "彩蛋2_UT.mp4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cloud-execute-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "data": {
+          "batch_id": "25524b4f-c13a-41bf-a8ed-a583b9e5177e",
+          "total": 2,
+          "success": 2,
+          "failed": 0,
+          "results": [
+            {
+              "fid": "ffc8593910824eadbe28d99c7d17a54c",
+              "status": "success",
+              "new_name": "彩蛋1_UT.mp4"
+            },
+            {
+              "fid": "525722fa10e44dc9b1f233ec88f5b313",
+              "status": "success",
+              "new_name": "彩蛋2_UT.mp4"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "cloud-execute-success-count",
+      "ok": true,
+      "detail": {
+        "success": 2,
+        "failed": 0
+      }
+    },
+    {
+      "name": "cloud-verify-renamed",
+      "ok": true,
+      "detail": {
+        "ffc8593910824eadbe28d99c7d17a54c": {
+          "expected": "彩蛋1_UT.mp4",
+          "actual": "彩蛋1_UT.mp4"
+        },
+        "525722fa10e44dc9b1f233ec88f5b313": {
+          "expected": "彩蛋2_UT.mp4",
+          "actual": "彩蛋2_UT.mp4"
+        }
+      }
+    },
+    {
+      "name": "cloud-revert-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "data": {
+          "batch_id": "25524b4f-c13a-41bf-a8ed-a583b9e5177e_revert",
+          "total": 2,
+          "success": 2,
+          "failed": 0,
+          "results": [
+            {
+              "fid": "ffc8593910824eadbe28d99c7d17a54c",
+              "status": "success",
+              "new_name": "彩蛋1.mp4"
+            },
+            {
+              "fid": "525722fa10e44dc9b1f233ec88f5b313",
+              "status": "success",
+              "new_name": "彩蛋2.mp4"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "cloud-verify-reverted",
+      "ok": true,
+      "detail": {
+        "ffc8593910824eadbe28d99c7d17a54c": {
+          "expected": "彩蛋1.mp4",
+          "actual": "彩蛋1.mp4"
+        },
+        "525722fa10e44dc9b1f233ec88f5b313": {
+          "expected": "彩蛋2.mp4",
+          "actual": "彩蛋2.mp4"
+        }
+      }
+    },
+    {
+      "name": "cleanup-delete-folder",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "code": 200,
+          "message": "Success",
+          "data": {
+            "status": "success",
+            "action": "delete",
+            "count": 1
+          },
+          "request_id": null,
+          "timestamp": "2026-02-06T17:46:11.483867"
+        },
+        "folder_fid": "252fe5aa5085452e845c503430d9f732",
+        "folder_name": "codex_smart_rename_cloud_1770370765"
+      }
+    }
+  ]
+}

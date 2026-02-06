@@ -244,7 +244,8 @@ class SmartRenameService:
         self,
         filename: str,
         algorithm: AlgorithmType,
-        force_ai: bool = False
+        force_ai: bool = False,
+        ai_timeout_seconds: Optional[int] = None
     ) -> Tuple[Dict[str, Any], str, float]:
         """
         使用指定算法解析文件名
@@ -262,7 +263,7 @@ class SmartRenameService:
             # 纯 AI 算法
             ai_service = get_ai_parser_service()
             if ai_service.api_key:
-                ai_result = await ai_service.parse_filename(filename)
+                ai_result = await ai_service.parse_filename(filename, max_timeout_seconds=ai_timeout_seconds)
                 if ai_result:
                     parsed_info = {
                         "title": ai_result.title,
@@ -280,7 +281,11 @@ class SmartRenameService:
         
         if algorithm == AlgorithmType.AI_ENHANCED or force_ai:
             # AI 增强算法
-            parsed_info = await MediaParser.parse_with_ai(filename, force=force_ai)
+            parsed_info = await MediaParser.parse_with_ai(
+                filename,
+                force=force_ai,
+                ai_timeout_seconds=ai_timeout_seconds
+            )
             if parsed_info.get("ai_parsed"):
                 parsed_info = self._normalize_parsed_title(filename, parsed_info)
                 return parsed_info, "ai_enhanced", parsed_info.get("confidence", 0.8)

@@ -44,7 +44,8 @@ class ConfigService:
         self._config: Optional[AppConfig] = None
         self._last_good_config: Optional[AppConfig] = None
         self._last_mtime: Optional[float] = None
-        self._config_lock = threading.Lock()
+        # Reentrant lock avoids deadlock when update flows call nested save operations.
+        self._config_lock = threading.RLock()
         self._change_callbacks = []
         self._watcher_thread: Optional[threading.Thread] = None
         self._watcher_stop_event = threading.Event()

@@ -90,7 +90,7 @@ class QuarkAPIClient:
                     if cookie_key in response.cookies:
                         cookie = response.cookies[cookie_key]
                         self.cookie = self._update_cookie(self.cookie, cookie_key, cookie.value)
-                        logger.debug("Updated cookie: %s", cookie_key)
+                        logger.debug(f"Updated cookie: {cookie_key}")
 
                 status = int(result.get("status", response.status))
                 code = int(result.get("code", 0))
@@ -100,12 +100,12 @@ class QuarkAPIClient:
                     raise TransientError(f"API transient error: {message} (status={status})")
                 if status >= 400 or code != 0:
                     error_msg = message or "Unknown error"
-                    logger.error("API error: %s, status: %s, code: %s", error_msg, status, code)
+                    logger.error(f"API error: {error_msg}, status: {status}, code: {code}")
                     raise Exception(error_msg)
 
                 return result
         except aiohttp.ClientError as exc:
-            logger.error("Request failed: %s", exc)
+            logger.error(f"Request failed: {exc}")
             raise TransientError(f"Request failed: {exc}") from exc
         except Exception:
             raise
@@ -306,6 +306,11 @@ class QuarkAPIClient:
         """Rename a file or directory."""
         data = {"fid": fid, "file_name": new_name}
         result = await self.request("/file/rename", method="POST", data=data)
+        return result.get("data", {})
+
+    async def get_file_info(self, fid: str) -> Dict[str, Any]:
+        """Get file metadata by fid."""
+        result = await self.request("/file/info", method="GET", params={"fid": fid})
         return result.get("data", {})
 
     async def move_files(self, fids: List[str], to_pdir_fid: str) -> Dict[str, Any]:

@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-02-06 18:35:23",
+  "case_dir": "tmp\\smart_rename_ui_rebuild_case_1770374123",
+  "preview_status": null,
+  "execute_status": null,
+  "rollback_status": null,
+  "errors": [
+    "Timeout 30000ms exceeded."
+  ]
+}

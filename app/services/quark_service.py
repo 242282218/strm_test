@@ -269,23 +269,54 @@ class QuarkService:
         副作用: 修改云盘中的文件名
         """
         try:
+            target_name = (new_name or "").strip()
+            if not target_name:
+                raise ValueError("new_name cannot be empty")
+
+            old_info = await self.client.get_file_info(fid)
+            old_name = (old_info.get("file_name") or "").strip()
+            if old_name and old_name == target_name:
+                logger.info(f"Skip rename for fid={fid}: old_name equals target_name ({target_name})")
+                return {
+                    "fid": fid,
+                    "old_name": old_name,
+                    "file_name": old_name,
+                    "status": "skipped",
+                    "verified": True,
+                    "changed": False,
+                    "data": old_info,
+                }
+
             # 添加请求间隔避免限流
             await asyncio.sleep(0.1)
+            result = await self.client.rename_file(fid, target_name)
 
-            data = {
-                "fid": fid,
-                "file_name": new_name
-            }
+            # 改名后回查，避免“接口返回成功但文件名未变化”的假成功。
+            verified = False
+            actual_name = ""
+            latest_info: Dict[str, Any] = {}
+            for _attempt in range(5):
+                await asyncio.sleep(0.25)
+                latest_info = await self.client.get_file_info(fid)
+                actual_name = (latest_info.get("file_name") or "").strip()
+                if actual_name == target_name:
+                    verified = True
+                    break
 
-            result = await self.client.request("/file/rename", method="POST", data=data)
-            
-            logger.info(f"Renamed file {fid} to {new_name}")
-            
+            if not verified:
+                raise Exception(
+                    f"rename verification failed for fid={fid}, expected='{target_name}', actual='{actual_name or 'unknown'}'"
+                )
+
+            logger.info(f"Renamed file success fid={fid}, old_name='{old_name}', new_name='{target_name}'")
             return {
                 "fid": fid,
-                "file_name": new_name,
+                "old_name": old_name,
+                "file_name": target_name,
                 "status": "success",
-                "data": result.get("data", {})
+                "verified": True,
+                "changed": True,
+                "data": result or latest_info,
             }
 
         except Exception as e:

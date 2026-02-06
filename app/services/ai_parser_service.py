@@ -7,7 +7,6 @@ from typing import Any, Dict, Literal, Optional
 
 from app.core.config_manager import ConfigManager
 from app.core.logging import get_logger
-from app.core.retry import retry_on_transient, TransientError
 
 logger = get_logger(__name__)
 
@@ -54,6 +53,7 @@ Expected fields:
 """
 
     DEFAULT_PROVIDER_ORDER: tuple[ProviderName, ...] = ("kimi", "glm", "deepseek")
+    PROVIDER_TIMEOUT_CAP_SECONDS = 8
     _instance = None
     _semaphore = None
 
@@ -241,7 +241,6 @@ Expected fields:
     def has_available_provider(self) -> bool:
         return any(cfg.api_key for cfg in self.provider_configs)
 
-    @retry_on_transient()
     async def _post_request(self, url: str, headers: dict, payload: dict, timeout_seconds: int) -> dict:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -251,10 +250,12 @@ Expected fields:
                 timeout=aiohttp.ClientTimeout(total=timeout_seconds),
             ) as resp:
                 if resp.status in {408, 429} or resp.status >= 500:
-                    raise TransientError(f"AI API transient error: {resp.status}")
+                    text = await resp.text()
+                    logger.warning(f"AI API transient status={resp.status}, body={text[:300]}")
+                    return {}
                 if resp.status != 200:
                     text = await resp.text()
-                    logger.warning("AI API error %s: %s", resp.status, text[:300])
+                    logger.warning(f"AI API error status={resp.status}, body={text[:300]}")
                     return {}
                 return await resp.json()
 
@@ -287,7 +288,17 @@ Expected fields:
             result["media_type"] = "unknown"
         return True
 
-    async def _parse_with_provider(self, filename: str, cfg: ProviderRuntimeConfig) -> Optional[AIParseResult]:
+    async def _parse_with_provider(
+        self,
+        filename: str,
+        cfg: ProviderRuntimeConfig,
+        timeout_seconds: Optional[int] = None,
+    ) -> Optional[AIParseResult]:
+        effective_timeout = self._coerce_timeout(
+            timeout_seconds if timeout_seconds is not None else cfg.timeout_seconds,
+            default=self.PROVIDER_TIMEOUT_CAP_SECONDS,
+        )
+        effective_timeout = min(effective_timeout, self.PROVIDER_TIMEOUT_CAP_SECONDS)
         url = f"{cfg.base_url}/chat/completions"
         headers = {
             "Content-Type": "application/json",
@@ -304,7 +315,7 @@ Expected fields:
             "stream": False,
         }
 
-        data = await self._post_request(url, headers, payload, cfg.timeout_seconds)
+        data = await self._post_request(url, headers, payload, effective_timeout)
         if not data or "choices" not in data or not data["choices"]:
             return None
 
@@ -312,10 +323,7 @@ Expected fields:
         result = self._extract_json(content)
         if not self._validate_result(result):
             logger.warning(
-                "AI response validation failed for provider=%s filename=%s content=%s",
-                cfg.provider,
-                filename,
-                content[:200],
+                f"AI response validation failed for provider={cfg.provider} filename={filename} content={content[:200]}"
             )
             return None
 
@@ -329,21 +337,33 @@ Expected fields:
             confidence=0.95,
         )
 
-    async def parse_filename(self, filename: str) -> Optional[AIParseResult]:
+    async def parse_filename(
+        self,
+        filename: str,
+        max_timeout_seconds: Optional[int] = None,
+    ) -> Optional[AIParseResult]:
         if not self.has_available_provider():
             logger.warning("No AI provider API key configured")
             return None
+
+        bounded_timeout = None
+        if max_timeout_seconds is not None:
+            bounded_timeout = self._coerce_timeout(max_timeout_seconds, default=self.PROVIDER_TIMEOUT_CAP_SECONDS)
+            bounded_timeout = min(bounded_timeout, self.PROVIDER_TIMEOUT_CAP_SECONDS)
 
         async with self._semaphore:
             for cfg in self.provider_configs:
                 if not cfg.api_key:
                     continue
                 try:
-                    parsed = await self._parse_with_provider(filename, cfg)
+                    provider_timeout = min(cfg.timeout_seconds, self.PROVIDER_TIMEOUT_CAP_SECONDS)
+                    if bounded_timeout is not None:
+                        provider_timeout = min(provider_timeout, bounded_timeout)
+                    parsed = await self._parse_with_provider(filename, cfg, timeout_seconds=provider_timeout)
                     if parsed:
                         return parsed
                 except Exception as exc:
-                    logger.warning("AI parse failed on provider=%s filename=%s error=%s", cfg.provider, filename, exc)
+                    logger.warning(f"AI parse failed on provider={cfg.provider} filename={filename} error={exc}")
                     continue
 
         return None

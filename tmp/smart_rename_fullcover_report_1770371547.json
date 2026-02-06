@@ -1,0 +1,289 @@
+{
+  "timestamp": "2026-02-06 17:51:32",
+  "base": "http://127.0.0.1:8000/api/smart-rename",
+  "checks": [
+    {
+      "name": "status-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "algorithms-contains-standard",
+      "ok": true,
+      "detail": {
+        "algorithms": [
+          "standard",
+          "ai_enhanced",
+          "ai_only"
+        ]
+      }
+    },
+    {
+      "name": "standards-non-empty",
+      "ok": true,
+      "detail": {
+        "standards": [
+          "emby",
+          "plex",
+          "kodi",
+          "custom"
+        ]
+      }
+    },
+    {
+      "name": "validate-query-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "validate-body-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "preview-not-exists-empty-result",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "total_items": 0
+      }
+    },
+    {
+      "name": "flow-standard-emby-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3
+      }
+    },
+    {
+      "name": "flow-standard-emby-execute-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "99dff38c-4f32-41de-a37b-d3df5f3a7024",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-standard-emby-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-standard-emby-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-standard-plex-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3
+      }
+    },
+    {
+      "name": "flow-standard-plex-execute-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "35bbdd13-543d-4f54-a7ec-5525560c8687",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-standard-plex-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-standard-plex-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-execute-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "f10898af-5e13-4660-bb3a-7c73283890d7",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_only-emby-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-execute-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "0f437fe9-3cae-4013-82bc-4d0914e6b3a8",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_only-plex-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-execute-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "73e7c70f-dfce-46c3-8b9c-a8b54a2c9ef9",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-emby-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-preview-items",
+      "ok": true,
+      "detail": {
+        "total_items": 3
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-execute-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "batch_id": "dd3a99c0-8db7-455e-a1be-b2f96934c7a3",
+          "total_items": 3,
+          "success_items": 3,
+          "failed_items": 0,
+          "skipped_items": 0
+        }
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-batch-items-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "flow-ai_enhanced-plex-rollback-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "batches-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200
+      }
+    },
+    {
+      "name": "execute-invalid-input-4xx",
+      "ok": true,
+      "detail": {
+        "status_code": 422
+      }
+    },
+    {
+      "name": "no-double-extension",
+      "ok": true,
+      "detail": {
+        "new_name": "Unknown_File_abcdefg.mp4"
+      }
+    }
+  ]
+}

@@ -70,6 +70,19 @@ class AIConnectivityService:
         except (TypeError, ValueError):
             return default
 
+    @staticmethod
+    def _format_exception_message(exc: Exception) -> str:
+        text = str(exc).strip()
+        if text:
+            return text
+        if isinstance(exc, asyncio.TimeoutError):
+            return "request timeout"
+        if isinstance(exc, aiohttp.ClientConnectionError):
+            return "connection error"
+        if isinstance(exc, aiohttp.ClientError):
+            return exc.__class__.__name__
+        return exc.__class__.__name__
+
     def _get_provider_config(self, provider: ProviderName) -> ProviderRuntimeConfig:
         if provider == "kimi":
             api_key = self._first_non_empty(
@@ -252,8 +265,8 @@ class AIConnectivityService:
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             base_result["response_time_ms"] = elapsed_ms
-            base_result["message"] = str(exc)
-            logger.warning("AI connectivity test failed for %s: %s", provider, exc)
+            base_result["message"] = self._format_exception_message(exc)
+            logger.warning("AI connectivity test failed for %s: %s", provider, base_result["message"])
             return base_result
 
     async def test_providers(

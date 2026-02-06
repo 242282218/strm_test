@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-02-06 17:37:04",
+  "share_url": "https://pan.quark.cn/s/8ebadbe746e5",
+  "checks": [
+    {
+      "name": "mkdir-200",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "code": 200,
+          "message": "Success",
+          "data": {
+            "status": "success",
+            "result": {
+              "id": "8ef23b1948a0420c823abafa9e0a7319",
+              "name": "Unknown",
+              "path": "8ef23b1948a0420c823abafa9e0a7319",
+              "parent_path": null,
+              "file_type": "file",
+              "storage_type": "quark",
+              "mime_type": null,
+              "extension": null,
+              "size": 0,
+              "updated_at": null,
+              "thumbnail": null,
+              "preview_url": null,
+              "is_readable": true,
+              "is_writable": true,
+              "extra": {
+                "finish": true,
+                "fid": "8ef23b1948a0420c823abafa9e0a7319"
+              }
+            }
+          },
+          "request_id": null,
+          "timestamp": "2026-02-06T17:37:04.534044"
+        }
+      }
+    },
+    {
+      "name": "mkdir-has-fid",
+      "ok": true,
+      "detail": {
+        "folder_fid": "8ef23b1948a0420c823abafa9e0a7319",
+        "folder_name": "codex_smart_rename_cloud_1770370624"
+      }
+    },
+    {
+      "name": "transfer-200",
+      "ok": false,
+      "detail": {
+        "status_code": 400,
+        "body": "{\"code\":400,\"message\":\"请求参数错误\",\"detail\":\"Target directory /codex_smart_rename_cloud_1770370624 not found\",\"error_code\":\"ERR_BAD_REQUEST\",\"request_id\":\"1e485dff-f18c-4146-8a27-f05e6511f440\",\"errors\":null,\"data\":null,\"timestamp\":1770370625}"
+      }
+    },
+    {
+      "name": "cloud-flow-fatal-error",
+      "ok": false,
+      "detail": {
+        "error": "transfer failed: 400"
+      }
+    },
+    {
+      "name": "cleanup-delete-folder",
+      "ok": true,
+      "detail": {
+        "status_code": 200,
+        "body": {
+          "code": 200,
+          "message": "Success",
+          "data": {
+            "status": "success",
+            "action": "delete",
+            "count": 1
+          },
+          "request_id": null,
+          "timestamp": "2026-02-06T17:37:05.324141"
+        },
+        "folder_fid": "8ef23b1948a0420c823abafa9e0a7319",
+        "folder_name": "codex_smart_rename_cloud_1770370624"
+      }
+    }
+  ]
+}

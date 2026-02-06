@@ -4,8 +4,10 @@
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
+import asyncio
 import uuid
+from datetime import datetime, timezone
 
 from app.services.quark_service import QuarkService
 from app.services.smart_rename_service import get_smart_rename_service, SmartRenameOptions, AlgorithmType, NamingStandard
@@ -56,7 +58,80 @@ class QuarkRenameExecuteRequest(BaseModel):
     operations: List[QuarkRenameOperation] = Field(..., description="重命名操作列表")
 
 # 获取配置管理器
+class QuarkWorkflowTaskRequest(QuarkSmartRenameRequest):
+    auto_execute: bool = Field(default=True, description="auto execute rename after preview")
+
+
 config = get_config()
+
+_cloud_workflow_tasks: Dict[str, Dict[str, Any]] = {}
+_cloud_workflow_handles: Dict[str, asyncio.Task] = {}
+_cloud_workflow_lock = asyncio.Lock()
+_CLOUD_WORKFLOW_MAX_KEEP = 50
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _base_workflow_task(task_id: str, request: QuarkWorkflowTaskRequest) -> Dict[str, Any]:
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "stage": "queued",
+        "progress": 0,
+        "message": "task queued",
+        "created_at": _utc_now_iso(),
+        "updated_at": _utc_now_iso(),
+        "request": request.model_dump(),
+        "preview": None,
+        "execute": None,
+        "error": None,
+    }
+
+
+def _update_workflow_task(task: Dict[str, Any], **fields: Any) -> None:
+    task.update(fields)
+    task["updated_at"] = _utc_now_iso()
+
+
+def _snapshot_workflow_task(task: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "task_id": task["task_id"],
+        "status": task["status"],
+        "stage": task["stage"],
+        "progress": task["progress"],
+        "message": task["message"],
+        "created_at": task["created_at"],
+        "updated_at": task["updated_at"],
+        "preview": task.get("preview"),
+        "execute": task.get("execute"),
+        "error": task.get("error"),
+    }
+
+
+def _prune_workflow_tasks() -> None:
+    if len(_cloud_workflow_tasks) <= _CLOUD_WORKFLOW_MAX_KEEP:
+        return
+
+    sorted_tasks = sorted(
+        _cloud_workflow_tasks.items(),
+        key=lambda pair: pair[1].get("updated_at", ""),
+        reverse=True,
+    )
+    keep_ids = {task_id for task_id, _ in sorted_tasks[:_CLOUD_WORKFLOW_MAX_KEEP]}
+    for task_id in list(_cloud_workflow_tasks.keys()):
+        if task_id not in keep_ids and task_id not in _cloud_workflow_handles:
+            _cloud_workflow_tasks.pop(task_id, None)
+
+
+async def _workflow_task_update(task_id: str, **fields: Any) -> Optional[Dict[str, Any]]:
+    async with _cloud_workflow_lock:
+        task = _cloud_workflow_tasks.get(task_id)
+        if not task:
+            return None
+        _update_workflow_task(task, **fields)
+        return task
 
 
 def _handle_exception(e: Exception, message: str) -> HTTPException:
@@ -349,7 +424,7 @@ async def sync_quark_files(
 
 @router.get("/ai-connectivity")
 async def test_quark_smart_rename_ai_connectivity(
-    timeout_seconds: int = Query(8, ge=1, le=30),
+    timeout_seconds: int = Query(30, ge=1, le=120),
     _auth: None = Depends(require_api_key),
 ):
     """
@@ -367,6 +442,177 @@ async def test_quark_smart_rename_ai_connectivity(
         "all_connected": all(item.get("connected") for item in results),
         "providers": results,
     }
+
+
+async def _run_cloud_workflow_task(
+    task_id: str,
+    request: QuarkWorkflowTaskRequest,
+    cookie: str,
+) -> None:
+    try:
+        await _workflow_task_update(
+            task_id,
+            status="running",
+            stage="preview",
+            progress=5,
+            message="generating preview",
+        )
+        preview_response = await smart_rename_cloud_files(
+            request=request,
+            _cookie=cookie,
+            _auth=None,
+        )
+        preview_data = preview_response.get("data", {})
+
+        await _workflow_task_update(
+            task_id,
+            stage="preview",
+            progress=60,
+            message=f"preview ready: {preview_data.get('total_items', 0)} items",
+            preview=preview_data,
+        )
+
+        if not request.auto_execute:
+            await _workflow_task_update(
+                task_id,
+                status="completed",
+                stage="done",
+                progress=100,
+                message="preview completed",
+            )
+            return
+
+        operations = []
+        for item in preview_data.get("items", []) or []:
+            fid = str(item.get("fid") or "").strip()
+            new_name = str(item.get("new_name") or "").strip()
+            if fid and new_name:
+                operations.append(QuarkRenameOperation(fid=fid, new_name=new_name))
+
+        if not operations:
+            await _workflow_task_update(
+                task_id,
+                status="completed",
+                stage="done",
+                progress=100,
+                message="no runnable operations after preview",
+                execute={
+                    "batch_id": preview_data.get("batch_id", ""),
+                    "total": 0,
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "results": [],
+                },
+            )
+            return
+
+        await _workflow_task_update(
+            task_id,
+            stage="execute",
+            progress=70,
+            message=f"executing rename for {len(operations)} items",
+        )
+
+        execute_request = QuarkRenameExecuteRequest(
+            batch_id=str(preview_data.get("batch_id") or task_id),
+            operations=operations,
+        )
+        execute_response = await execute_cloud_rename(
+            request=execute_request,
+            _cookie=cookie,
+            _auth=None,
+        )
+        execute_data = execute_response.get("data", {})
+
+        await _workflow_task_update(
+            task_id,
+            status="completed",
+            stage="done",
+            progress=100,
+            message=(
+                f"completed: success={execute_data.get('success', 0)}, "
+                f"failed={execute_data.get('failed', 0)}, "
+                f"skipped={execute_data.get('skipped', 0)}"
+            ),
+            execute=execute_data,
+        )
+    except asyncio.CancelledError:
+        await _workflow_task_update(
+            task_id,
+            status="cancelled",
+            stage="cancelled",
+            message="task cancelled",
+        )
+        raise
+    except Exception as exc:
+        logger.error(f"Cloud workflow task failed: task_id={task_id}, error={exc}")
+        await _workflow_task_update(
+            task_id,
+            status="failed",
+            stage="failed",
+            message="task failed",
+            error=str(exc),
+        )
+    finally:
+        async with _cloud_workflow_lock:
+            _cloud_workflow_handles.pop(task_id, None)
+
+
+@router.post("/smart-rename-cloud/workflow-tasks")
+async def create_cloud_workflow_task(
+    request: QuarkWorkflowTaskRequest,
+    _cookie: str = Depends(get_quark_cookie),
+    _auth: None = Depends(require_api_key),
+):
+    task_id = str(uuid.uuid4())
+    task = _base_workflow_task(task_id, request)
+
+    async with _cloud_workflow_lock:
+        _cloud_workflow_tasks[task_id] = task
+        _prune_workflow_tasks()
+        handle = asyncio.create_task(_run_cloud_workflow_task(task_id, request, _cookie))
+        _cloud_workflow_handles[task_id] = handle
+
+    return _snapshot_workflow_task(task)
+
+
+@router.get("/smart-rename-cloud/workflow-tasks/{task_id}")
+async def get_cloud_workflow_task(
+    task_id: str,
+    _auth: None = Depends(require_api_key),
+):
+    async with _cloud_workflow_lock:
+        task = _cloud_workflow_tasks.get(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="workflow task not found")
+        return _snapshot_workflow_task(task)
+
+
+@router.post("/smart-rename-cloud/workflow-tasks/{task_id}/cancel")
+async def cancel_cloud_workflow_task(
+    task_id: str,
+    _auth: None = Depends(require_api_key),
+):
+    async with _cloud_workflow_lock:
+        task = _cloud_workflow_tasks.get(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="workflow task not found")
+
+        if task.get("status") in {"completed", "failed", "cancelled"}:
+            return {"success": True, "task_id": task_id}
+
+        _update_workflow_task(
+            task,
+            status="cancelled",
+            stage="cancelled",
+            message="cancel requested",
+        )
+        handle = _cloud_workflow_handles.get(task_id)
+        if handle and not handle.done():
+            handle.cancel()
+
+    return {"success": True, "task_id": task_id}
 
 
 @router.post("/smart-rename-cloud")
@@ -394,6 +640,190 @@ async def smart_rename_cloud_files(
         # 初始化服务
         quark_service = QuarkService(cookie=_cookie)
         rename_service = get_smart_rename_service()
+
+        use_fast_mode = bool(request.options.get("fast_mode", True))
+        if use_fast_mode:
+            logger.info(
+                f"Cloud preview fast mode enabled: pdir_fid={request.pdir_fid}, recursive={request.options.get('recursive', True)}"
+            )
+
+            video_files = await quark_service.get_all_video_files(
+                pdir_fid=request.pdir_fid,
+                recursive=request.options.get("recursive", True),
+                max_files=1000
+            )
+
+            if not video_files:
+                return {
+                    "status": 200,
+                    "data": {
+                        "batch_id": str(uuid.uuid4()),
+                        "pdir_fid": request.pdir_fid,
+                        "total_items": 0,
+                        "matched_items": 0,
+                        "parsed_items": 0,
+                        "needs_confirmation": 0,
+                        "average_confidence": 0,
+                        "algorithm_used": request.algorithm,
+                        "naming_standard": request.naming_standard,
+                        "items": [],
+                        "message": "璇ョ洰褰曚笅娌℃湁鎵惧埌瑙嗛鏂囦欢锛堝寘鍚瓙鐩綍锛?"
+                    }
+                }
+
+            algorithm = AlgorithmType(request.algorithm)
+            naming_standard = NamingStandard(request.naming_standard)
+            from app.services.smart_rename_service import SmartRenameItem, SmartRenameOptions
+
+            options = SmartRenameOptions(
+                algorithm=algorithm,
+                naming_standard=naming_standard,
+                recursive=request.options.get("recursive", True),
+                create_folders=request.options.get("create_folders", True),
+                auto_confirm_high_confidence=request.options.get("auto_confirm_high_confidence", True),
+                ai_confidence_threshold=request.options.get("ai_confidence_threshold", 0.7)
+            )
+
+            parse_concurrency = int(request.options.get("parse_concurrency", 3) or 3)
+            parse_concurrency = max(1, min(parse_concurrency, 8))
+
+            ai_timeout_seconds = int(request.options.get("ai_timeout_seconds", 6) or 6)
+            ai_timeout_seconds = max(1, min(ai_timeout_seconds, 30))
+
+            tmdb_timeout_seconds = int(request.options.get("tmdb_timeout_seconds", 6) or 6)
+            tmdb_timeout_seconds = max(1, min(tmdb_timeout_seconds, 30))
+
+            async def process_file(file_data: dict) -> SmartRenameItem:
+                filename = file_data.get("file_name", "")
+                fid = file_data.get("fid", "")
+                parse_error: Optional[str] = None
+
+                try:
+                    parsed_info, used_algorithm, parse_confidence = await rename_service._parse_with_algorithm(
+                        filename,
+                        algorithm,
+                        force_ai=request.force_ai_parse,
+                        ai_timeout_seconds=ai_timeout_seconds,
+                    )
+                except Exception as exc:
+                    parse_error = str(exc)
+                    logger.warning(f"Cloud parse failed for fid={fid}, filename={filename}, fallback to standard: {exc}")
+                    parsed_info, used_algorithm, parse_confidence = await rename_service._parse_with_algorithm(
+                        filename,
+                        AlgorithmType.STANDARD,
+                        force_ai=False,
+                    )
+
+                tmdb_match = None
+                match_confidence = 0.0
+                try:
+                    tmdb_match, match_confidence = await asyncio.wait_for(
+                        rename_service._match_tmdb(
+                            parsed_info,
+                            media_type_hint=parsed_info.get("media_type")
+                        ),
+                        timeout=tmdb_timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"TMDB match timeout for fid={fid}, filename={filename}")
+                except Exception as exc:
+                    logger.warning(f"TMDB match failed for fid={fid}, filename={filename}: {exc}")
+
+                item = SmartRenameItem(
+                    original_path=fid,
+                    original_name=filename,
+                    parsed_info=parsed_info,
+                    tmdb_id=tmdb_match.get("id") if tmdb_match else None,
+                    tmdb_title=tmdb_match.get("title") if tmdb_match else None,
+                    tmdb_year=tmdb_match.get("year") if tmdb_match else None,
+                    media_type=parsed_info.get("media_type", "unknown"),
+                    season=parsed_info.get("season"),
+                    episode=parsed_info.get("episode"),
+                    parse_confidence=parse_confidence,
+                    match_confidence=match_confidence,
+                    overall_confidence=(parse_confidence + match_confidence) / 2,
+                    used_algorithm=used_algorithm
+                )
+
+                new_path, new_name = rename_service._generate_new_name(item, options)
+                item.new_path = new_path
+                item.new_name = new_name
+
+                if item.overall_confidence < options.ai_confidence_threshold:
+                    item.needs_confirmation = True
+                    item.confirmation_reason = f"缃俊搴﹁緝浣?({item.overall_confidence:.0%})"
+                elif not tmdb_match:
+                    item.needs_confirmation = True
+                    item.confirmation_reason = "鏈壘鍒?TMDB 鍖归厤"
+
+                if parse_error and not item.confirmation_reason:
+                    item.needs_confirmation = True
+                    item.confirmation_reason = "AI 瑙ｆ瀽澶辫触锛屽凡闄嶇骇涓烘爣鍑嗚В鏋?"
+
+                return item
+
+            items = []
+            parsed_count = 0
+            matched_count = 0
+            needs_confirmation_count = 0
+
+            for i in range(0, len(video_files), parse_concurrency):
+                batch_files = video_files[i:i + parse_concurrency]
+                batch_results = await asyncio.gather(
+                    *(process_file(file_data) for file_data in batch_files),
+                    return_exceptions=True,
+                )
+
+                for result in batch_results:
+                    if isinstance(result, Exception):
+                        logger.error(f"Cloud preview item processing failed: {result}")
+                        continue
+
+                    item = result
+                    if item.tmdb_id:
+                        matched_count += 1
+                    else:
+                        parsed_count += 1
+
+                    if item.needs_confirmation:
+                        needs_confirmation_count += 1
+
+                    items.append(item)
+
+            batch_id = str(uuid.uuid4())
+            return {
+                "status": 200,
+                "data": {
+                    "batch_id": batch_id,
+                    "pdir_fid": request.pdir_fid,
+                    "total_items": len(items),
+                    "matched_items": matched_count,
+                    "parsed_items": parsed_count,
+                    "needs_confirmation": needs_confirmation_count,
+                    "average_confidence": sum(item.overall_confidence for item in items) / len(items) if items else 0,
+                    "algorithm_used": request.algorithm,
+                    "naming_standard": request.naming_standard,
+                    "items": [
+                        {
+                            "fid": item.original_path,
+                            "original_name": item.original_name,
+                            "new_name": item.new_name,
+                            "tmdb_id": item.tmdb_id,
+                            "tmdb_title": item.tmdb_title,
+                            "tmdb_year": item.tmdb_year,
+                            "media_type": item.media_type,
+                            "season": item.season,
+                            "episode": item.episode,
+                            "overall_confidence": item.overall_confidence,
+                            "used_algorithm": item.used_algorithm,
+                            "needs_confirmation": item.needs_confirmation,
+                            "confirmation_reason": item.confirmation_reason,
+                            "status": "matched" if item.tmdb_id else "parsed"
+                        }
+                        for item in items
+                    ]
+                }
+            }
         
         # 1. 递归获取云盘视频文件
         logger.info(f"开始扫描目录 {request.pdir_fid}，递归={request.options.get('recursive', True)}")
@@ -570,6 +1000,7 @@ async def execute_cloud_rename(
         results = []
         success_count = 0
         failed_count = 0
+        skipped_count = 0
         
         # 分批执行，避免限流
         batch_size = 10
@@ -579,16 +1010,23 @@ async def execute_cloud_rename(
             for op in batch:
                 try:
                     # 调用夸克 API 重命名
-                    await quark_service.rename_file(
+                    rename_result = await quark_service.rename_file(
                         fid=op.fid,
                         new_name=op.new_name
                     )
+                    status = rename_result.get("status", "success")
+                    if status == "skipped":
+                        skipped_count += 1
+                    else:
+                        success_count += 1
+
                     results.append({
                         "fid": op.fid,
-                        "status": "success",
-                        "new_name": op.new_name
+                        "status": status,
+                        "old_name": rename_result.get("old_name"),
+                        "new_name": rename_result.get("file_name", op.new_name),
+                        "verified": bool(rename_result.get("verified", False))
                     })
-                    success_count += 1
                 except Exception as e:
                     logger.error(f"Rename file {op.fid} failed: {e}")
                     results.append({
@@ -610,6 +1048,7 @@ async def execute_cloud_rename(
                 "total": len(request.operations),
                 "success": success_count,
                 "failed": failed_count,
+                "skipped": skipped_count,
                 "results": results
             }
         }

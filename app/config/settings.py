@@ -307,7 +307,7 @@ class DeepSeekConfig(BaseModel):
     api_key: str = Field("", description="DeepSeek API Key", max_length=2048)
     base_url: str = Field("https://api.deepseek.com/v1", description="DeepSeek base URL", max_length=MAX_URL_LENGTH)
     model: str = Field("deepseek-chat", description="DeepSeek model", max_length=256)
-    timeout: int = Field(8, description="DeepSeek timeout in seconds", ge=MIN_TIMEOUT_SECONDS, le=MAX_TIMEOUT_SECONDS)
+    timeout: int = Field(20, description="DeepSeek timeout in seconds", ge=MIN_TIMEOUT_SECONDS, le=MAX_TIMEOUT_SECONDS)
 
     @field_validator('api_key')
     @classmethod
@@ -359,7 +359,7 @@ class KimiConfig(BaseModel):
     api_key: str = Field("", description="Kimi API Key", max_length=2048)
     base_url: str = Field("https://integrate.api.nvidia.com/v1", description="Kimi base URL", max_length=MAX_URL_LENGTH)
     model: str = Field("moonshotai/kimi-k2.5", description="Kimi model", max_length=256)
-    timeout: int = Field(8, description="Kimi timeout in seconds", ge=MIN_TIMEOUT_SECONDS, le=MAX_TIMEOUT_SECONDS)
+    timeout: int = Field(15, description="Kimi timeout in seconds", ge=MIN_TIMEOUT_SECONDS, le=MAX_TIMEOUT_SECONDS)
 
     @field_validator('api_key')
     @classmethod
