@@ -1,4 +1,5 @@
 import re
+import asyncio
 from typing import Optional, List
 from app.services.cloud_drive_service import CloudDriveService
 from app.services.quark_service import QuarkService
@@ -62,7 +63,7 @@ class TransferService:
             fid_list = [f["fid"] for f in files]
             
             # 5. Get target fid
-            target_file = await quark_service.get_file_by_path(target_dir)
+            target_file = await self._resolve_target_directory(quark_service, target_dir)
             if not target_file:
                  raise ValueError(f"Target directory {target_dir} not found")
             if not target_file.is_dir:
@@ -102,6 +103,25 @@ class TransferService:
                     logger.warning("Background tasks handler not provided, auto-organize task created but not started immediately")
         finally:
             await quark_service.close()
+
+    async def _resolve_target_directory(
+        self,
+        quark_service: QuarkService,
+        target_dir: str,
+        retries: int = 5,
+        retry_delay_seconds: float = 0.5
+    ):
+        """
+        Resolve target directory with bounded retries.
+        This avoids eventual-consistency races right after directory creation.
+        """
+        for attempt in range(retries + 1):
+            target_file = await quark_service.get_file_by_path(target_dir)
+            if target_file:
+                return target_file
+            if attempt < retries:
+                await asyncio.sleep(retry_delay_seconds)
+        return None
 
     def _extract_pwd_id(self, url: str) -> Optional[str]:
         # Supported formats:

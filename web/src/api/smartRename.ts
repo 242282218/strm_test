@@ -66,6 +66,10 @@ export interface SmartRenamePreviewResponse {
 
 export interface SmartRenameExecuteRequest {
   batch_id: string
+  operations?: Array<{
+    original_path: string
+    new_name: string
+  }>
 }
 
 export interface SmartRenameExecuteResponse {

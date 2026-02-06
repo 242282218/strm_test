@@ -1350,8 +1350,19 @@ const executeRename = async () => {
       }
     } else {
       // 本地模式
+      const operations = selectedItems.value
+        .map((path) => {
+          const item = previewData.value?.items.find((i) => i.original_path === path)
+          return {
+            original_path: path,
+            new_name: item?.new_name || ''
+          }
+        })
+        .filter((op) => op.new_name)
+
       const response = await executeSmartRename({
-        batch_id: previewData.value.batch_id
+        batch_id: previewData.value.batch_id,
+        operations
       })
 
       executeResult.value = response

@@ -9,7 +9,7 @@
 - 回滚支持
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from sqlalchemy.orm import Session
@@ -106,11 +106,32 @@ class SmartRenameExecuteRequest(BaseModel):
     """智能重命名执行请求"""
     model_config = ConfigDict(extra="forbid")
     batch_id: str = Field(..., min_length=1, max_length=64)
+    operations: Optional[List[Dict[str, str]]] = None
     
     @field_validator("batch_id")
     @classmethod
     def validate_batch_id(cls, v):
         return validate_identifier(v, "batch_id")
+
+    @field_validator("operations")
+    @classmethod
+    def validate_operations(cls, v):
+        if v is None:
+            return v
+
+        validated: List[Dict[str, str]] = []
+        for op in v:
+            original_path = validate_path((op or {}).get("original_path", ""), "original_path")
+            new_name = ((op or {}).get("new_name", "") or "").strip()
+            if not new_name:
+                raise InputValidationError("new_name is required")
+            validated.append(
+                {
+                    "original_path": original_path,
+                    "new_name": new_name,
+                }
+            )
+        return validated
 
 
 class SmartRenameExecuteResponse(BaseModel):
@@ -147,6 +168,11 @@ class ValidationResponse(BaseModel):
     is_valid: bool
     suggestions: List[str]
     warnings: List[str]
+
+
+class ValidationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filename: str = Field(..., min_length=1, max_length=500)
 
 
 # ==================== API Endpoints ====================
@@ -250,7 +276,10 @@ async def smart_execute(
     所有操作会被记录，支持后续回滚。
     """
     try:
-        result = await service.execute(batch_id=request.batch_id)
+        result = await service.execute(
+            batch_id=request.batch_id,
+            operations=request.operations
+        )
         
         return SmartRenameExecuteResponse(
             batch_id=result["batch_id"],
@@ -377,7 +406,10 @@ async def list_naming_standards():
 
 
 @router.post("/validate")
-async def validate_filename(filename: str) -> ValidationResponse:
+async def validate_filename(
+    request: Optional[ValidationRequest] = Body(default=None),
+    filename: Optional[str] = Query(default=None)
+) -> ValidationResponse:
     """
     验证文件名是否符合 Emby 命名规范
     
@@ -385,11 +417,17 @@ async def validate_filename(filename: str) -> ValidationResponse:
     """
     from app.services.emby_naming_service import get_emby_naming_service
     
+    final_filename = filename
+    if request and request.filename:
+        final_filename = request.filename
+    if not final_filename:
+        raise HTTPException(status_code=400, detail="filename is required")
+
     service = get_emby_naming_service()
-    result = service.validate_emby_naming(filename)
+    result = service.validate_emby_naming(final_filename)
     
     return ValidationResponse(
-        filename=filename,
+        filename=final_filename,
         is_valid=result["is_valid"],
         suggestions=result["suggestions"],
         warnings=result["warnings"]

@@ -220,6 +220,25 @@ class SmartRenameService:
                 break
                 
         return files
+
+    def _normalize_parsed_title(self, filename: str, parsed_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize parsed title to avoid duplicated extensions in generated names."""
+        title = parsed_info.get("title")
+        if not isinstance(title, str) or not title:
+            return parsed_info
+
+        ext = os.path.splitext(filename)[1]
+        if not ext:
+            return parsed_info
+
+        if title.lower().endswith(ext.lower()):
+            normalized = title[:-len(ext)].rstrip(" ._-")
+            if normalized:
+                normalized_info = dict(parsed_info)
+                normalized_info["title"] = normalized
+                return normalized_info
+
+        return parsed_info
     
     async def _parse_with_algorithm(
         self,
@@ -245,7 +264,7 @@ class SmartRenameService:
             if ai_service.api_key:
                 ai_result = await ai_service.parse_filename(filename)
                 if ai_result:
-                    return {
+                    parsed_info = {
                         "title": ai_result.title,
                         "original_title": ai_result.original_title,
                         "year": ai_result.year,
@@ -253,7 +272,9 @@ class SmartRenameService:
                         "episode": ai_result.episode,
                         "media_type": ai_result.media_type,
                         "ai_parsed": True
-                    }, "ai_only", ai_result.confidence
+                    }
+                    parsed_info = self._normalize_parsed_title(filename, parsed_info)
+                    return parsed_info, "ai_only", ai_result.confidence
             # AI 不可用时回退到标准算法
             algorithm = AlgorithmType.STANDARD
         
@@ -261,12 +282,14 @@ class SmartRenameService:
             # AI 增强算法
             parsed_info = await MediaParser.parse_with_ai(filename, force=force_ai)
             if parsed_info.get("ai_parsed"):
+                parsed_info = self._normalize_parsed_title(filename, parsed_info)
                 return parsed_info, "ai_enhanced", parsed_info.get("confidence", 0.8)
             # AI 解析失败时回退到正则
             algorithm = AlgorithmType.STANDARD
         
         # 标准本地算法 (正则)
         parsed_info = MediaParser.parse(filename)
+        parsed_info = self._normalize_parsed_title(filename, parsed_info)
         
         # 计算置信度
         confidence = 0.5
@@ -638,7 +661,11 @@ class SmartRenameService:
             naming_standard=options.naming_standard.value
         )
     
-    async def execute(self, batch_id: str) -> Dict[str, Any]:
+    async def execute(
+        self,
+        batch_id: str,
+        operations: Optional[List[Dict[str, str]]] = None
+    ) -> Dict[str, Any]:
         """
         执行重命名操作
         
@@ -664,10 +691,40 @@ class SmartRenameService:
             db.commit()
             
             # 获取待处理的项目
-            items = db.query(RenameHistory).filter(
-                RenameHistory.batch_id == batch_id,
-                RenameHistory.status.in_(["matched", "parsed"])
-            ).all()
+            if operations:
+                operation_map: Dict[str, str] = {}
+                for op in operations:
+                    original_path = (op.get("original_path", "") or "").strip()
+                    new_name = (op.get("new_name", "") or "").strip()
+                    if original_path and new_name:
+                        operation_map[original_path] = new_name
+
+                candidate_paths = list(operation_map.keys())
+                items = []
+                if candidate_paths:
+                    items = db.query(RenameHistory).filter(
+                        RenameHistory.batch_id == batch_id,
+                        RenameHistory.original_path.in_(candidate_paths),
+                        RenameHistory.status.in_(["matched", "parsed", "needs_confirmation"])
+                    ).all()
+
+                    for item in items:
+                        override_name = operation_map.get(item.original_path)
+                        if override_name:
+                            target_dir = os.path.dirname(item.new_path) if item.new_path else os.path.dirname(item.original_path)
+                            item.new_name = override_name
+                            item.new_path = os.path.join(target_dir, override_name)
+                            if item.status == "needs_confirmation":
+                                item.status = "parsed"
+                    db.commit()
+
+                total_items_for_execution = len(candidate_paths)
+            else:
+                items = db.query(RenameHistory).filter(
+                    RenameHistory.batch_id == batch_id,
+                    RenameHistory.status.in_(["matched", "parsed"])
+                ).all()
+                total_items_for_execution = batch.total_items
             
             success = 0
             failed = 0
@@ -675,6 +732,10 @@ class SmartRenameService:
             for item in items:
                 try:
                     if not item.new_path:
+                        item.status = "failed"
+                        item.error_message = "new_path is empty"
+                        failed += 1
+                        db.commit()
                         continue
                     
                     # 创建目标目录
@@ -719,7 +780,7 @@ class SmartRenameService:
             
             batch.success_items = success
             batch.failed_items = failed
-            batch.skipped_items = batch.total_items - success - failed
+            batch.skipped_items = max(total_items_for_execution - success - failed, 0)
             batch.status = "completed" if failed == 0 else "completed_with_errors"
             batch.completed_at = datetime.now()
             db.commit()
@@ -740,7 +801,7 @@ class SmartRenameService:
             
             return {
                 "batch_id": batch_id,
-                "total_items": batch.total_items,
+                "total_items": total_items_for_execution,
                 "success_items": success,
                 "failed_items": failed,
                 "skipped_items": batch.skipped_items

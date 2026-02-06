@@ -121,7 +121,14 @@ class QuarkStorageProvider(StorageProvider):
 
     async def mkdir(self, parent_path: str, name: str) -> FileItem:
         result = await self.service.mkdir(parent_fid=parent_path, name=name)
-        return self._map_to_file_item(result)
+        # mkdir API may return only {"fid": "..."}; enrich for stable response fields.
+        normalized = dict(result or {})
+        normalized.setdefault("fid", normalized.get("id", ""))
+        normalized.setdefault("file_name", name)
+        normalized.setdefault("pdir_fid", parent_path)
+        normalized.setdefault("file_type", 0)
+        normalized.setdefault("size", 0)
+        return self._map_to_file_item(normalized)
 
     async def exists(self, path: str) -> bool:
         return True # 暂时默认存在

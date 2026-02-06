@@ -126,13 +126,16 @@ def test_performance():
     elapsed_no_cache = time.time() - start
     
     # 再次运行，应该使用缓存
+    cache_before = MediaParser._parse_internal.cache_info()
     start = time.time()
     for filename in filenames * 100:
         MediaParser.parse(filename)
     elapsed_cached = time.time() - start
+    cache_after = MediaParser._parse_internal.cache_info()
     
-    # 缓存后应该更快
-    assert elapsed_cached < elapsed_no_cache * 0.5, f"缓存未生效: 无缓存 {elapsed_no_cache*1000:.2f}ms, 有缓存 {elapsed_cached*1000:.2f}ms"
+    # 缓存命中数应该增长；时间在不同环境中波动较大，仅做上限校验
+    assert cache_after.hits > cache_before.hits, "缓存未命中"
+    assert elapsed_cached < 0.5, f"缓存性能异常: 有缓存 {elapsed_cached*1000:.2f}ms"
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
