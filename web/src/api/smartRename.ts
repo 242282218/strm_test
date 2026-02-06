@@ -113,6 +113,23 @@ export interface SmartRenameStatus {
   naming_standards: string[]
 }
 
+export interface AIConnectivityProviderResult {
+  provider: 'deepseek' | 'glm'
+  configured: boolean
+  connected: boolean
+  model: string
+  base_url: string
+  response_time_ms: number | null
+  message: string
+}
+
+export interface AIConnectivityResponse {
+  success: boolean
+  interface: string
+  all_connected: boolean
+  providers: AIConnectivityProviderResult[]
+}
+
 /**
  * 智能重命名预览
  */
@@ -166,6 +183,17 @@ export const validateFilename = (filename: string): Promise<ValidationResponse> 
  */
 export const getSmartRenameStatus = (): Promise<SmartRenameStatus> => {
   return api.get('/smart-rename/status')
+}
+
+/**
+ * 测试智能重命名（本地接口）AI连通性，固定测试 deepseek + glm
+ */
+export const testSmartRenameAIConnectivity = (
+  timeoutSeconds: number = 8
+): Promise<AIConnectivityResponse> => {
+  return api.get('/smart-rename/ai-connectivity', {
+    params: { timeout_seconds: timeoutSeconds }
+  })
 }
 
 /**

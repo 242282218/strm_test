@@ -205,6 +205,23 @@ export interface QuarkRenameExecuteResponse {
   }
 }
 
+export interface QuarkAIConnectivityProviderResult {
+  provider: 'deepseek' | 'glm'
+  configured: boolean
+  connected: boolean
+  model: string
+  base_url: string
+  response_time_ms: number | null
+  message: string
+}
+
+export interface QuarkAIConnectivityResponse {
+  success: boolean
+  interface: string
+  all_connected: boolean
+  providers: QuarkAIConnectivityProviderResult[]
+}
+
 // ========== API 函数 ==========
 
 /**
@@ -266,6 +283,17 @@ export async function executeCloudRename(
 ): Promise<QuarkRenameExecuteResponse['data']> {
   const response = await api.post<any>('/quark/execute-cloud-rename', params)
   return response.data
+}
+
+/**
+ * 测试云盘智能重命名 AI 连通性，固定测试 deepseek + glm
+ */
+export async function testCloudRenameAIConnectivity(
+  timeoutSeconds: number = 8
+): Promise<QuarkAIConnectivityResponse> {
+  return api.get('/quark/ai-connectivity', {
+    params: { timeout_seconds: timeoutSeconds }
+  })
 }
 
 // ========== Compatibility API for legacy file view ==========

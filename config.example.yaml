@@ -89,6 +89,18 @@ wechat:
 zhipu:
   api_key: ""
 
+glm:
+  api_key: ""
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  model: "glm-4.7-flash"
+  timeout: 8
+
+deepseek:
+  api_key: ""
+  base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-chat"
+  timeout: 8
+
 alist:
   enabled: false
   url: "http://localhost:5244"

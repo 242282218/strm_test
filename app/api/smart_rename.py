@@ -27,6 +27,7 @@ from app.services.smart_rename_service import (
     NamingStandard,
     NamingConfig
 )
+from app.services.ai_connectivity_service import get_ai_connectivity_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/smart-rename", tags=["智能重命名"])
@@ -526,3 +527,25 @@ async def get_smart_rename_status():
             "smart_rename_service": False,
             "error": str(e)
         }
+
+
+@router.get("/ai-connectivity")
+async def test_smart_rename_ai_connectivity(
+    timeout_seconds: int = Query(8, ge=1, le=30),
+    _auth: None = Depends(require_api_key),
+):
+    """
+    Test AI provider connectivity for smart rename (local interface).
+    Always tests both deepseek and glm.
+    """
+    service = get_ai_connectivity_service()
+    results = await service.test_providers(
+        providers=("deepseek", "glm"),
+        timeout_seconds=timeout_seconds,
+    )
+    return {
+        "success": True,
+        "interface": "smart_rename",
+        "all_connected": all(item.get("connected") for item in results),
+        "providers": results,
+    }

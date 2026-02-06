@@ -10,6 +10,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app
+import app.api.quark as quark_api
+import app.api.smart_rename as smart_rename_api
 from app.core.db import SessionLocal
 from app.models.scrape import RenameBatch, RenameHistory
 from app.services.smart_rename_service import SmartRenameService
@@ -116,3 +118,74 @@ def test_normalize_parsed_title_removes_file_extension():
     normalized = service._normalize_parsed_title("Unknown_File_abcdefg.mp4", parsed)
     assert normalized["title"] == "Unknown_File_abcdefg"
 
+
+def test_smart_rename_ai_connectivity_returns_deepseek_and_glm(monkeypatch):
+    class StubAIConnectivityService:
+        async def test_providers(self, providers=("deepseek", "glm"), timeout_seconds=8):
+            return [
+                {
+                    "provider": "deepseek",
+                    "configured": True,
+                    "connected": True,
+                    "model": "deepseek-chat",
+                    "base_url": "https://api.deepseek.com/v1",
+                    "response_time_ms": 10,
+                    "message": "ok",
+                },
+                {
+                    "provider": "glm",
+                    "configured": True,
+                    "connected": True,
+                    "model": "glm-4.7-flash",
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "response_time_ms": 12,
+                    "message": "ok",
+                },
+            ]
+
+    monkeypatch.setattr(smart_rename_api, "get_ai_connectivity_service", lambda: StubAIConnectivityService())
+
+    response = client.get("/api/smart-rename/ai-connectivity")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["success"] is True
+    assert body["interface"] == "smart_rename"
+    providers = {item["provider"] for item in body["providers"]}
+    assert providers == {"deepseek", "glm"}
+
+
+def test_quark_ai_connectivity_returns_deepseek_and_glm(monkeypatch):
+    class StubAIConnectivityService:
+        async def test_providers(self, providers=("deepseek", "glm"), timeout_seconds=8):
+            return [
+                {
+                    "provider": "deepseek",
+                    "configured": False,
+                    "connected": False,
+                    "model": "deepseek-chat",
+                    "base_url": "https://api.deepseek.com/v1",
+                    "response_time_ms": None,
+                    "message": "API key not configured",
+                },
+                {
+                    "provider": "glm",
+                    "configured": True,
+                    "connected": True,
+                    "model": "glm-4.7-flash",
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "response_time_ms": 11,
+                    "message": "ok",
+                },
+            ]
+
+    monkeypatch.setattr(quark_api, "get_ai_connectivity_service", lambda: StubAIConnectivityService())
+
+    response = client.get("/api/quark/ai-connectivity")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["success"] is True
+    assert body["interface"] == "quark_smart_rename"
+    providers = {item["provider"] for item in body["providers"]}
+    assert providers == {"deepseek", "glm"}

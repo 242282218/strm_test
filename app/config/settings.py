@@ -1,7 +1,7 @@
-"""
-配置管理模块
+﻿"""
+閰嶇疆绠＄悊妯″潡
 
-参考: AlistAutoStrm config.go
+鍙傝€? AlistAutoStrm config.go
 """
 
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
@@ -15,7 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 
 class EndpointConfig(BaseModel):
-    """端点配置"""
+    """绔偣閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
     base_url: str = Field(default="", description="OpenList/AList base URL", max_length=MAX_URL_LENGTH)
@@ -48,7 +48,7 @@ class EndpointConfig(BaseModel):
 
 
 class DirConfig(BaseModel):
-    """目录配置"""
+    """鐩綍閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
     local_directory: str = Field(..., description="Local directory path", max_length=512)
@@ -67,24 +67,24 @@ class DirConfig(BaseModel):
 
 
 class APIKeysConfig(BaseModel):
-    """API密钥配置"""
+    """API瀵嗛挜閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
-    ai_api_key: Optional[str] = Field(None, description="AI API密钥", max_length=2048)
-    tmdb_api_key: Optional[str] = Field(None, description="TMDB API密钥", max_length=2048)
+    ai_api_key: Optional[str] = Field(None, description="AI API瀵嗛挜", max_length=2048)
+    tmdb_api_key: Optional[str] = Field(None, description="TMDB API瀵嗛挜", max_length=2048)
 
 
 class TelegramConfig(BaseModel):
-    """Telegram通知配置"""
+    """Telegram閫氱煡閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(False, description="是否启用Telegram通知")
+    enabled: bool = Field(False, description="鏄惁鍚敤Telegram閫氱煡")
     bot_token: str = Field("", description="Telegram Bot Token", max_length=2048)
-    chat_id: str = Field("", description="接收消息的Chat ID", max_length=256)
-    proxy: str = Field("", description="代理服务器地址", max_length=MAX_URL_LENGTH)
+    chat_id: str = Field("", description="鎺ユ敹娑堟伅鐨凜hat ID", max_length=256)
+    proxy: str = Field("", description="浠ｇ悊鏈嶅姟鍣ㄥ湴鍧€", max_length=MAX_URL_LENGTH)
     events: List[str] = Field(
         default_factory=lambda: ["task_completed", "task_failed"],
-        description="需要推送的事件类型"
+        description="闇€瑕佹帹閫佺殑浜嬩欢绫诲瀷"
     )
 
     @field_validator('bot_token')
@@ -97,7 +97,7 @@ class TelegramConfig(BaseModel):
     @field_validator('proxy')
     @classmethod
     def validate_proxy(cls, v):
-        # 如果是环境变量占位符格式，则跳过验证
+        # 濡傛灉鏄幆澧冨彉閲忓崰浣嶇鏍煎紡锛屽垯璺宠繃楠岃瘉
         if v and (v.startswith('${') and v.endswith('}')):
             return v
         if v:
@@ -106,23 +106,23 @@ class TelegramConfig(BaseModel):
 
 
 class WeChatConfig(BaseModel):
-    """微信通知配置"""
+    """寰俊閫氱煡閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(False, description="是否启用微信通知")
-    provider: str = Field("serverchan", description="服务提供商", max_length=256)
+    enabled: bool = Field(False, description="鏄惁鍚敤寰俊閫氱煡")
+    provider: str = Field("serverchan", description="WeChat provider", max_length=256)
     send_key: str = Field("", description="SendKey", max_length=2048)
 
 
 
 class AListConfig(BaseModel):
-    """AList配置"""
+    """AList閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(False, description="是否启用AList集成")
-    url: str = Field("http://localhost:5244", description="AList服务地址", max_length=MAX_URL_LENGTH)
+    enabled: bool = Field(False, description="鏄惁鍚敤AList闆嗘垚")
+    url: str = Field("http://localhost:5244", description="AList鏈嶅姟鍦板潃", max_length=MAX_URL_LENGTH)
     token: str = Field("", description="AList Token", max_length=2048)
-    mount_path: str = Field("/", description="夸克网盘在AList中的挂载路径")
+    mount_path: str = Field("/", description="澶稿厠缃戠洏鍦ˋList涓殑鎸傝浇璺緞")
 
     @field_validator('url')
     @classmethod
@@ -142,16 +142,16 @@ class AListConfig(BaseModel):
 
 
 class WebDAVConfig(BaseModel):
-    """WebDAV配置（用于兜底播放）"""
+    """WebDAV閰嶇疆锛堢敤浜庡厹搴曟挱鏀撅級"""
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(False, description="是否启用WebDAV兜底功能")
-    fallback_enabled: bool = Field(True, description="是否启用故障自动切换")
-    url: str = Field("http://localhost:5244/dav", description="WebDAV服务地址", max_length=MAX_URL_LENGTH)
-    username: str = Field("", description="WebDAV用户名", max_length=128)
-    password: str = Field("", description="WebDAV密码", max_length=256)
-    mount_path: str = Field("/", description="夸克网盘在WebDAV中的挂载路径")
-    read_only: bool = Field(True, description="是否只读（仅用于内置WebDAV服务，此处无用但保留兼容）")
+    enabled: bool = Field(False, description="鏄惁鍚敤WebDAV鍏滃簳鍔熻兘")
+    fallback_enabled: bool = Field(True, description="鏄惁鍚敤鏁呴殰鑷姩鍒囨崲")
+    url: str = Field("http://localhost:5244/dav", description="WebDAV鏈嶅姟鍦板潃", max_length=MAX_URL_LENGTH)
+    username: str = Field("", description="WebDAV username", max_length=128)
+    password: str = Field("", description="WebDAV瀵嗙爜", max_length=256)
+    mount_path: str = Field("/", description="澶稿厠缃戠洏鍦╓ebDAV涓殑鎸傝浇璺緞")
+    read_only: bool = Field(True, description="WebDAV read only")
 
     @field_validator('username')
     @classmethod
@@ -186,7 +186,7 @@ class WebDAVConfig(BaseModel):
 
 
 class QuarkConfig(BaseModel):
-    """夸克网盘配置"""
+    """澶稿厠缃戠洏閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
     cookie: str = Field("", description="Quark Cookie", max_length=4096)
@@ -203,7 +203,7 @@ class QuarkConfig(BaseModel):
 
 
 class TmdbConfig(BaseModel):
-    """TMDB配置"""
+    """TMDB閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
     api_key: str = Field("", description="TMDB API Key", max_length=2048)
@@ -217,13 +217,13 @@ class TmdbConfig(BaseModel):
 
 
 class EmbyRefreshConfig(BaseModel):
-    """Emby刷新配置"""
+    """Emby鍒锋柊閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
-    on_strm_generate: bool = Field(True, description="STRM生成后是否触发刷新")
-    on_rename: bool = Field(True, description="重命名后是否触发刷新")
-    cron: Optional[str] = Field(None, description="Cron表达式(5或6字段)，空则不启用")
-    library_ids: List[str] = Field(default_factory=list, description="要刷新的媒体库ID列表(空则全库)")
+    on_strm_generate: bool = Field(True, description="Trigger refresh after STRM generation")
+    on_rename: bool = Field(True, description="閲嶅懡鍚嶅悗鏄惁瑙﹀彂鍒锋柊")
+    cron: Optional[str] = Field(None, description="Cron琛ㄨ揪寮?5鎴?瀛楁)锛岀┖鍒欎笉鍚敤")
+    library_ids: List[str] = Field(default_factory=list, description="瑕佸埛鏂扮殑濯掍綋搴揑D鍒楄〃(绌哄垯鍏ㄥ簱)")
 
     @field_validator("cron")
     @classmethod
@@ -251,25 +251,25 @@ class EmbyRefreshConfig(BaseModel):
 
 
 class GlobalEmbyConfig(BaseModel):
-    """全局Emby配置"""
+    """鍏ㄥ眬Emby閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(False, description="是否启用Emby集成")
+    enabled: bool = Field(False, description="鏄惁鍚敤Emby闆嗘垚")
     url: str = Field("", description="Emby Server URL", max_length=MAX_URL_LENGTH)
     api_key: str = Field("", description="Emby API Key", max_length=2048)
     timeout: int = Field(
         30,
-        description="Emby请求超时(秒)",
+        description="Emby璇锋眰瓒呮椂(绉?",
         ge=MIN_TIMEOUT_SECONDS,
         le=MAX_TIMEOUT_SECONDS,
     )
-    notify_on_complete: bool = Field(True, description="刷新完成后是否发送通知")
-    refresh: EmbyRefreshConfig = Field(default_factory=EmbyRefreshConfig, description="Emby刷新配置")
+    notify_on_complete: bool = Field(True, description="鍒锋柊瀹屾垚鍚庢槸鍚﹀彂閫侀€氱煡")
+    refresh: EmbyRefreshConfig = Field(default_factory=EmbyRefreshConfig, description="Emby鍒锋柊閰嶇疆")
 
     @field_validator('url')
     @classmethod
     def validate_url(cls, v):
-        # 如果是环境变量占位符格式，则跳过验证
+        # 濡傛灉鏄幆澧冨彉閲忓崰浣嶇鏍煎紡锛屽垯璺宠繃楠岃瘉
         if v and (v.startswith('${') and v.endswith('}')):
             return v
         if v:
@@ -287,7 +287,7 @@ class GlobalEmbyConfig(BaseModel):
 
 
 class ZhipuConfig(BaseModel):
-    """智谱AI配置"""
+    """鏅鸿氨AI閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
     api_key: str = Field("", description="Zhipu AI API Key", max_length=2048)
@@ -298,6 +298,58 @@ class ZhipuConfig(BaseModel):
         if v and v.startswith("encrypted:"):
             return get_decrypted_config_value(v)
         return v
+
+
+class DeepSeekConfig(BaseModel):
+    """DeepSeek AI configuration"""
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str = Field("", description="DeepSeek API Key", max_length=2048)
+    base_url: str = Field("https://api.deepseek.com/v1", description="DeepSeek base URL", max_length=MAX_URL_LENGTH)
+    model: str = Field("deepseek-chat", description="DeepSeek model", max_length=256)
+    timeout: int = Field(8, description="DeepSeek timeout in seconds", ge=MIN_TIMEOUT_SECONDS, le=MAX_TIMEOUT_SECONDS)
+
+    @field_validator('api_key')
+    @classmethod
+    def validate_and_decrypt_api_key(cls, v):
+        if v and v.startswith("encrypted:"):
+            return get_decrypted_config_value(v)
+        return v
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url(cls, v):
+        if v:
+            v = v.rstrip('/')
+            validate_http_url(v, "deepseek.base_url")
+            return v
+        return "https://api.deepseek.com/v1"
+
+
+class GLMConfig(BaseModel):
+    """GLM (Zhipu) AI configuration"""
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str = Field("", description="GLM API Key", max_length=2048)
+    base_url: str = Field("https://open.bigmodel.cn/api/paas/v4", description="GLM base URL", max_length=MAX_URL_LENGTH)
+    model: str = Field("glm-4.7-flash", description="GLM model", max_length=256)
+    timeout: int = Field(8, description="GLM timeout in seconds", ge=MIN_TIMEOUT_SECONDS, le=MAX_TIMEOUT_SECONDS)
+
+    @field_validator('api_key')
+    @classmethod
+    def validate_and_decrypt_api_key(cls, v):
+        if v and v.startswith("encrypted:"):
+            return get_decrypted_config_value(v)
+        return v
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url(cls, v):
+        if v:
+            v = v.rstrip('/')
+            validate_http_url(v, "glm.base_url")
+            return v
+        return "https://open.bigmodel.cn/api/paas/v4"
 
 
 class CorsConfig(BaseModel):
@@ -326,7 +378,7 @@ class SecurityConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
-    """应用配置"""
+    """搴旂敤閰嶇疆"""
     model_config = ConfigDict(extra="forbid")
 
     database: str = Field("quark_strm.db", description="Database file path", max_length=512)
@@ -338,17 +390,19 @@ class AppConfig(BaseModel):
     exts: List[str] = Field(default_factory=lambda: [".mp4", ".mkv", ".avi", ".mov"], description="Video extensions")
     alt_exts: List[str] = Field(default_factory=lambda: [".srt", ".ass"], description="Subtitle extensions")
     create_sub_directory: bool = Field(False, description="Create subdirectories globally")
-    api_keys: Optional[APIKeysConfig] = Field(None, description="API密钥配置")
-    telegram: TelegramConfig = Field(default_factory=TelegramConfig, description="Telegram通知配置")
-    wechat: WeChatConfig = Field(default_factory=WeChatConfig, description="微信通知配置")
-    webdav: WebDAVConfig = Field(default_factory=WebDAVConfig, description="WebDAV配置")
-    alist: AListConfig = Field(default_factory=AListConfig, description="AList配置")
+    api_keys: Optional[APIKeysConfig] = Field(None, description="API瀵嗛挜閰嶇疆")
+    telegram: TelegramConfig = Field(default_factory=TelegramConfig, description="Telegram閫氱煡閰嶇疆")
+    wechat: WeChatConfig = Field(default_factory=WeChatConfig, description="寰俊閫氱煡閰嶇疆")
+    webdav: WebDAVConfig = Field(default_factory=WebDAVConfig, description="WebDAV閰嶇疆")
+    alist: AListConfig = Field(default_factory=AListConfig, description="AList閰嶇疆")
     
-    # 新增字段
-    quark: QuarkConfig = Field(default_factory=QuarkConfig, description="夸克网盘配置")
-    tmdb: TmdbConfig = Field(default_factory=TmdbConfig, description="TMDB配置")
-    emby: GlobalEmbyConfig = Field(default_factory=GlobalEmbyConfig, description="Emby配置")
-    zhipu: ZhipuConfig = Field(default_factory=ZhipuConfig, description="智谱AI配置")
+    # 鏂板瀛楁
+    quark: QuarkConfig = Field(default_factory=QuarkConfig, description="澶稿厠缃戠洏閰嶇疆")
+    tmdb: TmdbConfig = Field(default_factory=TmdbConfig, description="TMDB閰嶇疆")
+    emby: GlobalEmbyConfig = Field(default_factory=GlobalEmbyConfig, description="Emby閰嶇疆")
+    zhipu: ZhipuConfig = Field(default_factory=ZhipuConfig, description="鏅鸿氨AI閰嶇疆")
+    deepseek: DeepSeekConfig = Field(default_factory=DeepSeekConfig, description="DeepSeek AI configuration")
+    glm: GLMConfig = Field(default_factory=GLMConfig, description="GLM AI configuration")
     cors: CorsConfig = Field(default_factory=CorsConfig, description="CORS settings")
     security: SecurityConfig = Field(default_factory=SecurityConfig, description="Security settings")
 
@@ -385,13 +439,13 @@ class AppConfig(BaseModel):
     @classmethod
     def from_yaml(cls, path: str) -> 'AppConfig':
         """
-        从YAML文件加载配置
+        浠嶻AML鏂囦欢鍔犺浇閰嶇疆
 
         Args:
-            path: YAML文件路径
+            path: YAML鏂囦欢璺緞
 
         Returns:
-            AppConfig实例
+            AppConfig瀹炰緥
         """
         if not os.path.exists(path):
             raise FileNotFoundError(f"Config file not found: {path}")
@@ -416,6 +470,8 @@ class AppConfig(BaseModel):
         env_map = {
             "SMART_MEDIA_TMDB_API_KEY": ["tmdb", "api_key"],
             "SMART_MEDIA_ZHIPU_API_KEY": ["zhipu", "api_key"],
+            "SMART_MEDIA_DEEPSEEK_API_KEY": ["deepseek", "api_key"],
+            "SMART_MEDIA_GLM_API_KEY": ["glm", "api_key"],
             "SMART_MEDIA_TELEGRAM_BOT_TOKEN": ["telegram", "bot_token"],
             "SMART_MEDIA_TELEGRAM_CHAT_ID": ["telegram", "chat_id"],
             "SMART_MEDIA_QUARK_COOKIE": ["quark", "cookie"],
@@ -465,13 +521,14 @@ class AppConfig(BaseModel):
 
     def to_yaml(self, path: str) -> None:
         """
-        保存配置到YAML文件
+        淇濆瓨閰嶇疆鍒癥AML鏂囦欢
 
         Args:
-            path: YAML文件路径
+            path: YAML鏂囦欢璺緞
         """
         dirname = os.path.dirname(path)
         if dirname:  # Only create directory if path has a parent directory
             os.makedirs(dirname, exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             yaml.dump(self.model_dump(), f, allow_unicode=True, default_flow_style=False)
+

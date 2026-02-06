@@ -9,6 +9,7 @@ import uuid
 
 from app.services.quark_service import QuarkService
 from app.services.smart_rename_service import get_smart_rename_service, SmartRenameOptions, AlgorithmType, NamingStandard
+from app.services.ai_connectivity_service import get_ai_connectivity_service
 from app.services.strm_generator import generate_strm_from_quark
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
@@ -344,6 +345,28 @@ async def sync_quark_files(
         raise
     except Exception as e:
         raise _handle_exception(e, "Failed to sync quark files")
+
+
+@router.get("/ai-connectivity")
+async def test_quark_smart_rename_ai_connectivity(
+    timeout_seconds: int = Query(8, ge=1, le=30),
+    _auth: None = Depends(require_api_key),
+):
+    """
+    Test AI provider connectivity for cloud smart rename interface.
+    Always tests both deepseek and glm.
+    """
+    service = get_ai_connectivity_service()
+    results = await service.test_providers(
+        providers=("deepseek", "glm"),
+        timeout_seconds=timeout_seconds,
+    )
+    return {
+        "success": True,
+        "interface": "quark_smart_rename",
+        "all_connected": all(item.get("connected") for item in results),
+        "providers": results,
+    }
 
 
 @router.post("/smart-rename-cloud")

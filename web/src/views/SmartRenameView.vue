@@ -1,865 +1,456 @@
+﻿
 <template>
   <div class="smart-rename-page">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="header-content">
-        <h1 class="page-title">
-          <span class="gradient-text">智能重命名</span>
-          <el-tag type="primary" effect="dark" class="version-tag">v2.0</el-tag>
-        </h1>
-        <p class="page-subtitle">基于多算法和 Emby 规范，智能识别并整理媒体文件</p>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+
+    <header class="hero-card">
+      <div>
+        <p class="kicker">SMART RENAME STUDIO</p>
+        <h1>智能重命名工作台</h1>
+        <p class="subtitle">
+          面向完整测试验证的重命名界面：本地与夸克云盘双流程，批量确认/编辑/执行/回滚全可测。
+        </p>
       </div>
-      <div class="header-actions">
-        <el-button type="primary" size="large" @click="showSettings = true">
-          <el-icon><Setting /></el-icon>
-          高级配置
+      <div class="hero-actions">
+        <el-tag :type="statusTagType" effect="dark" round>{{ statusTagText }}</el-tag>
+        <el-button plain @click="openHistory">
+          <el-icon><Document /></el-icon>
+          批次记录
         </el-button>
-        <el-button type="info" size="large" @click="showHelp = true">
-          <el-icon><QuestionFilled /></el-icon>
-          使用帮助
+        <el-button plain @click="showHelpDialog = true">
+          <el-icon><InfoFilled /></el-icon>
+          测试指南
         </el-button>
       </div>
-    </div>
+    </header>
 
-    <!-- Configuration Section -->
-    <div class="configuration-section">
-      <!-- Algorithm Selection Card -->
-      <div class="config-card glass-card">
-        <div class="card-header">
-          <div class="header-title">
-            <el-icon class="header-icon"><Cpu /></el-icon>
-            <h3>重命名算法</h3>
-          </div>
-          <el-tooltip content="选择适合您需求的解析算法" placement="top">
-            <el-icon class="help-icon"><InfoFilled /></el-icon>
-          </el-tooltip>
+    <section class="control-grid">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>1. 选择数据源</h2>
+          <el-icon><FolderOpened /></el-icon>
         </div>
-        
-        <div class="config-content">
-          <el-radio-group v-model="selectedAlgorithm" size="large" class="algorithm-group">
-            <el-radio-button 
-              v-for="algo in algorithms" 
-              :key="algo.algorithm" 
-              :value="algo.algorithm"
-              :class="{ 'recommended': algo.recommended }"
-            >
-              <div class="algorithm-option">
-                <div class="algo-header">
-                  <span class="algo-name">{{ algo.name }}</span>
-                  <el-tag v-if="algo.recommended" type="success" size="small" class="recommend-tag">推荐</el-tag>
-                </div>
-                <div class="algo-desc">{{ algo.description }}</div>
-              </div>
-            </el-radio-button>
-          </el-radio-group>
-          
-          <div class="algorithm-details" v-if="currentAlgorithm">
-            <div class="details-header">
-              <span class="details-title">算法特性</span>
-            </div>
-            <div class="features-grid">
-              <div 
-                v-for="feature in currentAlgorithm.features" 
-                :key="feature"
-                class="feature-item"
-              >
-                <el-icon class="feature-icon"><Check /></el-icon>
-                <span class="feature-text">{{ feature }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Naming Standard Card -->
-      <div class="config-card glass-card">
-        <div class="card-header">
-          <div class="header-title">
-            <el-icon class="header-icon"><Document /></el-icon>
-            <h3>命名标准</h3>
-          </div>
-          <el-tooltip content="选择媒体服务器兼容的命名规范" placement="top">
-            <el-icon class="help-icon"><InfoFilled /></el-icon>
-          </el-tooltip>
-        </div>
-        
-        <div class="config-content">
-          <el-radio-group v-model="selectedStandard" size="large" class="standard-group">
-            <el-radio-button 
-              v-for="std in namingStandards" 
-              :key="std.standard" 
-              :value="std.standard"
-            >
-              <div class="standard-option">
-                <span class="std-name">{{ std.name }}</span>
-                <span class="std-desc">{{ std.description }}</span>
-              </div>
-            </el-radio-button>
-          </el-radio-group>
-          
-          <div class="standard-examples" v-if="currentStandard">
-            <div class="examples-header">
-              <span class="examples-title">命名示例</span>
-            </div>
-            <div class="examples-grid">
-              <div class="example-card">
-                <div class="example-type">
-                  <el-icon><VideoCamera /></el-icon>
-                  电影
-                </div>
-                <div class="example-path">{{ currentStandard.movie_example }}</div>
-              </div>
-              <div class="example-card">
-                <div class="example-type">
-                  <el-icon><Monitor /></el-icon>
-                  剧集
-                </div>
-                <div class="example-path">{{ currentStandard.tv_example }}</div>
-              </div>
-              <div class="example-card">
-                <div class="example-type">
-                  <el-icon><Star /></el-icon>
-                  特别篇
-                </div>
-                <div class="example-path">{{ currentStandard.specials_example }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+        <el-radio-group v-model="sourceMode" class="mode-switch">
+          <el-radio-button label="local">本地目录</el-radio-button>
+          <el-radio-button label="cloud">夸克云盘</el-radio-button>
+        </el-radio-group>
 
-      <!-- Advanced Options Card -->
-      <div class="config-card glass-card">
-        <div class="card-header">
-          <div class="header-title">
-            <el-icon class="header-icon"><Tools /></el-icon>
-            <h3>高级选项</h3>
-          </div>
-          <el-tooltip content="配置重命名的高级参数" placement="top">
-            <el-icon class="help-icon"><InfoFilled /></el-icon>
-          </el-tooltip>
-        </div>
-        
-        <div class="config-content">
-          <div class="options-grid">
-            <div class="option-group">
-              <label class="option-label">文件处理</label>
-              <div class="option-items">
-                <el-checkbox v-model="options.recursive" class="option-item">
-                  包含子文件夹
-                </el-checkbox>
-                <el-checkbox v-model="options.createFolders" class="option-item">
-                  创建文件夹结构
-                </el-checkbox>
-                <el-checkbox v-model="options.autoConfirm" class="option-item">
-                  自动确认高置信度匹配 (≥90%)
-                </el-checkbox>
-              </div>
-            </div>
-            
-            <div class="option-group">
-              <label class="option-label">命名规则</label>
-              <div class="option-items">
-                <el-checkbox v-model="options.includeQuality" class="option-item">
-                  包含质量信息
-                </el-checkbox>
-                <el-checkbox v-model="options.includeSource" class="option-item">
-                  包含来源信息
-                </el-checkbox>
-                <el-checkbox v-model="options.includeTmdbId" class="option-item">
-                  包含 TMDB ID
-                </el-checkbox>
-              </div>
-            </div>
-            
-            <div class="option-group">
-              <label class="option-label">安全设置</label>
-              <div class="option-items">
-                <el-checkbox v-model="options.backupBeforeRename" class="option-item">
-                  重命名前备份
-                </el-checkbox>
-                <el-checkbox v-model="options.dryRun" class="option-item">
-                  仅预览不执行
-                </el-checkbox>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Operation Flow -->
-    <div class="operation-flow">
-      <!-- Step Progress -->
-      <div class="step-progress">
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: progressWidth }"></div>
-        </div>
-        <div class="step-indicators">
-          <div class="step-indicator" :class="{ 'active': currentStep >= 1, 'completed': currentStep > 1 }">
-            <div class="step-circle">1</div>
-            <span class="step-label">选择路径</span>
-          </div>
-          <div class="step-indicator" :class="{ 'active': currentStep >= 2, 'completed': currentStep > 2 }">
-            <div class="step-circle">2</div>
-            <span class="step-label">预览结果</span>
-          </div>
-          <div class="step-indicator" :class="{ 'active': currentStep >= 3, 'completed': currentStep > 3 }">
-            <div class="step-circle">3</div>
-            <span class="step-label">执行重命名</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 1: Select Path -->
-      <div class="step-section glass-card" :class="{ 'active': currentStep >= 1 }">
-        <div class="step-header">
-          <div class="step-info">
-            <div class="step-title">
-              <el-icon><FolderOpened /></el-icon>
-              <h3>选择媒体文件夹</h3>
-            </div>
-            <p class="step-description">选择包含需要整理的媒体文件的文件夹路径</p>
-          </div>
-          <div class="step-status">
-            <el-tag v-if="selectedPath" type="success" effect="dark" class="status-tag">
-              <el-icon><Check /></el-icon>
-              已选择
-            </el-tag>
-            <el-tag v-else type="info" effect="plain" class="status-tag">
-              <el-icon><Clock /></el-icon>
-              等待选择
+        <template v-if="sourceMode === 'local'">
+          <el-input
+            v-model="localPath"
+            placeholder="输入本地绝对路径，例如：D:/Media/Movies"
+            clearable
+            class="path-input"
+          >
+            <template #prepend>本地路径</template>
+            <template #append>
+              <el-button :disabled="recentPaths.length === 0" @click="useLatestPath">最近一次</el-button>
+            </template>
+          </el-input>
+          <div v-if="recentPaths.length" class="recent-wrap">
+            <span class="minor">最近路径</span>
+            <el-tag v-for="path in recentPaths" :key="path" size="small" class="recent-tag" @click="localPath = path">
+              {{ path }}
             </el-tag>
           </div>
+        </template>
+
+        <template v-else>
+          <el-input :model-value="cloudFolderLabel || '未选择云盘目录'" readonly class="path-input">
+            <template #prepend>云盘目录</template>
+            <template #append>
+              <el-button @click="showQuarkBrowser = true">浏览</el-button>
+            </template>
+          </el-input>
+          <p class="minor">目录选择由 QuarkFileBrowser 提供，兼容现有接口参数结构。</p>
+        </template>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>2. 配置策略</h2>
+          <el-icon><Cpu /></el-icon>
         </div>
-        
-        <div class="step-content" v-show="currentStep >= 1">
-          <div class="path-selector">
-            <div class="selector-header">
-              <span class="selector-label">文件夹路径</span>
-              <el-button 
-                type="primary" 
-                size="small" 
-                @click="openPathSelector"
-                class="browse-btn"
-              >
-                <el-icon><FolderOpened /></el-icon>
-                浏览文件夹
-              </el-button>
-            </div>
-            <el-input
-              v-model="selectedPath"
-              placeholder="请选择包含媒体文件的文件夹..."
-              readonly
-              size="large"
-              class="path-input"
-            >
-              <template #prefix>
-                <el-icon><Folder /></el-icon>
-              </template>
-            </el-input>
+
+        <div class="row2">
+          <div class="field">
+            <label>解析算法</label>
+            <el-select v-model="selectedAlgorithm">
+              <el-option v-for="algo in algorithms" :key="algo.algorithm" :label="algo.name" :value="algo.algorithm" />
+            </el-select>
           </div>
-          
-          <div class="step-actions">
-            <el-button
-              type="primary"
-              size="large"
-              :disabled="!selectedPath"
-              :loading="analyzing"
-              @click="startAnalysis"
-              class="action-btn"
-            >
-              <el-icon><Search /></el-icon>
-              扫描媒体文件
-            </el-button>
-            <el-button
-              type="info"
-              size="large"
-              @click="resetSelection"
-              :disabled="!selectedPath"
-              class="action-btn"
-            >
-              <el-icon><Refresh /></el-icon>
-              重新选择
-            </el-button>
+          <div class="field">
+            <label>命名标准</label>
+            <el-select v-model="selectedStandard">
+              <el-option v-for="std in namingStandards" :key="std.standard" :label="std.name" :value="std.standard" />
+            </el-select>
           </div>
+        </div>
+
+        <div v-if="currentAlgorithm" class="algo-box">
+          <p class="algo-title">{{ currentAlgorithm.name }}</p>
+          <p class="minor">{{ currentAlgorithm.description }}</p>
+          <div class="tag-line">
+            <el-tag v-for="feature in currentAlgorithm.features" :key="feature" size="small" effect="plain">{{ feature }}</el-tag>
+          </div>
+        </div>
+
+        <div class="opt-grid">
+          <el-checkbox v-model="options.recursive">递归扫描</el-checkbox>
+          <el-checkbox v-model="options.createFolders">创建目录结构</el-checkbox>
+          <el-checkbox v-model="options.autoConfirm">自动确认高置信度</el-checkbox>
+          <el-checkbox v-model="options.forceAiParse">强制 AI 解析</el-checkbox>
+        </div>
+
+        <div class="threshold">
+          <span class="minor">AI 置信度阈值</span>
+          <el-slider v-model="options.aiThreshold" :min="0.4" :max="0.95" :step="0.01" />
+          <strong>{{ Math.round(options.aiThreshold * 100) }}%</strong>
+        </div>
+      </article>
+    </section>
+
+    <section class="action-strip">
+      <el-button type="primary" :loading="previewing" :disabled="!canPreview" @click="runPreview">
+        <el-icon><Search /></el-icon>
+        生成预览
+      </el-button>
+      <el-button :disabled="!hasPreview || previewing" @click="refreshPreview">
+        <el-icon><Refresh /></el-icon>
+        重新扫描
+      </el-button>
+      <el-button :disabled="!hasPreview" @click="exportPreview">
+        <el-icon><Download /></el-icon>
+        导出预览
+      </el-button>
+      <el-button :disabled="!canRollback" :loading="rollingBack" @click="rollbackLatest">
+        <el-icon><RefreshRight /></el-icon>
+        回滚最近执行
+      </el-button>
+      <el-button :loading="testingAiConnectivity" @click="runAiConnectivityTest">
+        <el-icon><Cpu /></el-icon>
+        AI 连通性测试
+      </el-button>
+      <el-button :disabled="!hasPreview" @click="resetWorkspace">重置</el-button>
+    </section>
+
+    <section v-if="aiConnectivityResult" class="ai-connectivity-strip">
+      <div class="ai-connectivity-head">
+        <strong>AI 连通性（{{ aiConnectivityResult.interface === 'smart_rename' ? '本地接口' : '云盘接口' }}）</strong>
+        <el-tag :type="aiConnectivityResult.all_connected ? 'success' : 'warning'" round>
+          {{ aiConnectivityResult.all_connected ? '全部可用' : '部分异常' }}
+        </el-tag>
+      </div>
+      <div class="ai-connectivity-grid">
+        <div
+          v-for="provider in aiConnectivityResult.providers"
+          :key="provider.provider"
+          class="ai-connectivity-item"
+        >
+          <p class="strong">{{ provider.provider.toUpperCase() }}</p>
+          <el-tag
+            size="small"
+            :type="provider.connected ? 'success' : (provider.configured ? 'danger' : 'info')"
+          >
+            {{ provider.connected ? '已连接' : (provider.configured ? '连接失败' : '未配置') }}
+          </el-tag>
+          <p class="minor">{{ provider.message }}</p>
         </div>
       </div>
+    </section>
 
-      <!-- Step 2: Preview Results -->
-      <div class="step-section glass-card" :class="{ 'active': currentStep >= 2, 'disabled': currentStep < 2 }">
-        <div class="step-header">
-          <div class="step-info">
-            <div class="step-title">
-              <el-icon><View /></el-icon>
-              <h3>预览重命名结果</h3>
-            </div>
-            <p class="step-description">查看识别的媒体信息，确认或修改重命名建议</p>
-          </div>
-          <div class="step-status" v-if="previewData">
-            <div class="stats-panel">
-              <div class="stat-item">
-                <span class="stat-label">总文件数</span>
-                <span class="stat-value">{{ previewData.total_items }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">已匹配</span>
-                <span class="stat-value success">{{ previewData.matched_items }}</span>
-              </div>
-              <div class="stat-item" v-if="previewData.needs_confirmation > 0">
-                <span class="stat-label">待确认</span>
-                <span class="stat-value warning">{{ previewData.needs_confirmation }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">置信度</span>
-                <span class="stat-value info">{{ Math.round((previewData.average_confidence ?? 0) * 100) }}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="step-content" v-if="currentStep >= 2 && previewData">
-          <!-- Analysis Summary -->
-          <div class="summary-banner">
-            <div class="summary-info">
-              <div class="info-item">
-                <el-icon><Cpu /></el-icon>
-                <span>解析算法: {{ getAlgorithmName(previewData.algorithm_used) }}</span>
-              </div>
-              <div class="info-item">
-                <el-icon><Document /></el-icon>
-                <span>命名标准: {{ getStandardName(previewData.naming_standard) }}</span>
-              </div>
-              <div class="info-item">
-                <el-icon><Timer /></el-icon>
-                <span>分析耗时: {{ previewData.analysis_time }}s</span>
-              </div>
-            </div>
-            <div class="summary-actions">
-              <el-button type="info" size="small" @click="exportPreview">
-                <el-icon><Download /></el-icon>
-                导出预览
-              </el-button>
-              <el-button type="warning" size="small" @click="refreshPreview">
-                <el-icon><Refresh /></el-icon>
-                重新分析
-              </el-button>
-            </div>
-          </div>
-
-          <!-- File List Controls -->
-          <div class="list-controls">
-            <div class="controls-left">
-              <el-checkbox v-model="selectAll" @change="handleSelectAll">
-                全选 ({{ selectedItems.length }}/{{ previewData.items.length }})
-              </el-checkbox>
-              <el-button 
-                type="primary" 
-                size="small" 
-                @click="confirmSelected"
-                :disabled="selectedItems.length === 0"
-              >
-                <el-icon><Check /></el-icon>
-                批量确认
-              </el-button>
-              <el-button 
-                type="warning" 
-                size="small" 
-                @click="editSelected"
-                :disabled="selectedItems.length === 0"
-              >
-                <el-icon><Edit /></el-icon>
-                批量编辑
-              </el-button>
-            </div>
-            <div class="controls-right">
-              <el-input
-                v-model="searchKeyword"
-                placeholder="搜索文件名..."
-                size="small"
-                style="width: 200px;"
-                clearable
-              >
-                <template #prefix>
-                  <el-icon><Search /></el-icon>
-                </template>
-              </el-input>
-              <el-select v-model="filterType" size="small" style="width: 120px;">
-                <el-option label="全部文件" value="all" />
-                <el-option label="待确认" value="pending" />
-                <el-option label="已确认" value="confirmed" />
-                <el-option label="已匹配" value="matched" />
-                <el-option label="高置信度" value="high_confidence" />
-                <el-option label="低置信度" value="low_confidence" />
-              </el-select>
-              <el-select v-model="sortBy" size="small" style="width: 140px;">
-                <el-option label="按文件名排序" value="filename" />
-                <el-option label="按置信度排序" value="confidence" />
-                <el-option label="按文件类型排序" value="type" />
-                <el-option label="按状态排序" value="status" />
-              </el-select>
-            </div>
-          </div>
-
-          <!-- File List -->
-          <div class="file-list" v-if="previewData && previewData.items.length > 0">
-            <div class="list-container">
-              <div
-                v-for="item in filteredItems"
-                :key="item.original_path"
-                class="file-item"
-                :class="{
-                  'needs-confirmation': item.needs_confirmation,
-                  'selected': selectedItems.includes(item.original_path),
-                  'high-confidence': item.overall_confidence >= 0.9,
-                  'medium-confidence': item.overall_confidence >= 0.6 && item.overall_confidence < 0.9,
-                  'low-confidence': item.overall_confidence < 0.6
-                }"
-              >
-                <div class="item-header">
-                  <el-checkbox
-                    v-model="selectedItems"
-                    :label="item.original_path"
-                    class="item-checkbox"
-                  />
-                  <div class="item-info">
-                    <div class="file-type">
-                      <el-tag size="small" :type="getMediaTypeColor(item.media_type)">
-                        {{ getMediaTypeLabel(item.media_type) }}
-                      </el-tag>
-                    </div>
-                    <div class="confidence-indicator">
-                      <el-tooltip :content="`置信度: ${Math.round(item.overall_confidence * 100)}%`">
-                        <div class="confidence-bar">
-                          <div
-                            class="confidence-fill"
-                            :style="{ width: `${item.overall_confidence * 100}%` }"
-                            :class="getConfidenceClass(item.overall_confidence)"
-                          />
-                        </div>
-                      </el-tooltip>
-                      <span class="confidence-value">{{ Math.round(item.overall_confidence * 100) }}%</span>
-                    </div>
-                  </div>
-                  <div class="item-status">
-                    <el-tag 
-                      v-if="item.needs_confirmation" 
-                      type="warning" 
-                      size="small" 
-                      effect="dark"
-                    >
-                      <el-icon><Warning /></el-icon>
-                      需确认
-                    </el-tag>
-                    <el-tag 
-                      v-else-if="item.tmdb_id" 
-                      type="success" 
-                      size="small" 
-                      effect="dark"
-                    >
-                      <el-icon><Check /></el-icon>
-                      已匹配
-                    </el-tag>
-                    <el-tag v-else type="info" size="small" effect="plain">
-                      未匹配
-                    </el-tag>
-                  </div>
-                </div>
-
-                <div class="item-content">
-                  <div class="file-preview">
-                    <div class="original-file">
-                      <div class="file-label">
-                        <el-icon><Document /></el-icon>
-                        原文件名
-                      </div>
-                      <div class="file-path" :title="item.original_path">
-                        {{ getFileName(item.original_path) }}
-                      </div>
-                    </div>
-                    <el-icon class="arrow-icon"><ArrowRight /></el-icon>
-                    <div class="new-file">
-                      <div class="file-label">
-                        <el-icon><DocumentChecked /></el-icon>
-                        新文件名
-                      </div>
-                      <div class="file-path" :title="item.new_name">
-                        {{ item.new_name }}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="media-details">
-                    <div class="details-grid">
-                      <div class="detail-item" v-if="item.tmdb_title">
-                        <span class="detail-label">标题:</span>
-                        <span class="detail-value">{{ item.tmdb_title }}</span>
-                      </div>
-                      <div class="detail-item" v-if="item.tmdb_year">
-                        <span class="detail-label">年份:</span>
-                        <span class="detail-value">{{ item.tmdb_year }}</span>
-                      </div>
-                      <div class="detail-item" v-if="item.season !== undefined">
-                        <span class="detail-label">季度:</span>
-                        <span class="detail-value">S{{ String(item.season).padStart(2, '0') }}</span>
-                      </div>
-                      <div class="detail-item" v-if="item.episode !== undefined">
-                        <span class="detail-label">集数:</span>
-                        <span class="detail-value">E{{ String(item.episode).padStart(2, '0') }}</span>
-                      </div>
-                      <div class="detail-item" v-if="item.tmdb_id">
-                        <span class="detail-label">TMDB ID:</span>
-                        <span class="detail-value">{{ item.tmdb_id }}</span>
-                      </div>
-                      <div class="detail-item">
-                        <span class="detail-label">解析算法:</span>
-                        <span class="detail-value">{{ getAlgorithmShortName(item.used_algorithm) }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="item-actions">
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="editItem(item)"
-                    class="action-btn"
-                  >
-                    <el-icon><Edit /></el-icon>
-                    编辑
-                  </el-button>
-                  <el-button
-                    type="danger"
-                    text
-                    size="small"
-                    @click="removeItem(item)"
-                  >
-                    <el-icon><Delete /></el-icon>
-                    跳过
-                  </el-button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="step-actions">
-            <el-button size="large" @click="currentStep = 1">
-              上一步
-            </el-button>
-            <el-button
-              type="primary"
-              size="large"
-              :disabled="selectedItems.length === 0"
-              @click="currentStep = 3"
-            >
-              下一步
-              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </div>
+    <section v-if="hasPreview" class="workspace">
+      <div class="summary-grid">
+        <div class="summary"><span>批次 ID</span><strong>{{ previewBatchId }}</strong></div>
+        <div class="summary"><span>总项目</span><strong>{{ totalItems }}</strong></div>
+        <div class="summary"><span>待确认</span><strong>{{ pendingItems }}</strong></div>
+        <div class="summary"><span>匹配成功</span><strong>{{ matchedItems }}</strong></div>
+        <div class="summary"><span>平均置信度</span><strong>{{ Math.round(averageConfidence * 100) }}%</strong></div>
       </div>
 
-      <!-- Step 3: Execute -->
-      <div class="step-section glass-card" :class="{ 'active': currentStep >= 3, 'disabled': currentStep < 3 }">
-        <div class="step-header">
-          <div class="step-number">3</div>
-          <div class="step-info">
-            <h3>执行重命名</h3>
-            <p>确认后将开始批量重命名文件</p>
-          </div>
-        </div>
-        
-        <div class="step-content" v-show="currentStep >= 3">
-          <div class="execute-summary">
-            <div class="summary-card">
-              <div class="summary-icon">
-                <el-icon :size="48" color="var(--primary-500)"><Document /></el-icon>
-              </div>
-              <div class="summary-info">
-                <div class="summary-value">{{ selectedItems.length }}</div>
-                <div class="summary-label">待重命名文件</div>
-              </div>
-            </div>
-            
-            <div class="summary-card">
-              <div class="summary-icon">
-                <el-icon :size="48" color="var(--warning-500)"><Warning /></el-icon>
-              </div>
-              <div class="summary-info">
-                <div class="summary-value">
-                  {{ selectedItems.filter(path => {
-                    const item = previewData?.items.find(i => i.original_path === path)
-                    return item?.needs_confirmation
-                  }).length }}
-                </div>
-                <div class="summary-label">需确认项</div>
-              </div>
-            </div>
-            
-            <div class="summary-card">
-              <div class="summary-icon">
-                <el-icon :size="48" color="var(--success-500)"><Check /></el-icon>
-              </div>
-              <div class="summary-info">
-                <div class="summary-value">
-                  {{ selectedItems.filter(path => {
-                    const item = previewData?.items.find(i => i.original_path === path)
-                    return !item?.needs_confirmation
-                  }).length }}
-                </div>
-                <div class="summary-label">高置信度匹配</div>
-              </div>
-            </div>
-          </div>
-
-          <el-alert
-            title="操作提示"
-            type="info"
-            description="重命名操作不可撤销，建议在执行前备份重要文件。系统将创建日志记录所有变更。"
-            show-icon
-            :closable="false"
-            class="execute-warning"
-          />
-
-          <div class="step-actions">
-            <el-button size="large" @click="currentStep = 2">
-              上一步
-            </el-button>
-            <el-button
-              type="success"
-              size="large"
-              :loading="executing"
-              @click="executeRename"
-            >
-              <el-icon><CircleCheck /></el-icon>
-              确认执行
-            </el-button>
-          </div>
-        </div>
+      <div class="filter-row">
+        <el-input v-model="keyword" placeholder="按原文件名/新文件名搜索" clearable>
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <el-select v-model="statusFilter">
+          <el-option v-for="opt in statusFilterOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
+        <el-select v-model="confidenceFilter">
+          <el-option v-for="opt in confidenceFilterOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
+        <el-select v-model="sortKey">
+          <el-option v-for="opt in sortOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
       </div>
-    </div>
 
-    <!-- Edit Item Dialog -->
-    <el-dialog
-      v-model="editDialogVisible"
-      title="编辑重命名项目"
-      width="600px"
-      destroy-on-close
-    >
-      <el-form :model="editingItem" label-width="100px">
-        <el-form-item label="原始文件">
-          <el-input v-model="editingItem.original_path" disabled />
-        </el-form-item>
-        <el-form-item label="新文件名">
-          <el-input v-model="editingItem.new_name" />
-        </el-form-item>
+      <div class="batch-tools">
+        <el-button :disabled="selectedRows.length === 0" @click="markSelectedAsConfirmed">批量确认</el-button>
+        <el-button :disabled="selectedRows.length !== 1" @click="editSingleSelected">编辑选中</el-button>
+        <el-button :disabled="selectedRows.length === 0" @click="selectPendingOnly">仅选待确认</el-button>
+        <el-button :disabled="selectedRows.length === 0" @click="clearSelection">清空勾选</el-button>
+      </div>
+
+      <el-table :data="displayRows" row-key="id" class="result-table" empty-text="暂无可展示数据">
+        <el-table-column width="56" fixed="left">
+          <template #header>
+            <el-checkbox
+              :model-value="allDisplayedSelected"
+              :indeterminate="partiallyDisplayedSelected"
+              @change="toggleSelectDisplayed"
+            />
+          </template>
+          <template #default="{ row }">
+            <el-checkbox :model-value="isRowSelected(row.id)" @change="onRowCheck(row.id, $event)" />
+          </template>
+        </el-table-column>
+
+        <el-table-column label="原文件" min-width="240">
+          <template #default="{ row }">
+            <div class="name-cell">
+              <p class="strong">{{ row.original_name }}</p>
+              <p class="minor">{{ row.original_path }}</p>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="建议名称" min-width="250">
+          <template #default="{ row }">
+            <div class="name-cell">
+              <p class="strong">{{ row.new_name }}</p>
+              <p class="minor">
+                {{ getMediaTypeText(row.media_type) }}
+                <span v-if="row.season && row.episode"> · S{{ row.season }}E{{ row.episode }}</span>
+              </p>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="匹配" min-width="170">
+          <template #default="{ row }">
+            <div class="name-cell">
+              <p>{{ row.tmdb_title || '未匹配 TMDB' }}</p>
+              <el-tag v-if="row.tmdb_id" size="small" effect="plain">TMDB {{ row.tmdb_id }}</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="置信度" width="160">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="Math.round((row.overall_confidence || 0) * 100)"
+              :status="confidenceStatus(row.overall_confidence || 0)"
+              :stroke-width="9"
+            />
+          </template>
+        </el-table-column>
+
+        <el-table-column label="状态" width="160">
+          <template #default="{ row }">
+            <div class="name-cell">
+              <el-tag :type="statusType(row)" round>{{ statusText(row) }}</el-tag>
+              <small class="minor" v-if="row.needs_confirmation || row.confirmation_reason">
+                {{ row.confirmation_reason || '需要人工确认' }}
+              </small>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <div class="ops-cell">
+              <el-button text type="primary" @click="openEditDialog(row)">编辑</el-button>
+              <el-button text type="danger" @click="removeFromSelection(row.id)">移出执行</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <footer class="execute-bar">
+        <div class="execute-meta">
+          <el-icon><Collection /></el-icon>
+          <span>已勾选 {{ selectedRows.length }} / {{ totalItems }}</span>
+          <span>来源：{{ previewSourceMode === 'local' ? '本地目录' : '夸克云盘' }}</span>
+          <span>算法：{{ previewAlgorithmUsed }}</span>
+          <span>标准：{{ previewNamingUsed }}</span>
+        </div>
+        <div class="execute-actions">
+          <el-button :disabled="selectedRows.length !== 1" @click="validateSelectedName">校验命名</el-button>
+          <el-button type="success" :loading="executing" :disabled="!canExecute" @click="executeSelected">
+            <el-icon><CircleCheck /></el-icon>
+            执行重命名
+          </el-button>
+        </div>
+      </footer>
+    </section>
+
+    <el-empty v-else class="empty-block" description="先选择数据源并点击“生成预览”开始测试" />
+    <el-dialog v-model="editDialogVisible" title="编辑重命名项" width="620px" destroy-on-close>
+      <el-form label-width="100px">
+        <el-form-item label="原文件名"><el-input :model-value="editingItem.original_name" disabled /></el-form-item>
+        <el-form-item label="新文件名"><el-input v-model="editingItem.new_name" /></el-form-item>
+        <el-form-item label="TMDB 标题"><el-input v-model="editingItem.tmdb_title" /></el-form-item>
         <el-form-item label="媒体类型">
-          <el-radio-group v-model="editingItem.media_type">
-            <el-radio-button value="movie">电影</el-radio-button>
-            <el-radio-button value="tv">电视剧</el-radio-button>
-            <el-radio-button value="anime">动漫</el-radio-button>
-            <el-radio-button value="unknown">未知</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="TMDB标题">
-          <el-input v-model="editingItem.tmdb_title" />
-        </el-form-item>
-        <el-form-item label="年份">
-          <el-input-number v-model="editingItem.tmdb_year" :min="1900" :max="2100" />
-        </el-form-item>
-        <el-form-item label="季">
-          <el-input-number v-model="editingItem.season" :min="0" :max="99" />
-        </el-form-item>
-        <el-form-item label="集">
-          <el-input-number v-model="editingItem.episode" :min="0" :max="999" />
+          <el-select v-model="editingItem.media_type">
+            <el-option label="电影" value="movie" />
+            <el-option label="剧集" value="tv" />
+            <el-option label="动漫" value="anime" />
+            <el-option label="未知" value="unknown" />
+          </el-select>
         </el-form-item>
       </el-form>
+
+      <el-alert
+        v-if="nameValidation"
+        :title="nameValidation.is_valid ? '命名校验通过' : '命名建议检查'"
+        :type="nameValidation.is_valid ? 'success' : 'warning'"
+        :description="validationDescription"
+        :closable="false"
+        show-icon
+      />
+
       <template #footer>
+        <el-button @click="validateEditedName" :loading="validatingName">校验命名</el-button>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveItemEdit">保存</el-button>
+        <el-button type="primary" @click="saveEdit">保存</el-button>
       </template>
     </el-dialog>
 
-    <!-- Settings Dialog -->
-    <el-dialog
-      v-model="showSettings"
-      title="智能重命名配置"
-      width="800px"
-    >
-      <el-tabs v-model="settingsTab">
-        <el-tab-pane label="命名模板" name="template">
-          <el-form label-width="140px">
-            <el-form-item label="电影模板">
-              <el-input v-model="namingConfig.movie_template" />
-              <div class="template-hint">
-                可用变量: {title}, {year}
-              </div>
-            </el-form-item>
-            <el-form-item label="剧集模板">
-              <el-input v-model="namingConfig.tv_episode_template" />
-              <div class="template-hint">
-                可用变量: {title}, {year}, {season}, {episode}
-              </div>
-            </el-form-item>
-            <el-form-item label="特别篇文件夹">
-              <el-input v-model="namingConfig.specials_folder" />
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-        
-        <el-tab-pane label="高级选项" name="advanced">
-          <el-form label-width="140px">
-            <el-form-item label="包含质量信息">
-              <el-switch v-model="namingConfig.include_quality" />
-            </el-form-item>
-            <el-form-item label="包含来源信息">
-              <el-switch v-model="namingConfig.include_source" />
-            </el-form-item>
-            <el-form-item label="包含编码信息">
-              <el-switch v-model="namingConfig.include_codec" />
-            </el-form-item>
-            <el-form-item label="包含TMDB ID">
-              <el-switch v-model="namingConfig.include_tmdb_id" />
-            </el-form-item>
-            <el-form-item label="清理非法字符">
-              <el-switch v-model="namingConfig.sanitize_filenames" />
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-        
-        <el-tab-pane label="AI设置" name="ai">
-          <el-form label-width="140px">
-            <el-form-item label="AI API Key">
-              <el-input v-model="aiSettings.apiKey" show-password placeholder="在 config.yaml 中配置" disabled />
-              <div class="template-hint">
-                请在服务器配置文件中的 ai.api_key 或 zhipu.api_key 设置
-              </div>
-            </el-form-item>
-            <el-form-item label="置信度阈值">
-              <el-slider v-model="options.aiThreshold" :max="100" show-stops />
-              <div class="template-hint">
-                低于此阈值的解析结果将触发 AI 解析
-              </div>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-      </el-tabs>
-      <template #footer>
-        <el-button @click="showSettings = false">取消</el-button>
-        <el-button type="primary" @click="saveSettings">保存配置</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Execute Result Dialog -->
-    <el-dialog
-      v-model="resultDialogVisible"
-      title="执行结果"
-      width="600px"
-      :close-on-click-modal="false"
-    >
-      <div class="result-summary">
-        <div class="result-item success">
-          <el-icon :size="32"><CircleCheck /></el-icon>
-          <span class="result-value">{{ executeResult?.success_items || 0 }}</span>
-          <span class="result-label">成功</span>
-        </div>
-        <div class="result-item failed">
-          <el-icon :size="32"><CircleClose /></el-icon>
-          <span class="result-value">{{ executeResult?.failed_items || 0 }}</span>
-          <span class="result-label">失败</span>
-        </div>
-        <div class="result-item skipped">
-          <el-icon :size="32"><Remove /></el-icon>
-          <span class="result-value">{{ executeResult?.skipped_items || 0 }}</span>
-          <span class="result-label">跳过</span>
-        </div>
+    <el-dialog v-model="showResultDialog" title="执行结果" width="500px" destroy-on-close>
+      <div v-if="executeSummary" class="result-grid">
+        <div class="result-card success"><span>成功</span><strong>{{ executeSummary.success_items }}</strong></div>
+        <div class="result-card fail"><span>失败</span><strong>{{ executeSummary.failed_items }}</strong></div>
+        <div class="result-card skip"><span>跳过</span><strong>{{ executeSummary.skipped_items }}</strong></div>
+        <div class="result-card total"><span>总计</span><strong>{{ executeSummary.total_items }}</strong></div>
       </div>
-
-      <template #footer>
-        <el-button type="primary" @click="resultDialogVisible = false; resetWorkflow()">
-          完成
-        </el-button>
-      </template>
+      <template #footer><el-button type="primary" @click="showResultDialog = false">关闭</el-button></template>
     </el-dialog>
 
-    <!-- Quark File Browser -->
-    <QuarkFileBrowser
-      v-model="showQuarkBrowser"
-      @select="handleCloudFolderSelect"
-    />
+    <el-dialog v-model="showHelpDialog" title="完整测试建议流程" width="620px" destroy-on-close>
+      <ol class="help-list">
+        <li>先生成预览，验证统计、筛选、排序、搜索可用。</li>
+        <li>对低置信度项做批量确认、单项编辑与命名校验。</li>
+        <li>执行重命名后核对执行结果与批次记录明细。</li>
+        <li>本地模式使用回滚接口，云盘模式使用反向重命名回退。</li>
+      </ol>
+      <template #footer><el-button type="primary" @click="showHelpDialog = false">知道了</el-button></template>
+    </el-dialog>
+
+    <el-drawer v-model="showHistoryDrawer" title="重命名批次记录" size="72%" destroy-on-close>
+      <div class="history-layout">
+        <section class="history-panel">
+          <div class="history-head">
+            <h3>批次列表</h3>
+            <el-button size="small" @click="loadBatchHistory" :loading="historyLoading">刷新</el-button>
+          </div>
+          <el-table :data="batchHistory" v-loading="historyLoading" height="480" row-key="batch_id" @row-click="onHistoryBatchClick">
+            <el-table-column prop="batch_id" label="Batch ID" min-width="210" />
+            <el-table-column prop="status" label="状态" width="130" />
+            <el-table-column prop="total_items" label="总数" width="70" />
+            <el-table-column prop="success_items" label="成功" width="70" />
+            <el-table-column prop="failed_items" label="失败" width="70" />
+          </el-table>
+        </section>
+
+        <section class="history-panel">
+          <div class="history-head"><h3>批次明细 {{ activeHistoryBatchId ? `(${activeHistoryBatchId})` : '' }}</h3></div>
+          <el-table :data="historyItems" v-loading="historyItemsLoading" height="480" row-key="id">
+            <el-table-column prop="original_name" label="原文件" min-width="170" />
+            <el-table-column prop="new_name" label="新文件名" min-width="170" />
+            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column prop="confidence" label="置信度" width="90" />
+            <el-table-column prop="error_message" label="错误" min-width="160" />
+          </el-table>
+        </section>
+      </div>
+    </el-drawer>
+
+    <QuarkFileBrowser v-model="showQuarkBrowser" @select="handleCloudFolderSelect" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Setting,
-  Check,
-  Folder,
-  FolderOpened,
-  VideoPlay,
-  Document,
-  DocumentChecked,
-  ArrowRight,
-  Edit,
-  Delete,
-  Warning,
   CircleCheck,
-  CircleClose,
-  Remove,
+  Collection,
   Cpu,
-  InfoFilled
+  Document,
+  Download,
+  FolderOpened,
+  InfoFilled,
+  Refresh,
+  RefreshRight,
+  Search
 } from '@element-plus/icons-vue'
 import {
-  previewSmartRename,
   executeSmartRename,
   getAlgorithms,
+  getBatchItems,
   getNamingStandards,
+  getRenameBatches,
   getSmartRenameStatus,
-  type SmartRenameItem,
+  previewSmartRename,
+  rollbackSmartRename,
+  testSmartRenameAIConnectivity,
+  validateFilename,
+  type AIConnectivityResponse,
   type AlgorithmInfo,
-  type NamingStandardInfo
+  type NamingStandardInfo,
+  type SmartRenameExecuteResponse,
+  type SmartRenameItem,
+  type SmartRenameStatus,
+  type ValidationResponse
 } from '@/api/smartRename'
 import {
-  smartRenameCloudFiles,
   executeCloudRename,
+  smartRenameCloudFiles,
+  testCloudRenameAIConnectivity,
   type QuarkRenameItem
 } from '@/api/quark'
 import QuarkFileBrowser from '@/components/QuarkFileBrowser.vue'
 
-// State
-const currentStep = ref(1)
-const selectedPath = ref('')
-const analyzing = ref(false)
-const executing = ref(false)
-const selectAll = ref(false)
-const filterType = ref<'all' | 'pending' | 'confirmed' | 'matched' | 'high_confidence' | 'low_confidence'>('all')
-const sortBy = ref<'filename' | 'confidence' | 'type' | 'status'>('filename')
-const searchKeyword = ref('')
+type SourceMode = 'local' | 'cloud'
+type StatusFilter = 'all' | 'pending' | 'matched' | 'unmatched' | 'success' | 'failed'
+type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low'
+type SortKey = 'confidence_desc' | 'confidence_asc' | 'name_asc' | 'name_desc' | 'new_name_asc' | 'new_name_desc' | 'status'
 
-// 云盘模式状态
-const isCloudMode = ref(false)
-const selectedCloudFid = ref('')
+interface ViewRenameItem extends Omit<SmartRenameItem, 'new_name'> {
+  id: string
+  new_name: string
+  source_mode: SourceMode
+}
+
+interface CloudExecutionSnapshot {
+  fid: string
+  original_name: string
+  executed_name: string
+}
+
+const RECENT_PATH_KEY = 'smart_rename_recent_paths_v2'
+
+const sourceMode = ref<SourceMode>('local')
+const localPath = ref('')
+const cloudFolderFid = ref('')
+const cloudFolderLabel = ref('')
+const recentPaths = ref<string[]>([])
 const showQuarkBrowser = ref(false)
-
-const selectedAlgorithm = ref('ai_enhanced')
-const selectedStandard = ref('emby')
 
 const algorithms = ref<AlgorithmInfo[]>([])
 const namingStandards = ref<NamingStandardInfo[]>([])
+const serviceStatus = ref<SmartRenameStatus | null>(null)
+
+const selectedAlgorithm = ref('ai_enhanced')
+const selectedStandard = ref('emby')
 
 const options = reactive({
   recursive: true,
   createFolders: true,
   autoConfirm: false,
-  includeQuality: false,
-  includeSource: false,
-  includeTmdbId: false,
-  backupBeforeRename: false,
-  dryRun: false,
-  aiThreshold: 70
+  forceAiParse: false,
+  aiThreshold: 0.7
 })
 
 const namingConfig = reactive({
@@ -873,427 +464,352 @@ const namingConfig = reactive({
   sanitize_filenames: true
 })
 
-const aiSettings = reactive({
-  apiKey: ''
-})
+const previewing = ref(false)
+const executing = ref(false)
+const rollingBack = ref(false)
+const validatingName = ref(false)
+const testingAiConnectivity = ref(false)
+const aiConnectivityResult = ref<AIConnectivityResponse | null>(null)
 
-const previewData = ref<{
-  batch_id: string
-  items: SmartRenameItem[]
-  total_items: number
-  matched_items: number
-  needs_confirmation: number
-  average_confidence?: number
-  algorithm_used: string
-  naming_standard: string
-  analysis_time?: number
-} | null>(null)
+const previewBatchId = ref('')
+const previewSourceMode = ref<SourceMode>('local')
+const previewAlgorithmUsed = ref('')
+const previewNamingUsed = ref('')
+const previewTargetLabel = ref('')
 
-const selectedItems = ref<string[]>([])
+const previewRows = ref<ViewRenameItem[]>([])
+const selectedRowIds = ref<string[]>([])
 
-// Edit dialog
+const keyword = ref('')
+const statusFilter = ref<StatusFilter>('all')
+const confidenceFilter = ref<ConfidenceFilter>('all')
+const sortKey = ref<SortKey>('confidence_desc')
+
 const editDialogVisible = ref(false)
-const editingItem = reactive<Partial<SmartRenameItem>>({})
+const editingItem = reactive<Partial<ViewRenameItem>>({})
+const nameValidation = ref<ValidationResponse | null>(null)
 
-// Settings
-const showSettings = ref(false)
-const showHelp = ref(false)
-const settingsTab = ref('template')
+const executeSummary = ref<SmartRenameExecuteResponse | null>(null)
+const showResultDialog = ref(false)
+const showHelpDialog = ref(false)
+const lastCloudExecution = ref<CloudExecutionSnapshot[]>([])
 
-// Result dialog
-const resultDialogVisible = ref(false)
-const executeResult = ref<{
-  success_items: number
-  failed_items: number
-  skipped_items: number
-} | null>(null)
+const showHistoryDrawer = ref(false)
+const historyLoading = ref(false)
+const historyItemsLoading = ref(false)
+const batchHistory = ref<any[]>([])
+const historyItems = ref<any[]>([])
+const activeHistoryBatchId = ref('')
 
-// Computed
-const currentAlgorithm = computed(() => {
-  return algorithms.value.find(a => a.algorithm === selectedAlgorithm.value)
+const statusFilterOptions = [
+  { label: '全部状态', value: 'all' },
+  { label: '待确认', value: 'pending' },
+  { label: '已匹配', value: 'matched' },
+  { label: '未匹配', value: 'unmatched' },
+  { label: '执行成功', value: 'success' },
+  { label: '执行失败', value: 'failed' }
+] as const
+
+const confidenceFilterOptions = [
+  { label: '全部置信度', value: 'all' },
+  { label: '高 (≥ 90%)', value: 'high' },
+  { label: '中 (60% - 89%)', value: 'medium' },
+  { label: '低 (< 60%)', value: 'low' }
+] as const
+
+const sortOptions = [
+  { label: '置信度从高到低', value: 'confidence_desc' },
+  { label: '置信度从低到高', value: 'confidence_asc' },
+  { label: '原文件名 A-Z', value: 'name_asc' },
+  { label: '原文件名 Z-A', value: 'name_desc' },
+  { label: '建议名称 A-Z', value: 'new_name_asc' },
+  { label: '建议名称 Z-A', value: 'new_name_desc' },
+  { label: '按状态分组', value: 'status' }
+] as const
+
+const hasPreview = computed(() => previewRows.value.length > 0)
+const canPreview = computed(() => sourceMode.value === 'local' ? localPath.value.trim().length > 0 : !!cloudFolderFid.value)
+const selectedRowSet = computed(() => new Set(selectedRowIds.value))
+const selectedRows = computed(() => previewRows.value.filter((row) => selectedRowSet.value.has(row.id)))
+
+const totalItems = computed(() => previewRows.value.length)
+const pendingItems = computed(() => previewRows.value.filter((row) => row.needs_confirmation).length)
+const matchedItems = computed(() => previewRows.value.filter((row) => !!row.tmdb_id).length)
+const averageConfidence = computed(() => {
+  if (!previewRows.value.length) return 0
+  return previewRows.value.reduce((sum, row) => sum + (row.overall_confidence || 0), 0) / previewRows.value.length
 })
 
-const currentStandard = computed(() => {
-  return namingStandards.value.find(s => s.standard === selectedStandard.value)
-})
+const currentAlgorithm = computed(() => algorithms.value.find((item) => item.algorithm === selectedAlgorithm.value))
+const displayRows = computed(() => {
+  let rows = [...previewRows.value]
 
-const filteredItems = computed(() => {
-  if (!previewData.value) return []
-
-  let items = previewData.value.items
-
-  if (searchKeyword.value.trim()) {
-    const keyword = searchKeyword.value.trim().toLowerCase()
-    items = items.filter((item) => {
-      const original = (item.original_name || item.original_path || '').toLowerCase()
-      const renamed = (item.new_name || '').toLowerCase()
-      return original.includes(keyword) || renamed.includes(keyword)
+  const q = keyword.value.trim().toLowerCase()
+  if (q) {
+    rows = rows.filter((row) => {
+      const source = `${row.original_name} ${row.original_path}`.toLowerCase()
+      const target = `${row.new_name} ${row.tmdb_title || ''}`.toLowerCase()
+      return source.includes(q) || target.includes(q)
     })
   }
 
-  if (filterType.value === 'pending') {
-    items = items.filter(i => i.needs_confirmation)
-  } else if (filterType.value === 'confirmed') {
-    items = items.filter(i => !i.needs_confirmation)
-  } else if (filterType.value === 'matched') {
-    items = items.filter(i => i.tmdb_id)
-  } else if (filterType.value === 'high_confidence') {
-    items = items.filter(i => (i.overall_confidence || 0) >= 0.9)
-  } else if (filterType.value === 'low_confidence') {
-    items = items.filter(i => (i.overall_confidence || 0) < 0.6)
+  if (statusFilter.value !== 'all') {
+    rows = rows.filter((row) => {
+      if (statusFilter.value === 'pending') return row.needs_confirmation
+      if (statusFilter.value === 'matched') return !!row.tmdb_id
+      if (statusFilter.value === 'unmatched') return !row.tmdb_id
+      if (statusFilter.value === 'success') return row.status === 'success'
+      if (statusFilter.value === 'failed') return row.status === 'failed'
+      return true
+    })
   }
 
-  const sortedItems = [...items]
-  if (sortBy.value === 'confidence') {
-    sortedItems.sort((a, b) => (b.overall_confidence || 0) - (a.overall_confidence || 0))
-  } else if (sortBy.value === 'type') {
-    sortedItems.sort((a, b) => (a.media_type || '').localeCompare(b.media_type || ''))
-  } else if (sortBy.value === 'status') {
-    sortedItems.sort((a, b) => Number(Boolean(a.needs_confirmation)) - Number(Boolean(b.needs_confirmation)))
-  } else {
-    sortedItems.sort((a, b) => (a.original_name || a.original_path).localeCompare(b.original_name || b.original_path))
+  if (confidenceFilter.value !== 'all') {
+    rows = rows.filter((row) => {
+      const v = row.overall_confidence || 0
+      if (confidenceFilter.value === 'high') return v >= 0.9
+      if (confidenceFilter.value === 'medium') return v >= 0.6 && v < 0.9
+      return v < 0.6
+    })
   }
 
-  return sortedItems
-})
+  rows.sort((a, b) => {
+    const nameA = (a.original_name || '').toLowerCase()
+    const nameB = (b.original_name || '').toLowerCase()
+    const newA = (a.new_name || '').toLowerCase()
+    const newB = (b.new_name || '').toLowerCase()
+    const confA = a.overall_confidence || 0
+    const confB = b.overall_confidence || 0
 
-/**
- * 进度条宽度
- *
- * 用途: 根据当前步骤计算进度条宽度百分比
- * 输入: 无
- * 输出: 宽度百分比字符串
- * 副作用: 无
- */
-const progressWidth = computed(() => {
-  const stepPercentages = ['0%', '50%', '100%']
-  return stepPercentages[currentStep.value - 1] || '0%'
-})
-
-// Methods
-const loadAlgorithms = async () => {
-  try {
-    algorithms.value = await getAlgorithms()
-  } catch (error) {
-    console.error('Failed to load algorithms:', error)
-  }
-}
-
-const loadNamingStandards = async () => {
-  try {
-    namingStandards.value = await getNamingStandards()
-  } catch (error) {
-    console.error('Failed to load naming standards:', error)
-  }
-}
-
-const loadStatus = async () => {
-  try {
-    const status = await getSmartRenameStatus()
-    aiSettings.apiKey = status.ai_available ? '已配置' : '未配置'
-  } catch (error) {
-    console.error('Failed to load status:', error)
-  }
-}
-
-/**
- * 打开路径选择器
- *
- * 用途: 显示模式选择对话框，让用户选择夸克云盘或本地文件
- * 输入: 无
- * 输出: 无
- * 副作用: 根据用户选择显示文件浏览器或提示信息
- */
-const openPathSelector = () => {
-  // 显示模式选择
-  ElMessageBox.confirm(
-    '请选择文件来源',
-    '选择模式',
-    {
-      distinguishCancelAndClose: true,
-      confirmButtonText: '夸克云盘',
-      cancelButtonText: '本地文件',
-      type: 'info'
-    }
-  ).then(() => {
-    // 选择夸克云盘
-    isCloudMode.value = true
-    showQuarkBrowser.value = true
-  }).catch((action) => {
-    if (action === 'cancel') {
-      // 选择本地文件
-      isCloudMode.value = false
-      ElMessage.info('本地文件浏览功能开发中')
-      // 临时设置一个测试路径
-      selectedPath.value = '/media/movies'
-    }
+    if (sortKey.value === 'confidence_desc') return confB - confA
+    if (sortKey.value === 'confidence_asc') return confA - confB
+    if (sortKey.value === 'name_asc') return nameA.localeCompare(nameB)
+    if (sortKey.value === 'name_desc') return nameB.localeCompare(nameA)
+    if (sortKey.value === 'new_name_asc') return newA.localeCompare(newB)
+    if (sortKey.value === 'new_name_desc') return newB.localeCompare(newA)
+    return statusText(a).localeCompare(statusText(b))
   })
+
+  return rows
+})
+
+const allDisplayedSelected = computed(() => displayRows.value.length > 0 && displayRows.value.every((row) => selectedRowSet.value.has(row.id)))
+const partiallyDisplayedSelected = computed(() => displayRows.value.some((row) => selectedRowSet.value.has(row.id)) && !allDisplayedSelected.value)
+const canExecute = computed(() => !!previewBatchId.value && selectedRows.value.length > 0)
+const canRollback = computed(() => {
+  if (!previewBatchId.value) return false
+  if (previewSourceMode.value === 'local') return true
+  return lastCloudExecution.value.length > 0
+})
+
+const statusTagText = computed(() => {
+  if (!serviceStatus.value) return '服务状态未知'
+  if (!serviceStatus.value.available) return '服务不可用'
+  if (!serviceStatus.value.ai_available) return 'AI 解析未配置'
+  return '服务可用'
+})
+
+const statusTagType = computed(() => {
+  if (!serviceStatus.value || !serviceStatus.value.available) return 'danger'
+  if (!serviceStatus.value.ai_available) return 'warning'
+  return 'success'
+})
+
+const validationDescription = computed(() => {
+  if (!nameValidation.value) return ''
+  const messages: string[] = []
+  if (nameValidation.value.suggestions.length) messages.push(`建议：${nameValidation.value.suggestions.join('；')}`)
+  if (nameValidation.value.warnings.length) messages.push(`警告：${nameValidation.value.warnings.join('；')}`)
+  return messages.join(' | ') || '该文件名符合当前命名规范。'
+})
+
+function extractErrorMessage(error: unknown, fallback: string): string {
+  const err = error as any
+  return err?.response?.data?.detail || err?.message || fallback
 }
 
-/**
- * 处理云盘文件夹选择
- *
- * 用途: 当用户在 QuarkFileBrowser 中选择文件夹后调用
- * 输入:
- *   - fid: 选中的文件夹ID
- *   - path: 文件夹路径
- * 输出: 无
- * 副作用: 更新选中路径和云盘文件夹ID
- */
-const handleCloudFolderSelect = (fid: string, path: string) => {
-  selectedCloudFid.value = fid
-  selectedPath.value = `夸克云盘: ${path}`
-  ElMessage.success('已选择云盘文件夹')
+function providerStateText(provider?: { configured: boolean; connected: boolean }): string {
+  if (!provider) return '未知'
+  if (provider.connected) return '已连接'
+  if (provider.configured) return '连接失败'
+  return '未配置'
 }
 
-/**
- * 重置选择
- *
- * 用途: 清除当前选择的路径和相关状态
- * 输入: 无
- * 输出: 无
- * 副作用: 重置路径、云盘文件夹ID和步骤状态
- */
-const resetSelection = () => {
-  selectedPath.value = ''
-  selectedCloudFid.value = ''
-  isCloudMode.value = false
-  currentStep.value = 1
-  previewData.value = null
-  selectedItems.value = []
-  ElMessage.info('已重置选择')
+async function runAiConnectivityTest() {
+  testingAiConnectivity.value = true
+  try {
+    const result = sourceMode.value === 'local'
+      ? await testSmartRenameAIConnectivity(8)
+      : await testCloudRenameAIConnectivity(8)
+
+    aiConnectivityResult.value = result
+
+    const deepseek = result.providers.find((item) => item.provider === 'deepseek')
+    const glm = result.providers.find((item) => item.provider === 'glm')
+    const summary = `DeepSeek: ${providerStateText(deepseek)}，GLM: ${providerStateText(glm)}`
+    if (result.all_connected) {
+      ElMessage.success(`AI 连通性测试通过，${summary}`)
+    } else {
+      ElMessage.warning(`AI 连通性测试完成，${summary}`)
+    }
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, 'AI 连通性测试失败'))
+  } finally {
+    testingAiConnectivity.value = false
+  }
 }
 
-/**
- * 开始分析
- *
- * 用途: 根据选择的模式（本地/云盘）执行智能重命名预览
- * 输入: 无
- * 输出: 无
- * 副作用: 调用 API 获取预览结果
- */
-const startAnalysis = async () => {
-  if (!selectedPath.value) {
-    ElMessage.warning('请先选择文件夹')
+function loadRecentPaths() {
+  try {
+    const raw = localStorage.getItem(RECENT_PATH_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) recentPaths.value = parsed.filter((v) => typeof v === 'string').slice(0, 6)
+  } catch {
+    recentPaths.value = []
+  }
+}
+
+function saveRecentPath(path: string) {
+  const clean = path.trim()
+  if (!clean) return
+  const next = [clean, ...recentPaths.value.filter((p) => p !== clean)].slice(0, 6)
+  recentPaths.value = next
+  localStorage.setItem(RECENT_PATH_KEY, JSON.stringify(next))
+}
+
+function useLatestPath() {
+  if (recentPaths.value.length) localPath.value = recentPaths.value[0] || ''
+}
+
+function handleCloudFolderSelect(fid: string, path: string) {
+  cloudFolderFid.value = fid
+  cloudFolderLabel.value = path
+  sourceMode.value = 'cloud'
+  ElMessage.success('已选择云盘目录')
+}
+
+function normalizeLocalItem(item: SmartRenameItem): ViewRenameItem {
+  return {
+    ...item,
+    id: item.original_path,
+    new_name: item.new_name || item.original_name || '',
+    source_mode: 'local'
+  }
+}
+
+function normalizeCloudItem(item: QuarkRenameItem): ViewRenameItem {
+  return {
+    id: item.fid,
+    source_mode: 'cloud',
+    original_path: item.fid,
+    original_name: item.original_name,
+    new_name: item.new_name || item.original_name,
+    media_type: item.media_type || 'unknown',
+    tmdb_id: item.tmdb_id,
+    tmdb_title: item.tmdb_title,
+    tmdb_year: item.tmdb_year,
+    season: item.season,
+    episode: item.episode,
+    overall_confidence: item.overall_confidence || 0,
+    status: item.status || (item.needs_confirmation ? 'needs_confirmation' : 'parsed'),
+    needs_confirmation: !!item.needs_confirmation,
+    confirmation_reason: item.confirmation_reason,
+    used_algorithm: item.used_algorithm
+  }
+}
+async function runPreview() {
+  if (!canPreview.value) {
+    ElMessage.warning('请先选择有效的数据源路径')
     return
   }
 
-  analyzing.value = true
-  currentStep.value = 2
-
+  previewing.value = true
+  nameValidation.value = null
   try {
-    if (isCloudMode.value) {
-      // 云盘模式
-      const response = await smartRenameCloudFiles({
-        pdir_fid: selectedCloudFid.value,
-        algorithm: selectedAlgorithm.value as any,
-        naming_standard: selectedStandard.value as any,
-        force_ai_parse: false,
-        options: {
-          recursive: options.recursive,
-          create_folders: options.createFolders,
-          auto_confirm_high_confidence: options.autoConfirm,
-          ai_confidence_threshold: options.aiThreshold / 100
-        }
-      })
-
-      // 转换云盘响应格式为本地格式
-      previewData.value = {
-        batch_id: response.batch_id,
-        items: response.items.map((item: QuarkRenameItem) => ({
-          original_path: item.fid,
-          original_name: item.original_name,
-          new_name: item.new_name,
-          tmdb_id: item.tmdb_id,
-          tmdb_title: item.tmdb_title,
-          tmdb_year: item.tmdb_year,
-          media_type: item.media_type,
-          season: item.season,
-          episode: item.episode,
-          overall_confidence: item.overall_confidence,
-          used_algorithm: item.used_algorithm,
-          needs_confirmation: item.needs_confirmation,
-          status: item.status
-        })),
-        total_items: response.total_items,
-        matched_items: response.matched_items,
-        needs_confirmation: response.needs_confirmation,
-        algorithm_used: response.algorithm_used,
-        naming_standard: response.naming_standard,
-        analysis_time: 0 // 云盘模式暂不返回分析时间
-      }
-
-      // Auto-select all items (使用 fid 作为标识)
-      selectedItems.value = response.items.map((i: QuarkRenameItem) => i.fid)
-
-      ElMessage.success(`分析完成，共发现 ${response.total_items} 个媒体文件`)
-    } else {
-      // 本地模式
+    if (sourceMode.value === 'local') {
+      const targetPath = localPath.value.trim()
       const response = await previewSmartRename({
-        target_path: selectedPath.value,
+        target_path: targetPath,
         algorithm: selectedAlgorithm.value as any,
         naming_standard: selectedStandard.value as any,
         recursive: options.recursive,
         create_folders: options.createFolders,
         auto_confirm_high_confidence: options.autoConfirm,
-        ai_confidence_threshold: options.aiThreshold / 100,
+        ai_confidence_threshold: options.aiThreshold,
+        force_ai_parse: options.forceAiParse,
         naming_config: namingConfig
       })
 
-      previewData.value = response
+      previewBatchId.value = response.batch_id
+      previewSourceMode.value = 'local'
+      previewAlgorithmUsed.value = response.algorithm_used
+      previewNamingUsed.value = response.naming_standard
+      previewTargetLabel.value = response.target_path
+      previewRows.value = response.items.map(normalizeLocalItem)
+      selectedRowIds.value = previewRows.value.map((item) => item.id)
+      saveRecentPath(targetPath)
+      lastCloudExecution.value = []
+      ElMessage.success(`预览完成：共 ${response.total_items} 项`)
+    } else {
+      const response = await smartRenameCloudFiles({
+        pdir_fid: cloudFolderFid.value,
+        algorithm: selectedAlgorithm.value as any,
+        naming_standard: selectedStandard.value as any,
+        force_ai_parse: options.forceAiParse,
+        options: {
+          recursive: options.recursive,
+          create_folders: options.createFolders,
+          auto_confirm_high_confidence: options.autoConfirm,
+          ai_confidence_threshold: options.aiThreshold
+        }
+      })
 
-      // Auto-select all items
-      selectedItems.value = response.items.map(i => i.original_path)
-
-      ElMessage.success(`分析完成，共发现 ${response.total_items} 个媒体文件`)
+      previewBatchId.value = response.batch_id
+      previewSourceMode.value = 'cloud'
+      previewAlgorithmUsed.value = response.algorithm_used
+      previewNamingUsed.value = response.naming_standard
+      previewTargetLabel.value = cloudFolderLabel.value
+      previewRows.value = response.items.map(normalizeCloudItem)
+      selectedRowIds.value = previewRows.value.map((item) => item.id)
+      lastCloudExecution.value = []
+      ElMessage.success(`云盘预览完成：共 ${response.total_items} 项`)
     }
   } catch (error) {
-    ElMessage.error('分析失败')
-    currentStep.value = 1
+    ElMessage.error(extractErrorMessage(error, '预览失败'))
   } finally {
-    analyzing.value = false
+    previewing.value = false
   }
 }
 
-const handleSelectAll = (val: boolean) => {
-  if (val && previewData.value) {
-    selectedItems.value = filteredItems.value.map(i => i.original_path)
-  } else {
-    selectedItems.value = []
-  }
+function refreshPreview() {
+  runPreview()
 }
 
-const getFileName = (path: string) => {
-  return path.split('/').pop() || path
+function resetWorkspace() {
+  previewBatchId.value = ''
+  previewRows.value = []
+  selectedRowIds.value = []
+  aiConnectivityResult.value = null
+  executeSummary.value = null
+  showResultDialog.value = false
+  activeHistoryBatchId.value = ''
+  historyItems.value = []
+  lastCloudExecution.value = []
 }
 
-const getMediaTypeLabel = (type: string) => {
-  const map: Record<string, string> = {
-    movie: '电影',
-    tv: '电视剧',
-    anime: '动漫',
-    unknown: '未知'
-  }
-  return map[type] || type
-}
-
-const getMediaTypeColor = (type: string) => {
-  const map: Record<string, string> = {
-    movie: 'primary',
-    tv: 'success',
-    anime: 'warning',
-    unknown: 'info'
-  }
-  return map[type] || 'info'
-}
-
-const getAlgorithmName = (algo: string) => {
-  const map: Record<string, string> = {
-    standard: '标准本地算法',
-    ai_enhanced: 'AI 增强算法',
-    ai_only: '纯 AI 算法'
-  }
-  return map[algo] || algo
-}
-
-const getAlgorithmShortName = (algo?: string) => {
-  const map: Record<string, string> = {
-    standard: '本地',
-    ai_enhanced: 'AI+',
-    ai_only: 'AI'
-  }
-  return map[algo || ''] || algo
-}
-
-const getStandardName = (std: string) => {
-  const map: Record<string, string> = {
-    emby: 'Emby',
-    plex: 'Plex',
-    kodi: 'Kodi',
-    custom: '自定义'
-  }
-  return map[std] || std
-}
-
-const getConfidenceClass = (confidence: number) => {
-  if (confidence >= 0.9) return 'high'
-  if (confidence >= 0.7) return 'medium'
-  return 'low'
-}
-
-const editItem = (item: SmartRenameItem) => {
-  Object.assign(editingItem, { ...item })
-  editDialogVisible.value = true
-}
-
-const saveItemEdit = () => {
-  if (previewData.value && editingItem.original_path) {
-    const index = previewData.value.items.findIndex(
-      i => i.original_path === editingItem.original_path
-    )
-    if (index !== -1) {
-      previewData.value.items[index] = { ...editingItem } as SmartRenameItem
-      ElMessage.success('已保存修改')
-    }
-  }
-  editDialogVisible.value = false
-}
-
-const removeItem = (item: SmartRenameItem) => {
-  if (previewData.value) {
-    previewData.value.items = previewData.value.items.filter(
-      i => i.original_path !== item.original_path
-    )
-    selectedItems.value = selectedItems.value.filter(
-      path => path !== item.original_path
-    )
-    previewData.value.total_items--
-    ElMessage.success('已跳过该文件')
-  }
-}
-
-const saveSettings = () => {
-  ElMessage.success('配置已保存')
-  showSettings.value = false
-}
-
-const confirmSelected = () => {
-  if (!previewData.value || selectedItems.value.length === 0) return
-  const selectedSet = new Set(selectedItems.value)
-  previewData.value.items = previewData.value.items.map((item) =>
-    selectedSet.has(item.original_path) ? { ...item, needs_confirmation: false } : item
-  )
-  ElMessage.success(`已确认 ${selectedItems.value.length} 个文件`)
-}
-
-const editSelected = () => {
-  if (!previewData.value || selectedItems.value.length === 0) return
-  if (selectedItems.value.length > 1) {
-    ElMessage.info('批量编辑开发中，请先选择单个文件')
-    return
-  }
-  const item = previewData.value.items.find((i) => i.original_path === selectedItems.value[0])
-  if (item) {
-    editItem(item)
-  }
-}
-
-const refreshPreview = async () => {
-  await startAnalysis()
-}
-
-const exportPreview = () => {
-  if (!previewData.value) return
-
+function exportPreview() {
+  if (!previewRows.value.length) return
   const payload = {
     exported_at: new Date().toISOString(),
-    batch_id: previewData.value.batch_id,
-    total_items: previewData.value.total_items,
-    matched_items: previewData.value.matched_items,
-    needs_confirmation: previewData.value.needs_confirmation,
-    items: previewData.value.items
+    batch_id: previewBatchId.value,
+    source_mode: previewSourceMode.value,
+    target: previewTargetLabel.value,
+    algorithm: previewAlgorithmUsed.value,
+    naming_standard: previewNamingUsed.value,
+    options: { ...options },
+    rows: previewRows.value
   }
-
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -1303,1093 +819,763 @@ const exportPreview = () => {
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
-
   ElMessage.success('预览结果已导出')
 }
 
-/**
- * 执行重命名
- *
- * 用途: 根据选择的模式（本地/云盘）执行批量重命名
- * 输入: 无
- * 输出: 无
- * 副作用: 调用 API 执行重命名操作
- */
-const executeRename = async () => {
-  if (!previewData.value?.batch_id) return
+function isRowSelected(id: string): boolean {
+  return selectedRowSet.value.has(id)
+}
+
+function onRowCheck(id: string, checked: boolean) {
+  const set = new Set(selectedRowIds.value)
+  if (checked) set.add(id)
+  else set.delete(id)
+  selectedRowIds.value = Array.from(set)
+}
+
+function toggleSelectDisplayed(checked: boolean) {
+  const displayIds = displayRows.value.map((row) => row.id)
+  const set = new Set(selectedRowIds.value)
+  if (checked) displayIds.forEach((id) => set.add(id))
+  else displayIds.forEach((id) => set.delete(id))
+  selectedRowIds.value = Array.from(set)
+}
+
+function clearSelection() {
+  selectedRowIds.value = []
+}
+
+function removeFromSelection(rowId: string) {
+  selectedRowIds.value = selectedRowIds.value.filter((id) => id !== rowId)
+}
+
+function selectPendingOnly() {
+  selectedRowIds.value = previewRows.value.filter((row) => row.needs_confirmation).map((row) => row.id)
+}
+
+function markSelectedAsConfirmed() {
+  if (!selectedRows.value.length) return
+  const set = selectedRowSet.value
+  previewRows.value = previewRows.value.map((row) => set.has(row.id)
+    ? { ...row, needs_confirmation: false, confirmation_reason: undefined }
+    : row)
+  ElMessage.success(`已确认 ${selectedRows.value.length} 项`)
+}
+
+function editSingleSelected() {
+  if (selectedRows.value.length !== 1) {
+    ElMessage.warning('请选择且仅选择一个项目进行编辑')
+    return
+  }
+  const target = selectedRows.value[0]
+  if (target) openEditDialog(target)
+}
+
+function openEditDialog(row: ViewRenameItem) {
+  Object.assign(editingItem, { ...row })
+  nameValidation.value = null
+  editDialogVisible.value = true
+}
+
+function saveEdit() {
+  if (!editingItem.id) return
+  const id = editingItem.id
+  previewRows.value = previewRows.value.map((row) => row.id === id
+    ? {
+        ...row,
+        new_name: (editingItem.new_name || '').trim() || row.new_name,
+        tmdb_title: editingItem.tmdb_title || row.tmdb_title,
+        media_type: editingItem.media_type || row.media_type,
+        needs_confirmation: false
+      }
+    : row)
+  editDialogVisible.value = false
+  ElMessage.success('编辑已保存')
+}
+async function validateEditedName() {
+  const value = (editingItem.new_name || '').trim()
+  if (!value) {
+    ElMessage.warning('请先输入新文件名')
+    return
+  }
+  validatingName.value = true
+  try {
+    nameValidation.value = await validateFilename(value)
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '命名校验失败'))
+  } finally {
+    validatingName.value = false
+  }
+}
+
+async function validateSelectedName() {
+  if (selectedRows.value.length !== 1) {
+    ElMessage.warning('命名校验仅支持单项，请只选择一个项目')
+    return
+  }
+  const target = selectedRows.value[0]
+  if (!target) return
+  openEditDialog(target)
+  await validateEditedName()
+}
+
+async function executeSelected() {
+  if (!previewBatchId.value || !selectedRows.value.length) {
+    ElMessage.warning('请先选择待执行项目')
+    return
+  }
+
+  const runnableRows = selectedRows.value.filter((row) => row.new_name.trim().length > 0)
+  if (!runnableRows.length) {
+    ElMessage.warning('勾选项中没有可执行的新文件名')
+    return
+  }
+
+  const actionText = previewSourceMode.value === 'local' ? '本地重命名' : '云盘重命名'
+  try {
+    await ElMessageBox.confirm(`即将执行 ${runnableRows.length} 项 ${actionText}，是否继续？`, '执行确认', {
+      type: 'warning',
+      confirmButtonText: '继续执行',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
 
   executing.value = true
-
   try {
-    if (isCloudMode.value) {
-      // 云盘模式 - 构建操作列表
-      const operations = selectedItems.value.map(fid => {
-        const item = previewData.value?.items.find(i => i.original_path === fid)
-        return {
-          fid: fid,
-          new_name: item?.new_name || ''
-        }
-      }).filter(op => op.new_name)
+    if (previewSourceMode.value === 'local') {
+      const operations = runnableRows.map((row) => ({ original_path: row.original_path, new_name: row.new_name.trim() }))
+      const response = await executeSmartRename({ batch_id: previewBatchId.value, operations })
+      executeSummary.value = response
+      showResultDialog.value = true
 
-      const response = await executeCloudRename({
-        batch_id: previewData.value.batch_id,
-        operations: operations
-      })
-
-      executeResult.value = {
+      const set = new Set(runnableRows.map((row) => row.id))
+      previewRows.value = previewRows.value.map((row) => set.has(row.id) ? { ...row, status: 'success', needs_confirmation: false } : row)
+    } else {
+      const operations = runnableRows.map((row) => ({ fid: row.id, new_name: row.new_name.trim() }))
+      const response = await executeCloudRename({ batch_id: previewBatchId.value, operations })
+      executeSummary.value = {
+        batch_id: previewBatchId.value,
+        total_items: response.total,
         success_items: response.success,
         failed_items: response.failed,
-        skipped_items: response.total - response.success - response.failed
+        skipped_items: Math.max(response.total - response.success - response.failed, 0)
       }
-      resultDialogVisible.value = true
+      showResultDialog.value = true
 
-      if (response.failed === 0) {
-        ElMessage.success('所有文件重命名成功')
-      } else {
-        ElMessage.warning(`${response.failed} 个文件重命名失败`)
-      }
-    } else {
-      // 本地模式
-      const operations = selectedItems.value
-        .map((path) => {
-          const item = previewData.value?.items.find((i) => i.original_path === path)
+      lastCloudExecution.value = runnableRows.map((row) => ({
+        fid: row.id,
+        original_name: row.original_name,
+        executed_name: row.new_name
+      }))
+
+      const resultMap = new Map(response.results.map((item) => [item.fid, item]))
+      previewRows.value = previewRows.value.map((row) => {
+        const result = resultMap.get(row.id)
+        if (!result) return row
+        if (result.status === 'success') {
           return {
-            original_path: path,
-            new_name: item?.new_name || ''
+            ...row,
+            original_name: row.new_name,
+            status: 'success',
+            needs_confirmation: false,
+            confirmation_reason: undefined
           }
-        })
-        .filter((op) => op.new_name)
-
-      const response = await executeSmartRename({
-        batch_id: previewData.value.batch_id,
-        operations
+        }
+        return {
+          ...row,
+          status: 'failed',
+          confirmation_reason: result.error || '执行失败'
+        }
       })
-
-      executeResult.value = response
-      resultDialogVisible.value = true
-
-      if (response.failed_items === 0) {
-        ElMessage.success('所有文件重命名成功')
-      } else {
-        ElMessage.warning(`${response.failed_items} 个文件重命名失败`)
-      }
     }
-  } catch {
-    ElMessage.error('执行失败')
+
+    await loadBatchHistory()
+    ElMessage.success('执行完成')
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '执行失败'))
   } finally {
     executing.value = false
   }
 }
 
-const resetWorkflow = () => {
-  currentStep.value = 1
-  selectedPath.value = ''
-  previewData.value = null
-  selectedItems.value = []
-  selectAll.value = false
+async function rollbackLatest() {
+  if (!canRollback.value) {
+    ElMessage.warning('当前没有可回滚的数据')
+    return
+  }
+
+  rollingBack.value = true
+  try {
+    if (previewSourceMode.value === 'local') {
+      const response = await rollbackSmartRename(previewBatchId.value)
+      executeSummary.value = response
+      showResultDialog.value = true
+      previewRows.value = previewRows.value.map((row) => ({ ...row, status: 'rolled_back' }))
+    } else {
+      const operations = lastCloudExecution.value.map((item) => ({ fid: item.fid, new_name: item.original_name }))
+      const response = await executeCloudRename({
+        batch_id: `${previewBatchId.value}_rollback_${Date.now()}`,
+        operations
+      })
+
+      executeSummary.value = {
+        batch_id: previewBatchId.value,
+        total_items: response.total,
+        success_items: response.success,
+        failed_items: response.failed,
+        skipped_items: Math.max(response.total - response.success - response.failed, 0)
+      }
+      showResultDialog.value = true
+
+      const successSet = new Set(response.results.filter((item) => item.status === 'success').map((item) => item.fid))
+      previewRows.value = previewRows.value.map((row) => {
+        const snapshot = lastCloudExecution.value.find((item) => item.fid === row.id)
+        if (!snapshot || !successSet.has(row.id)) return row
+        return {
+          ...row,
+          original_name: snapshot.original_name,
+          new_name: snapshot.original_name,
+          status: 'rolled_back',
+          needs_confirmation: false,
+          confirmation_reason: undefined
+        }
+      })
+
+      lastCloudExecution.value = lastCloudExecution.value.filter((item) => !successSet.has(item.fid))
+    }
+
+    await loadBatchHistory()
+    ElMessage.success('回滚完成')
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '回滚失败'))
+  } finally {
+    rollingBack.value = false
+  }
+}
+function statusText(row: ViewRenameItem): string {
+  if (row.status === 'success') return '执行成功'
+  if (row.status === 'failed') return '执行失败'
+  if (row.status === 'rolled_back') return '已回滚'
+  if (row.needs_confirmation) return '待确认'
+  if (row.tmdb_id) return '已匹配'
+  return '已解析'
 }
 
-// Lifecycle
-onMounted(() => {
-  loadAlgorithms()
-  loadNamingStandards()
-  loadStatus()
+function statusType(row: ViewRenameItem): 'success' | 'warning' | 'danger' | 'info' {
+  if (row.status === 'success') return 'success'
+  if (row.status === 'failed') return 'danger'
+  if (row.needs_confirmation) return 'warning'
+  return 'info'
+}
+
+function confidenceStatus(value: number): '' | 'success' | 'warning' | 'exception' {
+  if (value >= 0.9) return 'success'
+  if (value >= 0.6) return 'warning'
+  return 'exception'
+}
+
+function getMediaTypeText(type: string): string {
+  const map: Record<string, string> = { movie: '电影', tv: '剧集', anime: '动漫', unknown: '未知' }
+  return map[type] || type
+}
+
+async function loadBatchHistory() {
+  historyLoading.value = true
+  try {
+    batchHistory.value = await getRenameBatches(0, 50)
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '加载批次记录失败'))
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function onHistoryBatchClick(row: any) {
+  if (!row?.batch_id) return
+  activeHistoryBatchId.value = row.batch_id
+  historyItemsLoading.value = true
+  try {
+    historyItems.value = await getBatchItems(row.batch_id, undefined, 0, 200)
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '加载批次明细失败'))
+  } finally {
+    historyItemsLoading.value = false
+  }
+}
+
+async function openHistory() {
+  showHistoryDrawer.value = true
+  if (!batchHistory.value.length) await loadBatchHistory()
+}
+
+async function loadBootstrap() {
+  try {
+    const [algo, standards, status] = await Promise.all([getAlgorithms(), getNamingStandards(), getSmartRenameStatus()])
+    algorithms.value = algo
+    namingStandards.value = standards
+    serviceStatus.value = status
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error, '初始化配置加载失败'))
+  }
+}
+
+watch(sourceMode, (mode) => {
+  aiConnectivityResult.value = null
+  if (mode === 'local') {
+    cloudFolderFid.value = ''
+    cloudFolderLabel.value = ''
+  } else {
+    localPath.value = ''
+  }
+})
+
+watch(previewRows, () => {
+  const idSet = new Set(previewRows.value.map((item) => item.id))
+  selectedRowIds.value = selectedRowIds.value.filter((id) => idSet.has(id))
+})
+
+onMounted(async () => {
+  loadRecentPaths()
+  await Promise.all([loadBootstrap(), loadBatchHistory()])
 })
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
 .smart-rename-page {
+  --ink: #173042;
+  --muted: #60788a;
+  --teal: #0a8d76;
+  --teal-soft: #ddf5ef;
+  --sand: #fff7ea;
+  --shadow: 0 14px 44px rgba(24, 55, 78, 0.12);
+
   min-height: 100%;
-  padding: 0 16px 32px;
-}
-
-/* Page Header */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-  padding: 0 8px;
-}
-
-.header-content {
-  flex: 1;
-}
-
-.page-title {
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, var(--el-color-primary) 0%, var(--el-color-success) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.version-tag {
-  font-size: 12px;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-/* Configuration Section */
-.configuration-section {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
-}
-
-.glass-card {
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  box-shadow: var(--el-box-shadow-light);
-}
-
-.config-card {
   padding: 24px;
-  border-radius: 12px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  box-shadow: var(--el-box-shadow-light);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.header-icon {
-  color: var(--el-color-primary);
-  font-size: 20px;
-}
-
-.card-header h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.help-icon {
-  color: var(--el-text-color-secondary);
-  cursor: help;
-}
-
-.config-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* Algorithm Group */
-.algorithm-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.algorithm-option {
-  padding: 16px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.algorithm-option:hover {
-  background: var(--el-fill-color-light);
-}
-
-.algo-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.algo-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.recommend-tag {
-  font-size: 12px;
-}
-
-.algo-desc {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.4;
-}
-
-.algorithm-details {
-  padding: 16px;
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
-}
-
-.details-header {
-  margin-bottom: 12px;
-}
-
-.details-title {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.feature-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.feature-icon {
-  color: var(--el-color-success);
-  font-size: 12px;
-}
-
-/* Standard Group */
-.standard-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.standard-option {
-  padding: 16px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.standard-option:hover {
-  background: var(--el-fill-color-light);
-}
-
-.std-name {
-  font-weight: 600;
-  font-size: 14px;
-  display: block;
-  margin-bottom: 2px;
-}
-
-.std-desc {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.standard-examples {
-  padding: 16px;
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
-}
-
-.examples-header {
-  margin-bottom: 12px;
-}
-
-.examples-title {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.examples-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.example-card {
-  padding: 12px;
-  background: var(--el-bg-color);
-  border-radius: 6px;
-  border: 1px solid var(--el-border-color);
-}
-
-.example-type {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 6px;
-  color: var(--el-text-color-secondary);
-}
-
-.example-path {
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  color: var(--el-color-primary);
-}
-
-/* Advanced Options */
-.options-grid {
-  display: grid;
-  gap: 20px;
-}
-
-.option-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.option-label {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--el-text-color-primary);
-}
-
-.option-items {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.option-item {
-  margin: 0;
-}
-
-/* Operation Flow */
-.operation-flow {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.step-progress {
-  margin-bottom: 32px;
-  padding: 0 20px;
-}
-
-.progress-bar {
-  height: 4px;
-  background: var(--el-border-color);
-  border-radius: 2px;
   position: relative;
-  margin-bottom: 24px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--el-color-primary);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
-.step-indicators {
-  display: flex;
-  justify-content: space-between;
-}
-
-.step-indicator {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  transition: transform 0.3s ease;
-}
-
-.step-circle {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--el-border-color);
-  color: var(--el-text-color-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.step-indicator.active .step-circle {
-  background: var(--el-color-primary);
-  color: white;
-}
-
-.step-indicator.completed .step-circle {
-  background: var(--el-color-success);
-  color: white;
-}
-
-.step-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--el-text-color-secondary);
-}
-
-.step-indicator.active .step-label,
-.step-indicator.completed .step-label {
-  color: var(--el-text-color-primary);
-}
-
-.step-indicator.active {
-  transform: translateY(-2px);
-}
-
-/* Step Section */
-.step-section {
-  margin-bottom: 24px;
-  border-radius: 12px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  box-shadow: var(--el-box-shadow-light);
   overflow: hidden;
-  transition: all 0.3s ease;
+  color: var(--ink);
+  font-family: 'Space Grotesk', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(10, 141, 118, 0.14) 0, transparent 40%),
+    radial-gradient(circle at 88% 0%, rgba(230, 139, 31, 0.14) 0, transparent 36%),
+    linear-gradient(180deg, #f6fbfa 0%, #fffefa 58%, #f4faf8 100%);
 }
 
-.step-section.disabled {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.step-section.active {
-  box-shadow: var(--el-box-shadow);
-}
-
-.step-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 20px;
-  background: var(--el-fill-color-light);
-  border-bottom: 1px solid var(--el-border-color);
-}
-
-.step-info {
-  flex: 1;
-}
-
-.step-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.step-title h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.step-description {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  margin: 0;
-}
-
-.step-status {
-  display: flex;
-  gap: 12px;
-}
-
-.status-tag {
-  font-size: 11px;
-  padding: 2px 8px;
-}
-
-.step-content {
-  padding: 18px 20px 20px;
-}
-
-/* Path Selector */
-.path-selector {
-  margin-bottom: 16px;
-}
-
-.selector-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.selector-label {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.browse-btn {
-  font-size: 13px;
+.ambient {
+  position: absolute;
   border-radius: 999px;
+  filter: blur(32px);
+  pointer-events: none;
+  animation: drift 10s ease-in-out infinite alternate;
+}
+
+.ambient-a {
+  width: 200px;
+  height: 200px;
+  background: rgba(10, 141, 118, 0.2);
+  top: -26px;
+  right: -30px;
+}
+
+.ambient-b {
+  width: 170px;
+  height: 170px;
+  background: rgba(230, 139, 31, 0.16);
+  left: -28px;
+  top: 220px;
+  animation-delay: 1.2s;
+}
+
+.hero-card,
+.control-grid,
+.action-strip,
+.workspace,
+.empty-block {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  border: 1px solid rgba(10, 141, 118, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow);
+}
+.kicker {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--teal);
+  font-weight: 700;
+}
+
+.hero-card h1 {
+  margin: 4px 0 10px;
+  font-size: 31px;
+  line-height: 1.2;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: 760px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.hero-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.control-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.panel {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.93);
+  border: 1px solid rgba(96, 120, 138, 0.2);
+  box-shadow: 0 8px 26px rgba(23, 48, 66, 0.08);
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.mode-switch {
+  margin-bottom: 12px;
 }
 
 .path-input {
-  font-size: 16px;
+  margin-bottom: 8px;
 }
 
-.step-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 16px;
-  justify-content: flex-end;
-  padding-top: 16px;
-  border-top: 1px solid var(--el-border-color);
-}
-
-.action-btn {
-  min-width: 120px;
-  border-radius: 12px;
-  height: 36px;
-  padding: 0 16px;
-}
-
-/* Preview Results */
-.summary-banner {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: var(--el-color-info-light-9);
-  border: 1px solid var(--el-color-info-light-8);
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.summary-info {
-  display: flex;
-  gap: 24px;
-}
-
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-}
-
-.summary-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.stats-panel {
-  display: flex;
-  gap: 20px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.stat-value {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.stat-value.success {
-  color: var(--el-color-success);
-}
-
-.stat-value.warning {
-  color: var(--el-color-warning);
-}
-
-.stat-value.info {
-  color: var(--el-color-info);
-}
-
-/* List Controls */
-.list-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 14px;
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.controls-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.controls-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* File List */
-.file-list {
-  max-height: 600px;
-  overflow-y: auto;
-}
-
-.list-container {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.file-item {
-  padding: 16px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.file-item:hover {
-  border-color: var(--el-color-primary-light-5);
-  box-shadow: var(--el-box-shadow-light);
-}
-
-.file-item.selected {
-  border-color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-
-.file-item.needs-confirmation {
-  border-color: var(--el-color-warning);
-  background: var(--el-color-warning-light-9);
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: 12px;
-  box-shadow: none;
-}
-
-.file-item.high-confidence {
-  border-left: 4px solid var(--el-color-success);
-}
-
-.file-item.medium-confidence {
-  border-left: 4px solid var(--el-color-warning);
-}
-
-.file-item.low-confidence {
-  border-left: 4px solid var(--el-color-danger);
-}
-
-.item-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.item-checkbox {
-  flex-shrink: 0;
-}
-
-.item-info {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.file-type {
-  flex-shrink: 0;
-}
-
-.confidence-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.confidence-bar {
-  width: 80px;
-  height: 6px;
-  background: var(--el-border-color);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.confidence-fill {
-  height: 100%;
-  transition: width 0.3s ease;
-}
-
-.confidence-fill.high {
-  background: var(--el-color-success);
-}
-
-.confidence-fill.medium {
-  background: var(--el-color-warning);
-}
-
-.confidence-fill.low {
-  background: var(--el-color-danger);
-}
-
-.confidence-value {
-  font-size: 12px;
-  font-weight: 600;
-  min-width: 30px;
-}
-
-.item-status {
-  flex-shrink: 0;
-}
-
-.item-content {
+.row2 {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 16px;
-  align-items: start;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.file-preview {
+.field {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 12px;
-  align-items: start;
-}
-
-.original-file,
-.new-file {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
 }
 
-.file-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.field label,
+.minor {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
+  color: var(--muted);
 }
 
-.file-path {
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  word-break: break-all;
-}
-
-.arrow-icon {
-  color: var(--el-text-color-secondary);
-  margin-top: 20px;
-}
-
-.media-details {
-  grid-column: 1 / -1;
-  margin-top: 12px;
-}
-
-.details-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.detail-item {
-  display: flex;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.detail-label {
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  min-width: 60px;
-}
-
-.detail-value {
-  color: var(--el-text-color-primary);
-}
-
-.item-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.action-btn {
-  font-size: 12px;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-  .configuration-section {
-    grid-template-columns: 1fr;
-  }
-  
-  .item-content {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .file-preview {
-    grid-template-columns: 1fr;
-  }
-  
-  .arrow-icon {
-    display: none;
-  }
-  
-  .list-controls {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-  }
-  
-  .controls-left,
-  .controls-right {
-    justify-content: center;
-  }
-}
-
-.original-name {
-  background: var(--gray-100);
-  color: var(--text-secondary);
-}
-
-.new-name {
-  background: var(--primary-50);
-  color: var(--primary-700);
-  font-weight: 500;
-}
-
-.name-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.arrow-icon {
-  color: var(--text-tertiary);
-}
-
-.media-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.info-tags {
+.recent-wrap {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
-.confidence-indicator {
+.recent-tag {
+  cursor: pointer;
+}
+
+.algo-box {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--teal-soft), #edf8f3);
+}
+
+.algo-title {
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+
+.tag-line {
+  margin-top: 8px;
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.opt-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.threshold {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 120px 1fr 52px;
+  align-items: center;
+  gap: 10px;
+}
+
+.action-strip {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(230, 139, 31, 0.22);
+  background: linear-gradient(135deg, var(--sand), #fffdf8);
+}
+
+.ai-connectivity-strip {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(10, 141, 118, 0.2);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.ai-connectivity-head {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
-.confidence-bar {
-  width: 60px;
-  height: 6px;
-  background: var(--gray-200);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.confidence-fill {
-  height: 100%;
-  border-radius: var(--radius-full);
-  transition: width var(--transition-normal);
-}
-
-.confidence-fill.high {
-  background: var(--success-500);
-}
-
-.confidence-fill.medium {
-  background: var(--warning-500);
-}
-
-.confidence-fill.low {
-  background: var(--danger-500);
-}
-
-.confidence-value {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 36px;
-}
-
-.task-status {
-  flex-shrink: 0;
-}
-
-.task-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-/* Execute Summary */
-.execute-summary {
+.ai-connectivity-grid {
+  margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 8px;
 }
 
-.summary-card {
+.ai-connectivity-item {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 120, 138, 0.18);
+  background: #f8fbfa;
+  display: grid;
+  gap: 6px;
+}
+
+.workspace {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(10, 141, 118, 0.2);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.summary {
+  padding: 10px;
+  border-radius: 12px;
+  background: #f5faf8;
+  border: 1px solid rgba(96, 120, 138, 0.16);
+  display: grid;
+  gap: 4px;
+}
+
+.summary span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.summary strong {
+  font-size: 17px;
+}
+
+.filter-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.batch-tools {
+  margin-top: 10px;
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 24px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-xl);
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.summary-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-xl);
-  background: var(--bg-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.result-table {
+  margin-top: 10px;
 }
 
-.summary-info {
-  flex: 1;
+.name-cell {
+  display: grid;
+  gap: 2px;
 }
 
-.summary-value {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--text-primary);
+.strong {
+  margin: 0;
+  font-weight: 600;
 }
 
-.summary-label {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.execute-warning {
-  margin-bottom: 24px;
-}
-
-/* Result Summary */
-.result-summary {
-  display: flex;
-  justify-content: center;
-  gap: 48px;
-  padding: 24px;
-}
-
-.result-item {
+.ops-cell {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+
+.execute-bar {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(10, 141, 118, 0.1), rgba(230, 139, 31, 0.1));
+  border: 1px solid rgba(96, 120, 138, 0.24);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.execute-meta {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.execute-actions {
+  display: flex;
+  gap: 8px;
+}
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
-.result-item.success {
-  color: var(--success-500);
+.result-card {
+  padding: 10px;
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
 }
 
-.result-item.failed {
-  color: var(--danger-500);
-}
-
-.result-item.skipped {
-  color: var(--warning-500);
-}
-
-.result-value {
-  font-size: 36px;
-  font-weight: 700;
-}
-
-.result-label {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-/* Template Hint */
-.template-hint {
+.result-card span {
   font-size: 12px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
+  color: #4f6878;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
+.result-card strong {
+  font-size: 22px;
+}
+
+.result-card.success { background: #e5f7ee; }
+.result-card.fail { background: #fde9e7; }
+.result-card.skip { background: #fff2df; }
+.result-card.total { background: #eaf3fb; }
+
+.help-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: #24475f;
+}
+
+.history-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.history-panel {
+  border: 1px solid rgba(96, 120, 138, 0.18);
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.history-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.empty-block {
+  margin-top: 20px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px dashed rgba(96, 120, 138, 0.3);
+}
+
+@keyframes drift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-6px, 10px); }
+}
+
+@media (max-width: 1200px) {
+  .control-grid,
+  .row2,
+  .opt-grid,
+  .filter-row,
+  .history-layout,
+  .ai-connectivity-grid {
+    grid-template-columns: 1fr;
   }
 
-  .step-header {
+  .summary-grid {
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .hero-card,
+  .execute-bar {
+    flex-direction: column;
+  }
+
+  .hero-actions,
+  .execute-actions {
     flex-wrap: wrap;
   }
 
-  .step-stats {
-    width: 100%;
-    justify-content: flex-end;
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .smart-rename-page {
+    padding: 14px;
   }
 
-  .file-info {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .arrow-icon {
-    transform: rotate(90deg);
-  }
-
-  .media-info {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .confidence-indicator {
-    margin-left: 0;
-  }
-
-  .task-item {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .task-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
-  .execute-summary {
+  .summary-grid,
+  .result-grid {
     grid-template-columns: 1fr;
   }
 }

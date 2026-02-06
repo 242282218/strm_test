@@ -57,13 +57,14 @@ class AIParserService:
         config = ConfigManager()
         # 优先读取配置中的密钥，不再使用硬编码
         self.api_key = (
-            config.get("zhipu.api_key")
+            config.get("glm.api_key")
+            or config.get("zhipu.api_key")
             or config.get("api_keys.ai_api_key")
             or config.get("ai.api_key", "")
         )
-        self.model = config.get("ai.model", "glm-4.7-flash")
-        self.base_url = config.get("ai.base_url", "https://open.bigmodel.cn/api/paas/v4")
-        self.timeout = config.get("ai.timeout", 30)
+        self.model = config.get("glm.model") or config.get("ai.model", "glm-4.7-flash")
+        self.base_url = config.get("glm.base_url") or config.get("ai.base_url", "https://open.bigmodel.cn/api/paas/v4")
+        self.timeout = config.get("glm.timeout") or config.get("ai.timeout", 30)
         
         # 并发控制：最多 5 个并发请求
         if AIParserService._semaphore is None:
