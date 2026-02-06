@@ -12,7 +12,7 @@ from app.services.smart_rename_service import get_smart_rename_service, SmartRen
 from app.services.strm_generator import generate_strm_from_quark
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
-from app.core.dependencies import get_quark_cookie, get_only_video_flag
+from app.core.dependencies import get_quark_cookie, get_only_video_flag, require_api_key
 from app.core.validators import validate_identifier, validate_path, InputValidationError
 from app.core.constants import MAX_PATH_LENGTH, MAX_FILES_LIMIT
 
@@ -292,6 +292,7 @@ async def get_quark_config():
 async def sync_quark_files(
     cookie: str = None,
     root_id: str = None,
+    _auth: None = Depends(require_api_key),
     output_dir: str = Query("./strm", min_length=1, max_length=MAX_PATH_LENGTH),
     only_video: bool = None,
     max_files: int = Query(50, ge=1, le=MAX_FILES_LIMIT)
@@ -348,7 +349,8 @@ async def sync_quark_files(
 @router.post("/smart-rename-cloud")
 async def smart_rename_cloud_files(
     request: QuarkSmartRenameRequest,
-    _cookie: str = Depends(get_quark_cookie)
+    _cookie: str = Depends(get_quark_cookie),
+    _auth: None = Depends(require_api_key)
 ):
     """
     智能重命名夸克云盘文件（预览）
@@ -524,7 +526,8 @@ async def smart_rename_cloud_files(
 @router.post("/execute-cloud-rename")
 async def execute_cloud_rename(
     request: QuarkRenameExecuteRequest,
-    _cookie: str = Depends(get_quark_cookie)
+    _cookie: str = Depends(get_quark_cookie),
+    _auth: None = Depends(require_api_key)
 ):
     """
     执行云盘文件重命名

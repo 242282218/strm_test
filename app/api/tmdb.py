@@ -5,7 +5,7 @@ TMDB API路由
 提供TMDB搜索和查询接口
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from app.services.tmdb_service import (
@@ -19,6 +19,7 @@ from app.services.tmdb_service import (
 from app.services.cache_service import get_cache_service
 from app.core.config_manager import ConfigManager
 from app.core.logging import get_logger
+from app.core.dependencies import require_api_key
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/tmdb", tags=["tmdb"])
@@ -361,7 +362,7 @@ async def get_cache_stats():
 
 
 @router.post("/cache/clear")
-async def clear_cache():
+async def clear_cache(_auth: None = Depends(require_api_key)):
     """清空缓存"""
     try:
         cache_service = get_cache_service()

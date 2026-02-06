@@ -42,6 +42,7 @@ class LRUCache:
         self.enable_stats = enable_stats
         
         # 使用OrderedDict维护访问顺序
+        # value stored as (value, timestamp, ttl)
         self._cache: OrderedDict[str, tuple] = OrderedDict()
         
         # 线程安全锁
@@ -73,10 +74,11 @@ class LRUCache:
                     self._stats['misses'] += 1
                 return None
             
-            value, timestamp = self._cache[key]
-            
-            # 检查是否过期
-            if self.ttl and (time.time() - timestamp) > self.ttl:
+            value, timestamp, entry_ttl = self._cache[key]
+
+            # 检查是否过期（优先使用单条TTL，其次使用默认TTL）
+            effective_ttl = entry_ttl if entry_ttl is not None else self.ttl
+            if effective_ttl is not None and (time.time() - timestamp) > effective_ttl:
                 del self._cache[key]
                 if self.enable_stats:
                     self._stats['expirations'] += 1
@@ -91,7 +93,7 @@ class LRUCache:
             
             return value
     
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
         设置缓存值
         
@@ -112,8 +114,9 @@ class LRUCache:
                     self._stats['evictions'] += 1
                 logger.debug(f"Evicted LRU entry: {oldest_key}")
             
-            # 添加新项
-            self._cache[key] = (value, time.time())
+            # 添加新项（支持单条TTL）
+            entry_ttl = ttl if ttl is not None else None
+            self._cache[key] = (value, time.time(), entry_ttl)
             
             if self.enable_stats:
                 self._stats['sets'] += 1
@@ -176,15 +179,15 @@ class LRUCache:
         Returns:
             清理的条目数
         """
-        if not self.ttl:
-            return 0
-        
         with self._lock:
             current_time = time.time()
             expired_keys = []
             
-            for key, (_, timestamp) in self._cache.items():
-                if (current_time - timestamp) > self.ttl:
+            for key, (_, timestamp, entry_ttl) in self._cache.items():
+                effective_ttl = entry_ttl if entry_ttl is not None else self.ttl
+                if effective_ttl is None:
+                    continue
+                if (current_time - timestamp) > effective_ttl:
                     expired_keys.append(key)
             
             for key in expired_keys:

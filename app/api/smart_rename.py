@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.logging import get_logger
 from app.core.validators import validate_path, validate_identifier, InputValidationError
+from app.core.dependencies import require_api_key
 from app.models.scrape import RenameBatch, RenameHistory
 from app.services.smart_rename_service import (
     get_smart_rename_service,
@@ -153,6 +154,7 @@ class ValidationResponse(BaseModel):
 @router.post("/preview", response_model=SmartRenamePreviewResponse)
 async def smart_preview(
     request: SmartRenamePreviewRequest,
+    _auth: None = Depends(require_api_key),
     service: SmartRenameService = Depends(get_smart_rename_service)
 ):
     """
@@ -238,6 +240,7 @@ async def smart_preview(
 @router.post("/execute", response_model=SmartRenameExecuteResponse)
 async def smart_execute(
     request: SmartRenameExecuteRequest,
+    _auth: None = Depends(require_api_key),
     service: SmartRenameService = Depends(get_smart_rename_service)
 ):
     """
@@ -269,6 +272,7 @@ async def smart_execute(
 @router.post("/rollback/{batch_id}", response_model=SmartRenameExecuteResponse)
 async def smart_rollback(
     batch_id: str,
+    _auth: None = Depends(require_api_key),
     service: SmartRenameService = Depends(get_smart_rename_service)
 ):
     """

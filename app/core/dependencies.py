@@ -2,7 +2,9 @@
 依赖注入
 """
 
-from fastapi import Depends, HTTPException, status
+import os
+import secrets
+from fastapi import Depends, HTTPException, status, Header
 from app.core.config_manager import get_config
 from app.services.config_service import get_config_service
 from app.core.logging import get_logger
@@ -10,6 +12,54 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 config = get_config()
 config_service = get_config_service()
+
+def _extract_bearer(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    parts = authorization.split()
+    if len(parts) == 2 and parts[0].lower() == "bearer":
+        return parts[1].strip()
+    return None
+
+def _get_security_config():
+    try:
+        cfg = config_service.get_config()
+        security = getattr(cfg, "security", None)
+        if security:
+            return security.api_key or None, bool(security.require_api_key)
+    except Exception as exc:
+        logger.warning(f"Failed to read security config: {exc}")
+    return None, False
+
+
+async def require_api_key(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> None:
+    expected = os.getenv("SMART_MEDIA_API_KEY") or os.getenv("API_KEY")
+    config_key, require_flag = _get_security_config()
+    if not expected and config_key:
+        expected = config_key
+
+    if not expected and not require_flag:
+        return
+    if not expected and require_flag:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API key required but not configured",
+        )
+
+    provided = x_api_key or _extract_bearer(authorization)
+    if not provided:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key is required",
+        )
+    if not secrets.compare_digest(provided, expected):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid API key",
+        )
 
 async def get_quark_cookie(cookie: str = None) -> str:
     """

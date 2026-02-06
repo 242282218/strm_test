@@ -3,6 +3,7 @@ from app.schemas.file_manager import (
     BrowseResponse, StorageType, FileOperationRequest
 )
 from app.services.file_manager_service import FileManagerService, get_file_manager_service
+from app.core.dependencies import require_api_key
 from app.schemas.base import BaseResponse
 
 router = APIRouter(prefix="/files", tags=["FileManager"])
@@ -13,6 +14,7 @@ async def browse(
     path: str = Query("/", description="目录路径或ID"),
     page: int = Query(1, ge=1),
     size: int = Query(100, ge=1, le=500),
+    _auth: None = Depends(require_api_key),
     service: FileManagerService = Depends(get_file_manager_service)
 ):
     """
@@ -21,12 +23,15 @@ async def browse(
     try:
         data = await service.browse(storage, path, page, size)
         return BaseResponse(data=data)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/operation", response_model=BaseResponse[dict])
 async def file_operation(
     request: FileOperationRequest,
+    _auth: None = Depends(require_api_key),
     service: FileManagerService = Depends(get_file_manager_service)
 ):
     """
@@ -35,5 +40,7 @@ async def file_operation(
     try:
         data = await service.handle_operation(request)
         return BaseResponse(data=data)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

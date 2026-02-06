@@ -15,6 +15,7 @@ from app.core.metrics_collector import (
     AlertManager
 )
 from app.core.logging import get_logger
+from app.core.dependencies import require_api_key
 
 logger = get_logger(__name__)
 
@@ -189,6 +190,7 @@ async def get_system_status(
 @router.post("/monitoring/start")
 async def start_monitoring(
     interval: float = 10.0,
+    _auth: None = Depends(require_api_key),
     monitor: SystemMonitor = Depends(get_system_monitor)
 ) -> Dict[str, Any]:
     """
@@ -213,6 +215,7 @@ async def start_monitoring(
 
 @router.post("/monitoring/stop")
 async def stop_monitoring(
+    _auth: None = Depends(require_api_key),
     monitor: SystemMonitor = Depends(get_system_monitor)
 ) -> Dict[str, Any]:
     """

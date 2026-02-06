@@ -2,6 +2,7 @@
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 python-multipart>=0.0.6
+orjson>=3.9.10
 
 # HTTP客户端
 aiohttp>=3.8.5

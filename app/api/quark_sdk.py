@@ -7,7 +7,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
 from app.services.quark_sdk_service import QuarkSDKService
-from app.core.dependencies import get_quark_cookie
+from app.core.dependencies import get_quark_cookie, require_api_key
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -101,6 +101,7 @@ async def create_share(
     file_ids: List[str],
     title: Optional[str] = None,
     password: Optional[str] = None,
+    _auth: None = Depends(require_api_key),
     service: QuarkSDKService = Depends(get_service)
 ):
     """
@@ -129,6 +130,7 @@ async def save_share(
     file_ids: List[str],
     target_folder: str = "0",
     password: Optional[str] = None,
+    _auth: None = Depends(require_api_key),
     service: QuarkSDKService = Depends(get_service)
 ):
     """

@@ -5,6 +5,7 @@ from app.schemas.base import BaseResponse
 from app.services.rename_service import get_rename_service, RenameService
 from app.core.exceptions import AppException, AppErrorCode
 from app.core.validators import validate_path, InputValidationError
+from app.core.dependencies import require_api_key
 from app.core.constants import MAX_PATH_LENGTH, MIN_BATCH_SIZE, MAX_BATCH_SIZE, DEFAULT_BATCH_SIZE
 
 router = APIRouter()
@@ -54,6 +55,7 @@ class RenamePreviewResponse(BaseModel):
 @router.post("/preview", response_model=BaseResponse[RenamePreviewResponse])
 async def preview_rename(
     request: RenamePreviewRequest,
+    _auth: None = Depends(require_api_key),
     service: RenameService = Depends(get_rename_service),
 ):
     """Preview rename results without modifying any files."""

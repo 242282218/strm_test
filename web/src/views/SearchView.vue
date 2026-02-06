@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="search-page">
     <!-- Hero Search Section -->
     <div class="search-hero">
@@ -285,8 +285,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { AxiosError } from 'axios'
 import {
   Search,
+  Filter,
   Grid,
   List,
   Collection,
@@ -296,6 +298,8 @@ import {
   Star
 } from '@element-plus/icons-vue'
 import { searchResources, type SearchResult } from '@/api/search'
+import { listCloudDrives } from '@/api/cloudDrive'
+import { transferShare } from '@/api/transfer'
 
 // Search state
 const searchQuery = ref('')
@@ -389,18 +393,55 @@ const openCloudLink = (link: { url: string; password?: string }) => {
 }
 
 // Save to cloud
-const saveToCloud = (item: SearchResult) => {
-  ElMessageBox.confirm(
-    `确定要转存 "${item.title}" 到夸克网盘吗？`,
-    '确认转存',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'info'
+const saveToCloud = async (item: SearchResult) => {
+  const quarkLink = item.cloud_links.find((link) => link.type === 'quark')
+  if (!quarkLink) {
+    ElMessage.error('该资源没有夸克网盘链接')
+    return
+  }
+
+  try {
+    const { value: targetDir } = await ElMessageBox.prompt(
+      '请输入转存目录，例如 /电影 或 /电视剧',
+      '转存到夸克网盘',
+      {
+        confirmButtonText: '开始转存',
+        cancelButtonText: '取消',
+        inputValue: '/',
+        inputPlaceholder: '例如 /电影'
+      }
+    )
+
+    let quarkDriveId: number | undefined
+    try {
+      const drives = await listCloudDrives()
+      const quarkDrive = drives.find((drive) => drive.drive_type === 'quark')
+      quarkDriveId = quarkDrive?.id
+    } catch {
+      quarkDriveId = undefined
     }
-  ).then(() => {
-    ElMessage.success('已添加到转存队列')
-  })
+
+    if (!quarkDriveId) {
+      ElMessage.info('未检测到夸克账号，将尝试使用系统配置的 quark.cookie 转存')
+    }
+
+    const result = await transferShare({
+      drive_id: quarkDriveId,
+      share_url: quarkLink.url,
+      target_dir: (targetDir || '/').trim() || '/',
+      password: quarkLink.password || '',
+      auto_organize: false
+    })
+
+    ElMessage.success(result.message || '转存请求已提交')
+  } catch (error: unknown) {
+    const action = (error as { action?: string } | null)?.action
+    if (action === 'cancel' || action === 'close' || String(error).includes('cancel')) {
+      return
+    }
+    const detail = (error as AxiosError<{ detail?: string }> | null)?.response?.data?.detail
+    ElMessage.error(detail || '转存失败，请稍后重试')
+  }
 }
 
 // Helper functions

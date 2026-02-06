@@ -30,14 +30,20 @@ def setup_logging(
 
     def _patcher(record):
         record["message"] = redact_sensitive(str(record["message"]))
-        if record.get("extra"):
-            for key, value in record["extra"].items():
-                if isinstance(value, str):
-                    record["extra"][key] = redact_sensitive(value)
+        record.setdefault("extra", {})
+        record["extra"].setdefault("request_id", "-")
+        record["extra"].setdefault("method", "-")
+        record["extra"].setdefault("path", "-")
+        record["extra"].setdefault("status", "-")
+        record["extra"].setdefault("elapsed_ms", "-")
+        for key, value in record["extra"].items():
+            if isinstance(value, str):
+                record["extra"][key] = redact_sensitive(value)
 
     console_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
+        "rid=<cyan>{extra[request_id]}</cyan> | "
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
@@ -45,6 +51,7 @@ def setup_logging(
     file_format = (
         "{time:YYYY-MM-DD HH:mm:ss} | "
         "{level: <8} | "
+        "rid={extra[request_id]} | "
         "{name}:{function}:{line} - "
         "{message}"
     )

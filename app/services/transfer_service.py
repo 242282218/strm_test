@@ -2,6 +2,7 @@ import re
 from typing import Optional, List
 from app.services.cloud_drive_service import CloudDriveService
 from app.services.quark_service import QuarkService
+from app.services.config_service import get_config_service
 
 from app.core.logging import get_logger
 
@@ -14,7 +15,7 @@ class TransferService:
 
     async def transfer_share(
         self, 
-        drive_id: int, 
+        drive_id: Optional[int],
         share_url: str, 
         target_dir: str, 
         password: str = "",
@@ -26,12 +27,25 @@ class TransferService:
         if not pwd_id:
             raise ValueError("Invalid share URL")
 
-        # 2. Get Drive & Client
-        drive = self.cloud_drive_service.get_drive(drive_id)
-        if not drive:
-            raise ValueError(f"Drive {drive_id} not found")
-        
-        quark_service = QuarkService(drive.cookie)
+        # 2. Resolve cookie source.
+        # Priority: explicit cloud drive account > global quark cookie in config.
+        cookie = ""
+        if drive_id is not None:
+            drive = self.cloud_drive_service.get_drive(drive_id)
+            if not drive:
+                raise ValueError(f"Drive {drive_id} not found")
+            if drive.drive_type != "quark":
+                raise ValueError("Only quark drive is supported for transfer")
+            cookie = (drive.cookie or "").strip()
+            if not cookie:
+                raise ValueError(f"Drive {drive_id} cookie is empty")
+        else:
+            config = get_config_service().get_config()
+            cookie = (config.quark.cookie or "").strip() if config and config.quark else ""
+            if not cookie:
+                raise ValueError("No quark drive configured and quark.cookie is empty")
+
+        quark_service = QuarkService(cookie)
         
         try:
             # 3. Get share token
@@ -62,6 +76,10 @@ class TransferService:
             
             # 7. Auto Organize
             if auto_organize:
+                if drive_id is None:
+                    logger.warning("Auto-organize skipped because drive_id is missing")
+                    return
+
                 from app.services.task_queue_service import TaskService
                 from app.schemas.task import TaskCreate
                 from app.services.task_runner import TaskRunner

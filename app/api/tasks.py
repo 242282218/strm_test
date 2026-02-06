@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, W
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.db import get_db
+from app.core.dependencies import require_api_key
 from app.schemas.task import TaskCreate, TaskResponse
 from app.services.task_queue_service import TaskService
 from app.services.task_runner import TaskRunner
@@ -26,6 +27,7 @@ async def websocket_endpoint(websocket: WebSocket):
 def create_task(
     task: TaskCreate, 
     background_tasks: BackgroundTasks,
+    _auth: None = Depends(require_api_key),
     service: TaskService = Depends(get_service)
 ):
     """创建新任务并触发后台执行"""
@@ -59,6 +61,7 @@ def get_task(
 @router.post("/{task_id}/cancel")
 def cancel_task(
     task_id: int, 
+    _auth: None = Depends(require_api_key),
     service: TaskService = Depends(get_service)
 ):
     """取消任务"""
@@ -70,6 +73,7 @@ def cancel_task(
 @router.delete("/{task_id}")
 def delete_task(
     task_id: int, 
+    _auth: None = Depends(require_api_key),
     service: TaskService = Depends(get_service)
 ):
     """删除任务记录"""
@@ -81,6 +85,7 @@ def delete_task(
 @router.get("/{task_id}/logs")
 def get_task_logs(
     task_id: int, 
+    _auth: None = Depends(require_api_key),
     service: TaskService = Depends(get_service)
 ):
     """获取任务日志"""

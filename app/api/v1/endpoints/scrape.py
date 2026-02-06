@@ -9,6 +9,7 @@ from app.models.scrape import ScrapeJob
 from app.schemas.base import BaseResponse, PageResponse, PageMeta
 from app.core.exceptions import AppException, AppErrorCode
 from app.core.validators import validate_path, validate_identifier, InputValidationError
+from app.core.dependencies import require_api_key
 from app.core.constants import MAX_PATH_LENGTH
 
 router = APIRouter()
@@ -44,6 +45,7 @@ class ScrapeJobDto(BaseModel):
 @router.post("/jobs", response_model=BaseResponse[ScrapeJobDto])
 async def create_scrape_job(
     request: ScrapeJobCreateRequest,
+    _auth: None = Depends(require_api_key),
     service: ScrapeService = Depends(get_scrape_service)
 ):
     """创建刮削任务"""
@@ -76,6 +78,7 @@ async def create_scrape_job(
 async def start_scrape_job(
     job_id: str,
     background_tasks: BackgroundTasks,
+    _auth: None = Depends(require_api_key),
     service: ScrapeService = Depends(get_scrape_service)
 ):
     """启动刮削任务"""

@@ -7,7 +7,7 @@ from app.services.strm_service import StrmService
 from app.core.database import resolve_db_path
 from app.core.database import Database
 from app.core.logging import get_logger
-from app.core.dependencies import get_quark_cookie
+from app.core.dependencies import get_quark_cookie, require_api_key
 from app.core.validators import validate_path, InputValidationError
 from app.core.constants import MAX_CONCURRENT_LIMIT, MIN_CONCURRENT_LIMIT, MAX_PATH_LENGTH
 
@@ -23,6 +23,7 @@ async def scan_directory(
     concurrent_limit: int = Query(5, ge=MIN_CONCURRENT_LIMIT, le=MAX_CONCURRENT_LIMIT),
     base_url: str = Query("http://localhost:8000", description="代理服务器基础URL"),
     strm_url_mode: str = Query("redirect", description="URL模式: redirect/stream/direct/webdav"),
+    _auth: None = Depends(require_api_key),
     cookie: str = Depends(get_quark_cookie)
 ):
     """

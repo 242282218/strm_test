@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.db import get_db
+from app.core.dependencies import require_api_key
 from app.schemas.cloud_drive import CloudDriveCreate, CloudDriveUpdate, CloudDriveResponse
 from app.services.cloud_drive_service import CloudDriveService
 
@@ -13,6 +14,7 @@ def get_service(db: Session = Depends(get_db)):
 @router.post("/", response_model=CloudDriveResponse)
 def create_drive(
     drive: CloudDriveCreate, 
+    _auth: None = Depends(require_api_key),
     service: CloudDriveService = Depends(get_service)
 ):
     return service.create_drive(drive)
@@ -39,6 +41,7 @@ def get_drive(
 def update_drive(
     drive_id: int, 
     drive_update: CloudDriveUpdate, 
+    _auth: None = Depends(require_api_key),
     service: CloudDriveService = Depends(get_service)
 ):
     drive = service.update_drive(drive_id, drive_update)
@@ -49,6 +52,7 @@ def update_drive(
 @router.delete("/{drive_id}")
 def delete_drive(
     drive_id: int, 
+    _auth: None = Depends(require_api_key),
     service: CloudDriveService = Depends(get_service)
 ):
     success = service.delete_drive(drive_id)
@@ -59,6 +63,7 @@ def delete_drive(
 @router.post("/{drive_id}/check")
 async def check_drive_cookie(
     drive_id: int, 
+    _auth: None = Depends(require_api_key),
     service: CloudDriveService = Depends(get_service)
 ):
     """检查Cookie有效性"""

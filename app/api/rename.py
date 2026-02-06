@@ -17,6 +17,7 @@ from app.core.logging import get_logger
 from app.services.rename_service import get_rename_service, RenameService
 from app.models.scrape import RenameBatch, RenameHistory
 from app.core.validators import validate_path, validate_identifier, InputValidationError
+from app.core.dependencies import require_api_key
 from app.core.constants import MAX_PATH_LENGTH, MAX_BATCH_SIZE, MIN_BATCH_SIZE, DEFAULT_BATCH_SIZE
 
 logger = get_logger(__name__)
@@ -146,6 +147,7 @@ class RenameHistoryResponse(BaseModel):
 @router.post("/preview", response_model=RenamePreviewResponse)
 async def preview_rename(
     request: RenamePreviewRequest,
+    _auth: None = Depends(require_api_key),
     service: RenameService = Depends(get_rename_service)
 ):
     """
@@ -208,6 +210,7 @@ async def preview_rename(
 @router.post("/execute", response_model=RenameExecuteResponse)
 async def execute_rename(
     request: RenameExecuteRequest,
+    _auth: None = Depends(require_api_key),
     service: RenameService = Depends(get_rename_service)
 ):
     """
@@ -239,6 +242,7 @@ async def execute_rename(
 @router.post("/rollback/{batch_id}", response_model=RenameExecuteResponse)
 async def rollback_rename(
     batch_id: str,
+    _auth: None = Depends(require_api_key),
     service: RenameService = Depends(get_rename_service)
 ):
     """

@@ -95,3 +95,15 @@ alist:
   token: ""
   mount_path: "/"
 
+cors:
+  allow_origins:
+    - "*"
+  allow_credentials: false
+  allow_methods:
+    - "*"
+  allow_headers:
+    - "*"
+
+security:
+  api_key: ""
+  require_api_key: false

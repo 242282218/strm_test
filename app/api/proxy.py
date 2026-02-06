@@ -5,7 +5,7 @@
 支持302重定向和Emby反代
 """
 
-from fastapi import APIRouter, HTTPException, Request, Response, Query
+from fastapi import APIRouter, HTTPException, Request, Response, Query, Depends
 from fastapi.responses import RedirectResponse
 from app.services.proxy_service import ProxyService
 from app.services.quark_service import QuarkService
@@ -14,7 +14,7 @@ from app.services.webdav_fallback import WebDAVFallback
 from app.core.config_manager import get_config
 from app.services.config_service import get_config_service
 from app.core.logging import get_logger
-from app.core.dependencies import get_quark_cookie
+from app.core.dependencies import get_quark_cookie, require_api_key
 from app.core.validators import validate_identifier, validate_proxy_path, validate_http_url, InputValidationError
 from typing import Optional
 
@@ -328,7 +328,7 @@ async def proxy_emby_request(request: Request, path: str):
 
 
 @router.post("/cache/clear")
-async def clear_cache():
+async def clear_cache(_auth: None = Depends(require_api_key)):
     """
     清除缓存
     """

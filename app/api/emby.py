@@ -5,7 +5,7 @@ Emby API路由
 支持PlaybackInfo Hook和302重定向
 """
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from fastapi.responses import RedirectResponse
 from app.services.emby_proxy_service import EmbyProxyService
 from app.services.proxy_service import ProxyService
@@ -17,6 +17,7 @@ from fastapi import BackgroundTasks
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, Dict, Any, List
 from app.core.validators import validate_identifier, validate_proxy_path, validate_http_url, InputValidationError
+from app.core.dependencies import require_api_key
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/emby", tags=["Emby服务"])
@@ -149,7 +150,10 @@ async def get_playback_info(
 
 
 @router.post("/test-connection")
-async def test_connection(body: Optional[EmbyTestRequest] = None):
+async def test_connection(
+    body: Optional[EmbyTestRequest] = None,
+    _auth: None = Depends(require_api_key)
+):
     """
     测试Emby连接
 
@@ -179,7 +183,11 @@ async def get_libraries():
 
 
 @router.post("/refresh")
-async def refresh_libraries(background_tasks: BackgroundTasks, body: Optional[EmbyRefreshRequest] = None):
+async def refresh_libraries(
+    background_tasks: BackgroundTasks,
+    body: Optional[EmbyRefreshRequest] = None,
+    _auth: None = Depends(require_api_key)
+):
     """手动触发刷新（后台执行）"""
     service = get_emby_service()
     if not service.is_enabled:
@@ -237,7 +245,10 @@ async def get_status(probe: bool = False, probe_timeout: int = 5):
 
 
 @router.post("/config")
-async def update_emby_config(body: EmbyConfigUpdate):
+async def update_emby_config(
+    body: EmbyConfigUpdate,
+    _auth: None = Depends(require_api_key)
+):
     """更新Emby配置并持久化到config.yaml"""
     service = get_emby_service()
     app_config = config_service.get_config()
@@ -537,7 +548,10 @@ async def emby_webhook(
     return {"status": "processed", "event": event.Event}
 
 @router.post("/sync")
-async def trigger_sync(background_tasks: BackgroundTasks):
+async def trigger_sync(
+    background_tasks: BackgroundTasks,
+    _auth: None = Depends(require_api_key)
+):
     """
     手动触发全量同步
     """

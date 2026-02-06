@@ -1314,8 +1314,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 32px;
-  padding: 24px 0;
-  border-bottom: 1px solid var(--el-border-color);
+  padding: 0 8px;
 }
 
 .header-content {
@@ -1358,6 +1357,12 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 24px;
   margin-bottom: 32px;
+}
+
+.glass-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  box-shadow: var(--el-box-shadow-light);
 }
 
 .config-card {
@@ -1611,6 +1616,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  transition: transform 0.3s ease;
 }
 
 .step-circle {
@@ -1648,6 +1654,10 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
+.step-indicator.active {
+  transform: translateY(-2px);
+}
+
 /* Step Section */
 .step-section {
   margin-bottom: 24px;
@@ -1672,7 +1682,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px;
+  padding: 18px 20px;
   background: var(--el-fill-color-light);
   border-bottom: 1px solid var(--el-border-color);
 }
@@ -1689,13 +1699,13 @@ onMounted(() => {
 }
 
 .step-title h3 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   margin: 0;
 }
 
 .step-description {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--el-text-color-secondary);
   margin: 0;
 }
@@ -1706,23 +1716,24 @@ onMounted(() => {
 }
 
 .status-tag {
-  font-size: 12px;
+  font-size: 11px;
+  padding: 2px 8px;
 }
 
 .step-content {
-  padding: 24px;
+  padding: 18px 20px 20px;
 }
 
 /* Path Selector */
 .path-selector {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .selector-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .selector-label {
@@ -1732,6 +1743,7 @@ onMounted(() => {
 
 .browse-btn {
   font-size: 13px;
+  border-radius: 999px;
 }
 
 .path-input {
@@ -1741,11 +1753,17 @@ onMounted(() => {
 .step-actions {
   display: flex;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 16px;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid var(--el-border-color);
 }
 
 .action-btn {
   min-width: 120px;
+  border-radius: 12px;
+  height: 36px;
+  padding: 0 16px;
 }
 
 /* Preview Results */
@@ -1753,7 +1771,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 12px 16px;
   background: var(--el-color-info-light-9);
   border: 1px solid var(--el-color-info-light-8);
   border-radius: 8px;
@@ -1816,7 +1834,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 12px 14px;
   background: var(--el-fill-color-light);
   border-radius: 8px;
   margin-bottom: 16px;
@@ -1867,6 +1885,11 @@ onMounted(() => {
 .file-item.needs-confirmation {
   border-color: var(--el-color-warning);
   background: var(--el-color-warning-light-9);
+}
+
+:deep(.el-input__wrapper) {
+  border-radius: 12px;
+  box-shadow: none;
 }
 
 .file-item.high-confidence {

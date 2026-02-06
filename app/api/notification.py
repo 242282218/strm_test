@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.notification import NotificationChannel, NotificationRule, NotificationLog
 from app.services.notification_service import get_notification_service, NotificationService, NotificationType, NotificationMessage
+from app.core.dependencies import require_api_key
 
 router = APIRouter(prefix="/api/notification", tags=["notification"])
 
@@ -73,7 +74,11 @@ class LogResponse(BaseModel):
 # ==================== Channels ====================
 
 @router.post("/channels", response_model=ChannelResponse)
-def create_channel(channel: ChannelCreate, db: Session = Depends(get_db)):
+def create_channel(
+    channel: ChannelCreate,
+    _auth: None = Depends(require_api_key),
+    db: Session = Depends(get_db)
+):
     """创建通知渠道"""
     db_channel = NotificationChannel(
         channel_type=channel.channel_type,
@@ -94,6 +99,7 @@ def list_channels(db: Session = Depends(get_db)):
 async def update_channel(
     channel_id: int, 
     channel: ChannelUpdate, 
+    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -120,6 +126,7 @@ async def update_channel(
 @router.delete("/channels/{channel_id}")
 async def delete_channel(
     channel_id: int, 
+    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -137,6 +144,7 @@ async def delete_channel(
 @router.post("/channels/{channel_id}/test")
 async def test_channel(
     channel_id: int, 
+    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -167,6 +175,7 @@ async def test_channel(
 @router.post("/rules", response_model=RuleResponse)
 async def create_rule(
     rule: RuleCreate, 
+    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -191,6 +200,7 @@ def list_rules(db: Session = Depends(get_db)):
 @router.delete("/rules/{rule_id}")
 async def delete_rule(
     rule_id: int, 
+    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):

@@ -300,6 +300,31 @@ class ZhipuConfig(BaseModel):
         return v
 
 
+class CorsConfig(BaseModel):
+    """CORS settings"""
+    model_config = ConfigDict(extra="forbid")
+
+    allow_origins: List[str] = Field(default_factory=lambda: ["*"], description="Allowed origins")
+    allow_credentials: bool = Field(False, description="Allow credentials")
+    allow_methods: List[str] = Field(default_factory=lambda: ["*"], description="Allowed methods")
+    allow_headers: List[str] = Field(default_factory=lambda: ["*"], description="Allowed headers")
+
+
+class SecurityConfig(BaseModel):
+    """Security settings"""
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str = Field("", description="API key for protected endpoints", max_length=2048)
+    require_api_key: bool = Field(False, description="Require API key for protected endpoints")
+
+    @field_validator('api_key')
+    @classmethod
+    def validate_and_decrypt_api_key(cls, v):
+        if v and v.startswith("encrypted:"):
+            return get_decrypted_config_value(v)
+        return v
+
+
 class AppConfig(BaseModel):
     """应用配置"""
     model_config = ConfigDict(extra="forbid")
@@ -324,6 +349,8 @@ class AppConfig(BaseModel):
     tmdb: TmdbConfig = Field(default_factory=TmdbConfig, description="TMDB配置")
     emby: GlobalEmbyConfig = Field(default_factory=GlobalEmbyConfig, description="Emby配置")
     zhipu: ZhipuConfig = Field(default_factory=ZhipuConfig, description="智谱AI配置")
+    cors: CorsConfig = Field(default_factory=CorsConfig, description="CORS settings")
+    security: SecurityConfig = Field(default_factory=SecurityConfig, description="Security settings")
 
     @model_validator(mode="before")
     @classmethod
@@ -377,7 +404,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def _apply_env_overrides(cls, data: dict) -> dict:
-        """从环境变量覆盖敏感配置"""
+        """Apply environment overrides for sensitive config values."""
         def _set_nested(target: dict, keys: list[str], value: str):
             current = target
             for key in keys[:-1]:
@@ -402,40 +429,39 @@ class AppConfig(BaseModel):
             env_value = os.getenv(env_key)
             if env_value:
                 _set_nested(data, path_keys, env_value)
-        
-        # 替换配置数据中的环境变量占位符
+
+        # Replace env var placeholders
         data = cls._replace_env_placeholders(data)
         return data
 
     @classmethod
     def _replace_env_placeholders(cls, data: any) -> any:
-        """递归替换数据中的环境变量占位符 ${VAR_NAME} 或 ${VAR_NAME:-default}"""
+        """Replace ${VAR_NAME} or ${VAR_NAME:-default} placeholders recursively."""
         if isinstance(data, dict):
             return {key: cls._replace_env_placeholders(value) for key, value in data.items()}
-        elif isinstance(data, list):
+        if isinstance(data, list):
             return [cls._replace_env_placeholders(item) for item in data]
-        elif isinstance(data, str):
+        if isinstance(data, str):
             import re
-            # 匹配 ${VAR_NAME} 或 ${VAR_NAME:-default} 格式的占位符
+            # Match ${VAR_NAME} or ${VAR_NAME:-default} placeholders
             pattern = r'\$\{([^}]+)\}'
             matches = re.findall(pattern, data)
-            
+
             for match in matches:
                 if ':-' in match:
                     var_name, default_val = match.split(':-', 1)
                 else:
                     var_name = match
                     default_val = ''
-                
+
                 env_value = os.getenv(var_name.strip())
                 if env_value is not None:
                     data = data.replace(f'${{{match}}}', env_value)
-                elif ':-' in match:  # 如果提供了默认值
+                elif ':-' in match:  # Use default value
                     data = data.replace(f'${{{match}}}', default_val)
-                # 如果没有默认值且环境变量不存在，则保留原字符串
+                # If env var not found and no default, keep original
             return data
-        else:
-            return data
+        return data
 
     def to_yaml(self, path: str) -> None:
         """

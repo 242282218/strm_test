@@ -5,9 +5,13 @@ FastAPI主应用
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime
+import time
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import ORJSONResponse
 from asgiref.wsgi import WsgiToAsgi
 from app.api import quark, strm, proxy, emby, tasks, strm_validator, quark_sdk, search, rename, dashboard, tmdb, monitoring, smart_rename, file_manager
 from app.api.v1 import api_router as v1_router
@@ -20,7 +24,7 @@ from app.core.exception_handler import (
     validation_exception_handler,
     input_validation_exception_handler,
 )
-from app.core.exceptions import AppException, app_exception_handler, general_exception_handler
+from app.core.exceptions import AppException, app_exception_handler
 from app.core.constants import REQUEST_ID_HEADER
 from app.core.validators import InputValidationError
 from app.services.cache_service import get_cache_service
@@ -92,6 +96,7 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     try:
         init_app()
+        app.state.started_at = datetime.utcnow()
         _mount_webdav(app)
 
         # 启动配置文件监控（热加载）
@@ -164,6 +169,7 @@ app = FastAPI(
     title="夸克STRM系统",
     description="Emby/Jellyfin可播放的夸克网盘STRM系统",
     version="0.1.0",
+    default_response_class=ORJSONResponse,
     lifespan=lifespan
 )
 
@@ -175,20 +181,73 @@ async def add_request_id(request: Request, call_next):
         import uuid
         request_id = str(uuid.uuid4())
     request.state.request_id = request_id
+    start = time.perf_counter()
     response = await call_next(request)
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
     response.headers[REQUEST_ID_HEADER] = request_id
+    response.headers["X-Response-Time"] = f"{elapsed_ms}ms"
+
+    access_logger = logger.bind(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        elapsed_ms=elapsed_ms,
+    )
+    if response.status_code >= 500:
+        access_logger.error(f"{request.method} {request.url.path} -> {response.status_code} ({elapsed_ms}ms)")
+    elif response.status_code >= 400:
+        access_logger.warning(f"{request.method} {request.url.path} -> {response.status_code} ({elapsed_ms}ms)")
+    else:
+        access_logger.info(f"{request.method} {request.url.path} -> {response.status_code} ({elapsed_ms}ms)")
+
     return response
+
+cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
+cors_allow_credentials_env = os.getenv("CORS_ALLOW_CREDENTIALS", "")
+
+config_for_cors = None
+try:
+    config_for_cors = get_config_service(os.getenv("CONFIG_PATH", "config.yaml")).get_config()
+except Exception as exc:
+    logger.warning(f"Failed to load config for CORS: {exc}")
+
+if cors_origins_env:
+    allow_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+elif config_for_cors and getattr(config_for_cors, "cors", None):
+    allow_origins = config_for_cors.cors.allow_origins or ["*"]
+else:
+    allow_origins = ["*"]
+
+if cors_allow_credentials_env:
+    allow_credentials = cors_allow_credentials_env.lower() in {"1", "true", "yes"}
+elif config_for_cors and getattr(config_for_cors, "cors", None):
+    allow_credentials = bool(config_for_cors.cors.allow_credentials)
+else:
+    allow_credentials = False
+
+if allow_origins == ["*"] and allow_credentials:
+    logger.warning("CORS allow_origins is '*' - disabling credentials to avoid invalid CORS config")
+    allow_credentials = False
+
+if config_for_cors and getattr(config_for_cors, "cors", None):
+    allow_methods = config_for_cors.cors.allow_methods or ["*"]
+    allow_headers = config_for_cors.cors.allow_headers or ["*"]
+else:
+    allow_methods = ["*"]
+    allow_headers = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
+    allow_methods=allow_methods,
+    allow_headers=allow_headers,
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # 注册全局异常处理器
-app.add_exception_handler(Exception, general_exception_handler)
+app.add_exception_handler(Exception, exception_handler)
 app.add_exception_handler(AppException, app_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
@@ -236,10 +295,14 @@ async def root():
 @app.get("/health")
 async def health():
     """健康检查"""
-    from datetime import datetime
+    started_at = getattr(app.state, "started_at", None)
+    uptime_seconds = None
+    if started_at:
+        uptime_seconds = int((datetime.utcnow() - started_at).total_seconds())
     return {
         "status": "ok",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.utcnow().isoformat(),
+        "uptime_seconds": uptime_seconds,
         "version": "0.1.0"
     }
 
@@ -262,4 +325,5 @@ async def get_config():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    workers = int(os.getenv("WEB_CONCURRENCY", "1"))
+    uvicorn.run(app, host="0.0.0.0", port=8000, workers=workers)

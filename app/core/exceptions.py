@@ -1,6 +1,8 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from enum import IntEnum
+from app.core.response import ErrorResponse
+from app.core.logging import get_logger
 
 class AppErrorCode(IntEnum):
     """全局错误码定义"""
@@ -45,29 +47,32 @@ class AppException(Exception):
         self.data = data
         super().__init__(self.message)
 
+logger = get_logger(__name__)
+
 async def app_exception_handler(request: Request, exc: AppException):
     """全局业务异常处理器"""
+    error_response = ErrorResponse(
+        code=exc.status_code,
+        message=exc.message,
+        error_code=str(exc.code),
+        request_id=getattr(request.state, "request_id", None),
+        data=exc.data,
+    )
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "code": exc.code,
-            "message": exc.message,
-            "data": exc.data,
-            "request_id": getattr(request.state, "request_id", None),
-            # "timestamp": ... (前端可能不需要)
-        }
+        content=error_response.model_dump(),
     )
 
 async def general_exception_handler(request: Request, exc: Exception):
     """兜底异常处理器"""
-    import traceback
-    print(f"Unhandled Exception: {exc}\n{traceback.format_exc()}")
-    
+    logger.exception("Unhandled Exception: %s", exc)
+    error_response = ErrorResponse(
+        code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        message="服务器内部错误",
+        error_code=str(AppErrorCode.UNKNOWN_ERROR),
+        request_id=getattr(request.state, "request_id", None),
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "code": AppErrorCode.UNKNOWN_ERROR,
-            "message": f"Internal Server Error: {str(exc)}",
-            "request_id": getattr(request.state, "request_id", None)
-        }
+        content=error_response.model_dump(),
     )

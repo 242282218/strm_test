@@ -8,21 +8,21 @@ const api = axios.create({
   }
 })
 
-// 请求拦截器
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    const apiKey = localStorage.getItem('api_key')
+    if (apiKey) {
+      config.headers['X-API-Key'] = apiKey
+    }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
-// 响应拦截器
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {

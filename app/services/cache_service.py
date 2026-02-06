@@ -15,8 +15,6 @@
 import asyncio
 import time
 from typing import Any, Optional, Dict
-from datetime import datetime, timedelta
-from cachetools import TTLCache
 from app.core.lru_cache import LRUCache as CustomLRUCache
 from app.core.logging import get_logger
 
@@ -83,7 +81,7 @@ class MemoryCache:
         """设置缓存值"""
         async with self._lock:
             # LRU缓存会自动处理容量限制和淘汰
-            self._cache.set(key, value)
+            self._cache.set(key, value, ttl)
     
     async def delete(self, key: str) -> bool:
         """删除缓存"""

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.services.config_service import get_config_service, ConfigError
 from app.core.logging import get_logger
+from app.core.dependencies import require_api_key
 import os
 import aiohttp
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -26,7 +27,7 @@ def get_config_path():
 
 
 @router.get("/")
-async def get_config():
+async def get_config(_auth: None = Depends(require_api_key)):
     """
     获取完整系统配置
 
@@ -48,7 +49,7 @@ async def get_config():
 
 
 @router.post("/")
-async def update_config(config_data: dict):
+async def update_config(config_data: dict, _auth: None = Depends(require_api_key)):
     """
     更新系统配置
 
@@ -89,7 +90,7 @@ class TelegramTestRequest(BaseModel):
 
 
 @router.post("/test-telegram")
-async def test_telegram(config: TelegramTestRequest):
+async def test_telegram(config: TelegramTestRequest, _auth: None = Depends(require_api_key)):
     """
     测试 Telegram 推送
 
