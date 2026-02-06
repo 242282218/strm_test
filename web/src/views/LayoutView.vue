@@ -1,6 +1,5 @@
 <template>
   <el-container class="layout-container">
-    <!-- 侧边栏 -->
     <el-aside :width="isCollapse ? '64px' : '240px'" class="sidebar">
       <div class="logo-container">
         <el-icon size="32" class="logo-icon"><Cloudy /></el-icon>
@@ -23,20 +22,14 @@
       </el-menu>
 
       <div class="sidebar-footer">
-        <el-button
-          link
-          :icon="isCollapse ? Expand : Fold"
-          @click="toggleCollapse"
-        />
+        <el-button link :icon="isCollapse ? Expand : Fold" @click="toggleCollapse" />
       </div>
     </el-aside>
 
-    <!-- 主内容区 -->
     <el-container>
-      <!-- 顶部导航 -->
       <el-header class="header">
         <div class="header-left">
-          <breadcrumb />
+          <Breadcrumb />
         </div>
         <div class="header-right">
           <el-tooltip content="主题切换">
@@ -66,7 +59,6 @@
         </div>
       </el-header>
 
-      <!-- 内容区 -->
       <el-main class="main-content">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
@@ -82,15 +74,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Cloudy,
-  Expand,
-  Fold,
-  Moon,
-  Sunny,
-  UserFilled,
-  ArrowDown
-} from '@element-plus/icons-vue'
+import { ArrowDown, Cloudy, Expand, Fold, Moon, Sunny, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import Breadcrumb from '@/components/Breadcrumb.vue'
 
@@ -103,16 +87,20 @@ const isDark = ref(false)
 const menuItems = [
   { path: '/dashboard', title: '概览', icon: 'Odometer' },
   { path: '/search', title: '资源搜索', icon: 'Search' },
-  { path: '/smart-rename', title: '智能重命名', icon: 'EditPen' },
+  { path: '/smart-rename', title: '智能重命名', icon: 'MagicStick' },
+  { path: '/scrape-pathes', title: '刮削目录', icon: 'FolderOpened' },
+  { path: '/scrape-records', title: '刮削记录', icon: 'Document' },
+  { path: '/settings/category-strategy', title: '二级分类策略', icon: 'CollectionTag' },
+  { path: '/emby-monitor', title: 'Emby 监控', icon: 'Monitor' },
   { path: '/tasks', title: '任务管理', icon: 'List' },
   { path: '/config', title: '系统配置', icon: 'Setting' }
 ]
 
-const toggleCollapse = () => {
+const toggleCollapse = (): void => {
   isCollapse.value = !isCollapse.value
 }
 
-const toggleTheme = (val: boolean) => {
+const toggleTheme = (val: boolean): void => {
   if (val) {
     document.documentElement.classList.add('dark')
   } else {
@@ -120,25 +108,25 @@ const toggleTheme = (val: boolean) => {
   }
 }
 
-const handleCommand = (command: string) => {
-  switch (command) {
-    case 'profile':
-      ElMessage.info('个人中心功能开发中')
-      break
-    case 'settings':
-      router.push('/config')
-      break
-    case 'logout':
-      ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(() => {
-        authStore.logout()
-        router.push('/login')
-        ElMessage.success('已退出登录')
-      })
-      break
+const handleCommand = (command: string): void => {
+  if (command === 'profile') {
+    ElMessage.info('个人中心开发中')
+    return
+  }
+  if (command === 'settings') {
+    router.push('/config')
+    return
+  }
+  if (command === 'logout') {
+    ElMessageBox.confirm('确认退出登录吗？', '提示', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(() => {
+      authStore.logout()
+      router.push('/login')
+      ElMessage.success('已退出登录')
+    })
   }
 }
 </script>
@@ -149,7 +137,6 @@ const handleCommand = (command: string) => {
   background: var(--bg-primary);
 }
 
-/* 侧边栏 */
 .sidebar {
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
@@ -194,7 +181,6 @@ const handleCommand = (command: string) => {
   justify-content: center;
 }
 
-/* 顶部导航 */
 .header {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -229,14 +215,12 @@ const handleCommand = (command: string) => {
   color: var(--text-primary);
 }
 
-/* 主内容区 */
 .main-content {
   padding: 24px;
   overflow-y: auto;
   background: var(--bg-primary);
 }
 
-/* 过渡动画 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -247,21 +231,7 @@ const handleCommand = (command: string) => {
   opacity: 0;
 }
 
-/* 响应式 */
 @media (max-width: 768px) {
-  .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 1000;
-    transform: translateX(-100%);
-  }
-
-  .sidebar.is-open {
-    transform: translateX(0);
-  }
-
   .username {
     display: none;
   }

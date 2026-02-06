@@ -388,6 +388,15 @@ def setup_default_monitoring():
     alert_manager.add_threshold(
         AlertThreshold('system.disk.percent', 90.0, 'gt', duration=300.0)
     )
+    alert_manager.add_threshold(
+        AlertThreshold('scrape.job.failure_rate', 0.3, 'gt', duration=120.0)
+    )
+    alert_manager.add_threshold(
+        AlertThreshold('emby.webhook.event_latency_seconds', 60.0, 'gt', duration=120.0)
+    )
+    alert_manager.add_threshold(
+        AlertThreshold('emby.delete.execute.warning', 0.0, 'gt', duration=1.0)
+    )
     
     # 启动监控
     monitor.start_monitoring(interval=10.0)

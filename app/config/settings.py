@@ -224,6 +224,12 @@ class EmbyRefreshConfig(BaseModel):
     on_rename: bool = Field(True, description="閲嶅懡鍚嶅悗鏄惁瑙﹀彂鍒锋柊")
     cron: Optional[str] = Field(None, description="Cron琛ㄨ揪寮?5鎴?瀛楁)锛岀┖鍒欎笉鍚敤")
     library_ids: List[str] = Field(default_factory=list, description="瑕佸埛鏂扮殑濯掍綋搴揑D鍒楄〃(绌哄垯鍏ㄥ簱)")
+    episode_aggregate_window_seconds: int = Field(
+        10,
+        description="Episode webhook 事件聚合窗口（秒）",
+        ge=1,
+        le=300,
+    )
 
     @field_validator("cron")
     @classmethod
@@ -264,6 +270,7 @@ class GlobalEmbyConfig(BaseModel):
         le=MAX_TIMEOUT_SECONDS,
     )
     notify_on_complete: bool = Field(True, description="鍒锋柊瀹屾垚鍚庢槸鍚﹀彂閫侀€氱煡")
+    delete_execute_enabled: bool = Field(False, description="是否允许执行删除联动")
     refresh: EmbyRefreshConfig = Field(default_factory=EmbyRefreshConfig, description="Emby鍒锋柊閰嶇疆")
 
     @field_validator('url')

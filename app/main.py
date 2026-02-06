@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import ORJSONResponse
 from asgiref.wsgi import WsgiToAsgi
-from app.api import quark, strm, proxy, emby, tasks, strm_validator, quark_sdk, search, rename, dashboard, tmdb, monitoring, smart_rename, file_manager
+from app.api import quark, strm, proxy, emby, scrape, tasks, strm_validator, quark_sdk, search, rename, dashboard, tmdb, monitoring, smart_rename, file_manager
 from app.api.v1 import api_router as v1_router
 from app.config.settings import AppConfig
 from app.services.config_service import get_config_service
@@ -257,6 +257,7 @@ app.include_router(quark.router)
 app.include_router(strm.router)
 app.include_router(proxy.router)
 app.include_router(emby.router)
+app.include_router(scrape.router)
 # 设置 prefix 以符合 API 设计
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(cloud_drive.router, prefix="/api/drives", tags=["Cloud Drives"])

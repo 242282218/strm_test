@@ -16,6 +16,8 @@ def test_emby_status_endpoint():
     assert "enabled" in data
     assert "connected" in data
     assert "configuration" in data
+    assert "episode_aggregate_window_seconds" in data["configuration"]
+    assert "delete_execute_enabled" in data["configuration"]
 
 
 def test_emby_test_connection_endpoint():
@@ -33,4 +35,3 @@ def test_emby_libraries_requires_enabled():
 def test_emby_refresh_requires_enabled():
     resp = client.post("/api/emby/refresh", json={})
     assert resp.status_code in (400, 500)
-

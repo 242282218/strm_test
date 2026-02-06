@@ -53,6 +53,16 @@
         <div class="form-tip">Cron 表达式，留空则不启用定时刷新</div>
       </el-form-item>
 
+      <el-form-item label="Episode 聚合窗口(秒)">
+        <el-input-number
+          v-model="form.episode_aggregate_window_seconds"
+          :min="1"
+          :max="300"
+          :disabled="!form.enabled"
+        />
+        <div class="form-tip">用于合并短时间内连续 Episode 事件，默认 10 秒</div>
+      </el-form-item>
+
       <el-form-item label="刷新媒体库">
         <el-select
           v-model="form.library_ids"
@@ -68,6 +78,11 @@
 
       <el-form-item label="刷新完成通知">
         <el-switch v-model="form.notify_on_complete" :disabled="!form.enabled" />
+      </el-form-item>
+
+      <el-form-item label="允许删除执行">
+        <el-switch v-model="form.delete_execute_enabled" :disabled="!form.enabled" />
+        <div class="form-tip warning-text">高风险开关，默认关闭。开启后可执行删除计划。</div>
       </el-form-item>
     </el-form>
 
@@ -108,7 +123,9 @@ const form = reactive({
   on_rename: true,
   cron: '',
   library_ids: [] as string[],
-  notify_on_complete: true
+  notify_on_complete: true,
+  episode_aggregate_window_seconds: 10,
+  delete_execute_enabled: false
 })
 
 const statusType = computed(() => {
@@ -189,6 +206,9 @@ onMounted(async () => {
     form.cron = status.configuration.cron || ''
     form.library_ids = status.configuration.library_ids || []
     form.notify_on_complete = status.configuration.notify_on_complete
+    form.episode_aggregate_window_seconds =
+      status.configuration.episode_aggregate_window_seconds || 10
+    form.delete_execute_enabled = !!status.configuration.delete_execute_enabled
 
     connected.value = status.connected
     serverInfo.value = status.server_info
@@ -227,6 +247,10 @@ onMounted(async () => {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+
+.warning-text {
+  color: #e6a23c;
 }
 
 .card-actions {

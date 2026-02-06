@@ -1,7 +1,61 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.db import Base
+
+class ScrapePath(Base):
+    """Scrape path configuration."""
+    __tablename__ = "scrape_paths"
+
+    id = Column(Integer, primary_key=True, index=True)
+    path_id = Column(String(50), unique=True, index=True, nullable=False)
+    source_path = Column(String(500), nullable=False, index=True)
+    dest_path = Column(String(500), nullable=False)
+    media_type = Column(String(20), default="auto", nullable=False)
+    scrape_mode = Column(String(30), default="scrape_and_rename", nullable=False)
+    rename_mode = Column(String(20), default="move", nullable=False)
+    max_threads = Column(Integer, default=1, nullable=False)
+    cron = Column(String(120))
+    enabled = Column(Boolean, default=True, nullable=False)
+    cron_enabled = Column(Boolean, default=False, nullable=False)
+    enable_secondary_category = Column(Boolean, default=True, nullable=False)
+    status = Column(String(20), default="idle", nullable=False)
+    last_job_id = Column(String(50))
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class ScrapeRecord(Base):
+    """Operational records for scrape pipeline."""
+    __tablename__ = "scrape_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    record_id = Column(String(50), unique=True, index=True, nullable=False)
+    job_id = Column(String(50), index=True, nullable=False)
+    path_id = Column(String(50), index=True)
+    item_id = Column(Integer, index=True)
+    source_file = Column(String(500), nullable=False, index=True)
+    target_file = Column(String(500))
+    media_type = Column(String(20), index=True)
+    tmdb_id = Column(Integer, index=True)
+    title = Column(String(200), index=True)
+    year = Column(Integer)
+    status = Column(String(30), index=True, nullable=False, default="pending")
+    error_code = Column(String(80))
+    error_message = Column(Text)
+    recognition_result = Column(JSON)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class CategoryStrategy(Base):
+    """Secondary category strategy configuration."""
+    __tablename__ = "category_strategy"
+
+    id = Column(Integer, primary_key=True, index=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+    anime_keywords = Column(JSON, nullable=False, default=list)
+    folder_names = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 class ScrapeJob(Base):
     """刮削任务"""

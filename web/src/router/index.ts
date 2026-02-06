@@ -29,6 +29,30 @@ const router = createRouter({
           meta: { title: '任务管理', icon: 'List' }
         },
         {
+          path: '/scrape-pathes',
+          name: 'ScrapePaths',
+          component: () => import('@/views/ScrapePathsView.vue'),
+          meta: { title: '刮削目录', icon: 'FolderOpened' }
+        },
+        {
+          path: '/scrape-records',
+          name: 'ScrapeRecords',
+          component: () => import('@/views/ScrapeRecordsView.vue'),
+          meta: { title: '刮削记录', icon: 'Document' }
+        },
+        {
+          path: '/settings/category-strategy',
+          name: 'CategoryStrategy',
+          component: () => import('@/views/CategoryStrategyView.vue'),
+          meta: { title: '二级分类策略', icon: 'CollectionTag' }
+        },
+        {
+          path: '/emby-monitor',
+          name: 'EmbyMonitor',
+          component: () => import('@/views/EmbyMonitorView.vue'),
+          meta: { title: 'Emby 监控', icon: 'Monitor' }
+        },
+        {
           path: '/config',
           name: 'Config',
           component: () => import('@/views/ConfigView.vue'),
@@ -50,7 +74,7 @@ const router = createRouter({
           path: '/smart-rename',
           name: 'SmartRename',
           component: () => import('@/views/SmartRenameView.vue'),
-          meta: { title: '智能重命名', icon: 'Magic' }
+          meta: { title: '智能重命名', icon: 'MagicStick' }
         }
       ]
     },
@@ -62,17 +86,18 @@ const router = createRouter({
   ]
 })
 
-// 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
 
   if (!to.meta.public && !authStore.isAuthenticated) {
     next('/login')
-  } else if (to.path === '/login' && authStore.isAuthenticated) {
-    next('/')
-  } else {
-    next()
+    return
   }
+  if (to.path === '/login' && authStore.isAuthenticated) {
+    next('/')
+    return
+  }
+  next()
 })
 
 export default router

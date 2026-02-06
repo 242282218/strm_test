@@ -26,6 +26,8 @@ export interface EmbyStatus {
     on_rename: boolean
     cron: string | null
     library_ids: string[]
+    episode_aggregate_window_seconds: number
+    delete_execute_enabled: boolean
   }
 }
 
@@ -39,6 +41,15 @@ export interface EmbyConfigUpdate {
   on_rename: boolean
   cron: string
   library_ids: string[]
+  episode_aggregate_window_seconds: number
+  delete_execute_enabled: boolean
+}
+
+export interface EmbyRefreshHistoryItem {
+  success: boolean
+  library_id: string | null
+  message: string
+  timestamp: string
 }
 
 export const embyApi = {
@@ -60,6 +71,14 @@ export const embyApi = {
 
   refresh(payload?: { library_ids?: string[] }): Promise<{ success: boolean; message: string }> {
     return api.post('/emby/refresh', payload || {})
+  },
+
+  getRefreshHistory(params?: { limit?: number }): Promise<{ success: boolean; history: EmbyRefreshHistoryItem[] }> {
+    return api.get('/emby/refresh/history', { params: params || {} })
+  },
+
+  triggerSync(): Promise<{ status: string; message: string }> {
+    return api.post('/emby/sync')
   },
 
   updateConfig(payload: EmbyConfigUpdate): Promise<{ success: boolean }> {
