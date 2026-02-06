@@ -119,10 +119,19 @@ def test_normalize_parsed_title_removes_file_extension():
     assert normalized["title"] == "Unknown_File_abcdefg"
 
 
-def test_smart_rename_ai_connectivity_returns_deepseek_and_glm(monkeypatch):
+def test_smart_rename_ai_connectivity_returns_kimi_deepseek_and_glm(monkeypatch):
     class StubAIConnectivityService:
-        async def test_providers(self, providers=("deepseek", "glm"), timeout_seconds=8):
+        async def test_providers(self, providers=("kimi", "deepseek", "glm"), timeout_seconds=8):
             return [
+                {
+                    "provider": "kimi",
+                    "configured": True,
+                    "connected": True,
+                    "model": "moonshotai/kimi-k2.5",
+                    "base_url": "https://integrate.api.nvidia.com/v1",
+                    "response_time_ms": 8,
+                    "message": "ok",
+                },
                 {
                     "provider": "deepseek",
                     "configured": True,
@@ -152,13 +161,22 @@ def test_smart_rename_ai_connectivity_returns_deepseek_and_glm(monkeypatch):
     assert body["success"] is True
     assert body["interface"] == "smart_rename"
     providers = {item["provider"] for item in body["providers"]}
-    assert providers == {"deepseek", "glm"}
+    assert providers == {"kimi", "deepseek", "glm"}
 
 
-def test_quark_ai_connectivity_returns_deepseek_and_glm(monkeypatch):
+def test_quark_ai_connectivity_returns_kimi_deepseek_and_glm(monkeypatch):
     class StubAIConnectivityService:
-        async def test_providers(self, providers=("deepseek", "glm"), timeout_seconds=8):
+        async def test_providers(self, providers=("kimi", "deepseek", "glm"), timeout_seconds=8):
             return [
+                {
+                    "provider": "kimi",
+                    "configured": True,
+                    "connected": True,
+                    "model": "moonshotai/kimi-k2.5",
+                    "base_url": "https://integrate.api.nvidia.com/v1",
+                    "response_time_ms": 9,
+                    "message": "ok",
+                },
                 {
                     "provider": "deepseek",
                     "configured": False,
@@ -188,4 +206,4 @@ def test_quark_ai_connectivity_returns_deepseek_and_glm(monkeypatch):
     assert body["success"] is True
     assert body["interface"] == "quark_smart_rename"
     providers = {item["provider"] for item in body["providers"]}
-    assert providers == {"deepseek", "glm"}
+    assert providers == {"kimi", "deepseek", "glm"}

@@ -101,6 +101,12 @@ deepseek:
   model: "deepseek-chat"
   timeout: 8
 
+kimi:
+  api_key: ""
+  base_url: "https://integrate.api.nvidia.com/v1"
+  model: "moonshotai/kimi-k2.5"
+  timeout: 8
+
 alist:
   enabled: false
   url: "http://localhost:5244"

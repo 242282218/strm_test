@@ -114,7 +114,7 @@ export interface SmartRenameStatus {
 }
 
 export interface AIConnectivityProviderResult {
-  provider: 'deepseek' | 'glm'
+  provider: 'kimi' | 'deepseek' | 'glm'
   configured: boolean
   connected: boolean
   model: string

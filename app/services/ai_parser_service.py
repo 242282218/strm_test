@@ -1,17 +1,21 @@
-import aiohttp
+﻿import aiohttp
 import asyncio
 import json
-from typing import Optional, Dict, Any
+import os
 from dataclasses import dataclass
+from typing import Any, Dict, Literal, Optional
+
 from app.core.config_manager import ConfigManager
 from app.core.logging import get_logger
 from app.core.retry import retry_on_transient, TransientError
 
 logger = get_logger(__name__)
 
+ProviderName = Literal["kimi", "glm", "deepseek"]
+
+
 @dataclass
 class AIParseResult:
-    """AI解析结果"""
     title: str
     original_title: Optional[str] = None
     year: Optional[int] = None
@@ -20,182 +24,329 @@ class AIParseResult:
     media_type: str = "movie"  # movie/tv/anime
     confidence: float = 0.0
 
+
+@dataclass
+class ProviderRuntimeConfig:
+    provider: ProviderName
+    api_key: str
+    base_url: str
+    model: str
+    timeout_seconds: int
+
+
 class AIParserService:
-    """AI辅助解析服务 (Zhipu AI)"""
-    
-    SYSTEM_PROMPT = """你是一个专业的媒体文件名解析JSON生成器。
+    """
+    AI parser with provider fallback.
 
-【重要约束】
-1. 只返回纯JSON，不要任何其他文字
-2. 严禁使用markdown代码块标记（如 ```json）
-3. 如果无法识别，返回 {"title": "[原始文件名]", "media_type": "unknown"}
-4. 确保输出可以被 json.loads() 直接解析
+    Default order: kimi -> glm -> deepseek
+    """
 
-【字段说明】
-- title: 中文标题（必填，如果原名是英文且翻译不明确，保留原名）
-- original_title: 英文或原始语言标题
-- year: 年份（4位数字）
-- media_type: "movie" 或 "tv" 或 "anime"
-- season: 季数（仅电视剧/动漫，数字，如1）
-- episode: 集数（仅电视剧/动漫，数字，如15）
-
-【示例】
-输入: The.Wandering.Earth.2.2023.BluRay.1080p.mkv
-输出: {"title":"流浪地球2","original_title":"The Wandering Earth 2","year":2023,"media_type":"movie","season":null,"episode":null}
-
-输入: 三体.Three-Body.S01E15.2023.WEB-DL.4K.mp4
-输出: {"title":"三体","original_title":"Three-Body","year":2023,"media_type":"tv","season":1,"episode":15}
-
-输入: [动漫国字幕组]进击的巨人 第四季 第28集[1080P].mp4
-输出: {"title":"进击的巨人","original_title":"Attack on Titan","year":2020,"media_type":"anime","season":4,"episode":28}
+    SYSTEM_PROMPT = """You are a media filename parser.
+Return JSON only. Do not wrap in markdown.
+If parsing fails, return {"title":"<original filename>","media_type":"unknown"}.
+Expected fields:
+- title (required)
+- original_title (optional)
+- year (optional integer)
+- media_type (movie|tv|anime|unknown)
+- season (optional integer)
+- episode (optional integer)
 """
 
+    DEFAULT_PROVIDER_ORDER: tuple[ProviderName, ...] = ("kimi", "glm", "deepseek")
     _instance = None
     _semaphore = None
 
     def __init__(self):
-        config = ConfigManager()
-        # 优先读取配置中的密钥，不再使用硬编码
-        self.api_key = (
-            config.get("glm.api_key")
-            or config.get("zhipu.api_key")
-            or config.get("api_keys.ai_api_key")
-            or config.get("ai.api_key", "")
-        )
-        self.model = config.get("glm.model") or config.get("ai.model", "glm-4.7-flash")
-        self.base_url = config.get("glm.base_url") or config.get("ai.base_url", "https://open.bigmodel.cn/api/paas/v4")
-        self.timeout = config.get("glm.timeout") or config.get("ai.timeout", 30)
-        
-        # 并发控制：最多 5 个并发请求
+        self._config = ConfigManager()
         if AIParserService._semaphore is None:
             AIParserService._semaphore = asyncio.Semaphore(5)
-            
+
+        self.provider_order = self._resolve_provider_order()
+        self.provider_configs = [self._build_provider_config(name) for name in self.provider_order]
+
+        # Compatibility fields used by legacy call sites.
+        self.api_key = next((cfg.api_key for cfg in self.provider_configs if cfg.api_key), "")
+        primary = self.provider_configs[0] if self.provider_configs else ProviderRuntimeConfig(
+            provider="glm",
+            api_key="",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            model="glm-4.7-flash",
+            timeout_seconds=30,
+        )
+        self.model = primary.model
+        self.base_url = primary.base_url
+        self.timeout = primary.timeout_seconds
+
     @classmethod
     def get_instance(cls):
         if not cls._instance:
             cls._instance = AIParserService()
         return cls._instance
-        
+
+    @staticmethod
+    def _first_non_empty(*values: Any, fallback: str = "") -> str:
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return fallback
+
+    @staticmethod
+    def _coerce_timeout(value: Any, default: int = 30) -> int:
+        try:
+            parsed = int(value)
+            if parsed <= 0:
+                return default
+            return min(parsed, 120)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _normalize_base_url(base_url: str) -> str:
+        return base_url.rstrip("/")
+
+    def _resolve_provider_order(self) -> list[ProviderName]:
+        raw = self._config.get("ai.provider_order")
+        candidates: list[str] = []
+        if isinstance(raw, list):
+            candidates = [str(item).strip().lower() for item in raw]
+        elif isinstance(raw, str):
+            candidates = [part.strip().lower() for part in raw.split(",")]
+
+        if not candidates:
+            candidates = list(self.DEFAULT_PROVIDER_ORDER)
+
+        valid: list[ProviderName] = []
+        for name in candidates:
+            if name in ("kimi", "glm", "deepseek") and name not in valid:
+                valid.append(name)  # type: ignore[arg-type]
+
+        # Ensure all defaults are present to keep fallback complete.
+        for name in self.DEFAULT_PROVIDER_ORDER:
+            if name not in valid:
+                valid.append(name)
+        return valid
+
+    def _build_provider_config(self, provider: ProviderName) -> ProviderRuntimeConfig:
+        if provider == "kimi":
+            api_key = self._first_non_empty(
+                self._config.get("kimi.api_key"),
+                os.getenv("SMART_MEDIA_KIMI_API_KEY"),
+                os.getenv("NVIDIA_API_KEY"),
+                os.getenv("NVIDIA_API_TOKEN"),
+                os.getenv("KIMI_API_KEY"),
+                fallback="",
+            )
+            base_url = self._first_non_empty(
+                self._config.get("kimi.base_url"),
+                os.getenv("KIMI_BASE_URL"),
+                fallback="https://integrate.api.nvidia.com/v1",
+            )
+            model = self._first_non_empty(
+                self._config.get("kimi.model"),
+                os.getenv("KIMI_MODEL"),
+                fallback="moonshotai/kimi-k2.5",
+            )
+            timeout = self._coerce_timeout(
+                self._first_non_empty(
+                    self._config.get("kimi.timeout"),
+                    os.getenv("KIMI_TIMEOUT"),
+                    fallback="30",
+                ),
+                default=30,
+            )
+            return ProviderRuntimeConfig(
+                provider=provider,
+                api_key=api_key,
+                base_url=self._normalize_base_url(base_url),
+                model=model,
+                timeout_seconds=timeout,
+            )
+
+        if provider == "deepseek":
+            api_key = self._first_non_empty(
+                self._config.get("deepseek.api_key"),
+                os.getenv("SMART_MEDIA_DEEPSEEK_API_KEY"),
+                os.getenv("DEEPSEEK_API_KEY"),
+                fallback="",
+            )
+            base_url = self._first_non_empty(
+                self._config.get("deepseek.base_url"),
+                os.getenv("DEEPSEEK_BASE_URL"),
+                fallback="https://api.deepseek.com/v1",
+            )
+            model = self._first_non_empty(
+                self._config.get("deepseek.model"),
+                os.getenv("DEEPSEEK_MODEL"),
+                fallback="deepseek-chat",
+            )
+            timeout = self._coerce_timeout(
+                self._first_non_empty(
+                    self._config.get("deepseek.timeout"),
+                    os.getenv("DEEPSEEK_TIMEOUT"),
+                    fallback="30",
+                ),
+                default=30,
+            )
+            return ProviderRuntimeConfig(
+                provider=provider,
+                api_key=api_key,
+                base_url=self._normalize_base_url(base_url),
+                model=model,
+                timeout_seconds=timeout,
+            )
+
+        api_key = self._first_non_empty(
+            self._config.get("glm.api_key"),
+            self._config.get("zhipu.api_key"),
+            os.getenv("SMART_MEDIA_GLM_API_KEY"),
+            os.getenv("GLM_API_KEY"),
+            os.getenv("SMART_MEDIA_ZHIPU_API_KEY"),
+            os.getenv("ZHIPUAI_API_KEY"),
+            self._config.get("api_keys.ai_api_key"),
+            fallback="",
+        )
+        base_url = self._first_non_empty(
+            self._config.get("glm.base_url"),
+            self._config.get("ai.base_url"),
+            os.getenv("GLM_BASE_URL"),
+            fallback="https://open.bigmodel.cn/api/paas/v4",
+        )
+        model = self._first_non_empty(
+            self._config.get("glm.model"),
+            self._config.get("ai.model"),
+            os.getenv("GLM_MODEL"),
+            fallback="glm-4.7-flash",
+        )
+        timeout = self._coerce_timeout(
+            self._first_non_empty(
+                self._config.get("glm.timeout"),
+                self._config.get("ai.timeout"),
+                os.getenv("GLM_TIMEOUT"),
+                fallback="30",
+            ),
+            default=30,
+        )
+        return ProviderRuntimeConfig(
+            provider=provider,
+            api_key=api_key,
+            base_url=self._normalize_base_url(base_url),
+            model=model,
+            timeout_seconds=timeout,
+        )
+
+    def has_available_provider(self) -> bool:
+        return any(cfg.api_key for cfg in self.provider_configs)
+
     @retry_on_transient()
-    async def _post_request(self, url: str, headers: dict, payload: dict) -> dict:
+    async def _post_request(self, url: str, headers: dict, payload: dict, timeout_seconds: int) -> dict:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 url,
                 headers=headers,
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
+                timeout=aiohttp.ClientTimeout(total=timeout_seconds),
             ) as resp:
                 if resp.status in {408, 429} or resp.status >= 500:
                     raise TransientError(f"AI API transient error: {resp.status}")
                 if resp.status != 200:
                     text = await resp.text()
-                    logger.error(f"AI API error: {resp.status} - {text}")
+                    logger.warning("AI API error %s: %s", resp.status, text[:300])
                     return {}
                 return await resp.json()
 
     def _extract_json(self, content: str) -> Optional[Dict[str, Any]]:
-        """
-        从 AI 响应内容中提取 JSON 对象
-        """
         import re
-        
-        # 1. 预处理：移除所有的 markdown 代码块标记
-        cleaned = re.sub(r'```(?:json)?\s*', '', content)
-        cleaned = cleaned.replace('```', '').strip()
-        
-        # 2. 尝试直接解析
+
+        cleaned = re.sub(r"```(?:json)?\\s*", "", content)
+        cleaned = cleaned.replace("```", "").strip()
+
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError:
             pass
-            
-        # 3. 正则提取第一个 { ... } 结构
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+
+        match = re.search(r"\\{.*\\}", cleaned, re.DOTALL)
         if match:
             json_str = match.group()
             try:
                 return json.loads(json_str)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Extracted JSON string is invalid: {e}")
-                
+            except json.JSONDecodeError as exc:
+                logger.warning("Extracted JSON is invalid: %s", exc)
         return None
 
     def _validate_result(self, result: Dict[str, Any]) -> bool:
-        """
-        验证解析结果的有效性
-        
-        用途: 验证 AI 解析结果是否符合基本要求
-        输入:
-            - result (Dict[str, Any]): AI 解析的 JSON 结果
-        输出:
-            - bool: 是否有效
-        副作用: 无
-        """
         if not result or not isinstance(result, dict):
             return False
-            
-        # 必须有标题
         if not result.get("title"):
             return False
-            
-        # 媒体类型必须合法
         if result.get("media_type") not in ["movie", "tv", "anime", "unknown"]:
             result["media_type"] = "unknown"
-            
         return True
 
-    async def parse_filename(self, filename: str) -> Optional[AIParseResult]:
-        """使用AI解析文件名 (带并发控制)"""
-        if not self.api_key:
-            logger.warning("AI API key not configured")
-            return None
-            
-        # 使用信号量控制并发
-        async with self._semaphore:
-            url = f"{self.base_url}/chat/completions"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
-            }
-            
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": self.SYSTEM_PROMPT},
-                    {"role": "user", "content": f"请解析这个文件名: {filename}"}
-                ],
-                "max_tokens": 512,
-                "temperature": 0.1,
-                "stream": False
-            }
-            
-            try:
-                data = await self._post_request(url, headers, payload)
-                if not data or "choices" not in data or not data["choices"]:
-                    return None
+    async def _parse_with_provider(self, filename: str, cfg: ProviderRuntimeConfig) -> Optional[AIParseResult]:
+        url = f"{cfg.base_url}/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {cfg.api_key}",
+        }
+        payload = {
+            "model": cfg.model,
+            "messages": [
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {"role": "user", "content": f"Parse this filename: {filename}"},
+            ],
+            "max_tokens": 512,
+            "temperature": 0.1,
+            "stream": False,
+        }
 
-                content = data["choices"][0]["message"]["content"]
-                
-                # 使用增强的提取逻辑
-                result = self._extract_json(content)
-                
-                if self._validate_result(result):
-                    return AIParseResult(
-                        title=result.get("title", ""),
-                        original_title=result.get("original_title"),
-                        year=result.get("year"),
-                        season=result.get("season"),
-                        episode=result.get("episode"),
-                        media_type=result.get("media_type", "movie"),
-                        confidence=0.95
-                    )
-                else:
-                    logger.error(f"AI response validation failed for '{filename}': {content[:200]}")
-                    return None
-                    
-            except Exception as e:
-                logger.error(f"AI parse error for {filename}: {e}")
-                return None
+        data = await self._post_request(url, headers, payload, cfg.timeout_seconds)
+        if not data or "choices" not in data or not data["choices"]:
+            return None
+
+        content = data["choices"][0]["message"]["content"]
+        result = self._extract_json(content)
+        if not self._validate_result(result):
+            logger.warning(
+                "AI response validation failed for provider=%s filename=%s content=%s",
+                cfg.provider,
+                filename,
+                content[:200],
+            )
+            return None
+
+        return AIParseResult(
+            title=result.get("title", ""),
+            original_title=result.get("original_title"),
+            year=result.get("year"),
+            season=result.get("season"),
+            episode=result.get("episode"),
+            media_type=result.get("media_type", "movie"),
+            confidence=0.95,
+        )
+
+    async def parse_filename(self, filename: str) -> Optional[AIParseResult]:
+        if not self.has_available_provider():
+            logger.warning("No AI provider API key configured")
+            return None
+
+        async with self._semaphore:
+            for cfg in self.provider_configs:
+                if not cfg.api_key:
+                    continue
+                try:
+                    parsed = await self._parse_with_provider(filename, cfg)
+                    if parsed:
+                        return parsed
+                except Exception as exc:
+                    logger.warning("AI parse failed on provider=%s filename=%s error=%s", cfg.provider, filename, exc)
+                    continue
+
+        return None
 
 
 def get_ai_parser_service() -> AIParserService:

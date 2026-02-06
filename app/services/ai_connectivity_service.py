@@ -2,6 +2,7 @@
 AI connectivity test service for smart rename flows.
 
 Tests provider connectivity for:
+- kimi (NVIDIA OpenAI-compatible endpoint)
 - deepseek
 - glm (Zhipu)
 """
@@ -21,7 +22,7 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-ProviderName = Literal["deepseek", "glm"]
+ProviderName = Literal["kimi", "deepseek", "glm"]
 
 
 @dataclass
@@ -70,6 +71,48 @@ class AIConnectivityService:
             return default
 
     def _get_provider_config(self, provider: ProviderName) -> ProviderRuntimeConfig:
+        if provider == "kimi":
+            api_key = self._first_non_empty(
+                [
+                    self._config.get("kimi.api_key"),
+                    os.getenv("SMART_MEDIA_KIMI_API_KEY"),
+                    os.getenv("NVIDIA_API_KEY"),
+                    os.getenv("NVIDIA_API_TOKEN"),
+                    os.getenv("KIMI_API_KEY"),
+                ]
+            )
+            base_url = self._first_non_empty(
+                [
+                    self._config.get("kimi.base_url"),
+                    os.getenv("KIMI_BASE_URL"),
+                    "https://integrate.api.nvidia.com/v1",
+                ]
+            )
+            model = self._first_non_empty(
+                [
+                    self._config.get("kimi.model"),
+                    os.getenv("KIMI_MODEL"),
+                    "moonshotai/kimi-k2.5",
+                ]
+            )
+            timeout = self._coerce_timeout(
+                self._first_non_empty(
+                    [
+                        self._config.get("kimi.timeout"),
+                        os.getenv("KIMI_TIMEOUT"),
+                        8,
+                    ],
+                    fallback="8",
+                )
+            )
+            return ProviderRuntimeConfig(
+                provider=provider,
+                api_key=api_key,
+                base_url=self._normalize_base_url(base_url),
+                model=model,
+                timeout_seconds=timeout,
+            )
+
         if provider == "deepseek":
             api_key = self._first_non_empty(
                 [
@@ -215,12 +258,12 @@ class AIConnectivityService:
 
     async def test_providers(
         self,
-        providers: Sequence[ProviderName] = ("deepseek", "glm"),
+        providers: Sequence[ProviderName] = ("kimi", "deepseek", "glm"),
         timeout_seconds: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         normalized: List[ProviderName] = []
         for name in providers:
-            if name in ("deepseek", "glm") and name not in normalized:
+            if name in ("kimi", "deepseek", "glm") and name not in normalized:
                 normalized.append(name)
 
         tasks = [self.test_provider(provider=name, timeout_seconds=timeout_seconds) for name in normalized]
@@ -231,4 +274,3 @@ class AIConnectivityService:
 
 def get_ai_connectivity_service() -> AIConnectivityService:
     return AIConnectivityService.get_instance()
-

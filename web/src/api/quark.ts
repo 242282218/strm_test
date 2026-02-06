@@ -206,7 +206,7 @@ export interface QuarkRenameExecuteResponse {
 }
 
 export interface QuarkAIConnectivityProviderResult {
-  provider: 'deepseek' | 'glm'
+  provider: 'kimi' | 'deepseek' | 'glm'
   configured: boolean
   connected: boolean
   model: string

@@ -178,8 +178,8 @@ class MediaParser:
         # 3. 调用 AI 解析
         from app.services.ai_parser_service import get_ai_parser_service
         ai_service = get_ai_parser_service()
-        
-        if not ai_service.api_key:
+
+        if not ai_service.has_available_provider():
             return info
             
         ai_result = await ai_service.parse_filename(filename)

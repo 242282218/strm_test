@@ -352,6 +352,32 @@ class GLMConfig(BaseModel):
         return "https://open.bigmodel.cn/api/paas/v4"
 
 
+class KimiConfig(BaseModel):
+    """Kimi (NVIDIA OpenAI-compatible) configuration"""
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str = Field("", description="Kimi API Key", max_length=2048)
+    base_url: str = Field("https://integrate.api.nvidia.com/v1", description="Kimi base URL", max_length=MAX_URL_LENGTH)
+    model: str = Field("moonshotai/kimi-k2.5", description="Kimi model", max_length=256)
+    timeout: int = Field(8, description="Kimi timeout in seconds", ge=MIN_TIMEOUT_SECONDS, le=MAX_TIMEOUT_SECONDS)
+
+    @field_validator('api_key')
+    @classmethod
+    def validate_and_decrypt_api_key(cls, v):
+        if v and v.startswith("encrypted:"):
+            return get_decrypted_config_value(v)
+        return v
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url(cls, v):
+        if v:
+            v = v.rstrip('/')
+            validate_http_url(v, "kimi.base_url")
+            return v
+        return "https://integrate.api.nvidia.com/v1"
+
+
 class CorsConfig(BaseModel):
     """CORS settings"""
     model_config = ConfigDict(extra="forbid")
@@ -403,6 +429,7 @@ class AppConfig(BaseModel):
     zhipu: ZhipuConfig = Field(default_factory=ZhipuConfig, description="鏅鸿氨AI閰嶇疆")
     deepseek: DeepSeekConfig = Field(default_factory=DeepSeekConfig, description="DeepSeek AI configuration")
     glm: GLMConfig = Field(default_factory=GLMConfig, description="GLM AI configuration")
+    kimi: KimiConfig = Field(default_factory=KimiConfig, description="Kimi AI configuration")
     cors: CorsConfig = Field(default_factory=CorsConfig, description="CORS settings")
     security: SecurityConfig = Field(default_factory=SecurityConfig, description="Security settings")
 
@@ -472,6 +499,7 @@ class AppConfig(BaseModel):
             "SMART_MEDIA_ZHIPU_API_KEY": ["zhipu", "api_key"],
             "SMART_MEDIA_DEEPSEEK_API_KEY": ["deepseek", "api_key"],
             "SMART_MEDIA_GLM_API_KEY": ["glm", "api_key"],
+            "SMART_MEDIA_KIMI_API_KEY": ["kimi", "api_key"],
             "SMART_MEDIA_TELEGRAM_BOT_TOKEN": ["telegram", "bot_token"],
             "SMART_MEDIA_TELEGRAM_CHAT_ID": ["telegram", "chat_id"],
             "SMART_MEDIA_QUARK_COOKIE": ["quark", "cookie"],

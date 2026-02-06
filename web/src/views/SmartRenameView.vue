@@ -635,6 +635,13 @@ function providerStateText(provider?: { configured: boolean; connected: boolean 
   return '未配置'
 }
 
+function providerLabel(provider?: string): string {
+  if (provider === 'kimi') return 'Kimi2.5'
+  if (provider === 'deepseek') return 'DeepSeek'
+  if (provider === 'glm') return 'GLM'
+  return provider || 'Unknown'
+}
+
 async function runAiConnectivityTest() {
   testingAiConnectivity.value = true
   try {
@@ -644,9 +651,9 @@ async function runAiConnectivityTest() {
 
     aiConnectivityResult.value = result
 
-    const deepseek = result.providers.find((item) => item.provider === 'deepseek')
-    const glm = result.providers.find((item) => item.provider === 'glm')
-    const summary = `DeepSeek: ${providerStateText(deepseek)}，GLM: ${providerStateText(glm)}`
+    const summary = result.providers
+      .map((item) => `${providerLabel(item.provider)}: ${providerStateText(item)}`)
+      .join('，')
     if (result.all_connected) {
       ElMessage.success(`AI 连通性测试通过，${summary}`)
     } else {

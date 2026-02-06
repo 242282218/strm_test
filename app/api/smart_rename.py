@@ -536,11 +536,11 @@ async def test_smart_rename_ai_connectivity(
 ):
     """
     Test AI provider connectivity for smart rename (local interface).
-    Always tests both deepseek and glm.
+    Always tests kimi, deepseek and glm.
     """
     service = get_ai_connectivity_service()
     results = await service.test_providers(
-        providers=("deepseek", "glm"),
+        providers=("kimi", "deepseek", "glm"),
         timeout_seconds=timeout_seconds,
     )
     return {
