@@ -215,9 +215,10 @@ const loadFiles = async () => {
     total.value = response.total
     
     console.log('[QuarkBrowser] 文件列表已设置:', fileList.value.length, '个文件')
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as { response?: unknown; message?: string }
     console.error('[QuarkBrowser] 加载失败:', error)
-    console.error('[QuarkBrowser] 错误详情:', error.response || error.message)
+    console.error('[QuarkBrowser] 错误详情:', err.response || err.message)
     ElMessage.error('加载文件列表失败，请检查网络连接')
   } finally {
     loading.value = false

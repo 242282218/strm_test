@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useFileManagerStore } from '../../stores/file-manager'
 import { Search, Refresh, Delete, Grid, List as ListIcon, FolderAdd, Upload, ArrowLeft } from '@element-plus/icons-vue'
 
 const store = useFileManagerStore()
+const searchQuery = ref('')
 defineEmits(['refresh', 'delete'])
 
 const handleBack = () => {

@@ -267,3 +267,51 @@ export async function executeCloudRename(
   const response = await api.post<any>('/quark/execute-cloud-rename', params)
   return response.data
 }
+
+// ========== Compatibility API for legacy file view ==========
+
+export interface QuarkFile extends QuarkFileItem {
+  file: boolean
+}
+
+export interface QuarkConfig {
+  referer: string
+  root_id: string
+  only_video: boolean
+  cookie_configured: boolean
+}
+
+export interface SyncResult {
+  message: string
+  result: {
+    success: number
+    failed: number
+    total: number
+    files: string[]
+  }
+}
+
+export const getQuarkFiles = async (parent: string = '0'): Promise<{ files: QuarkFile[]; count: number }> => {
+  const data = await browseQuarkDirectory({
+    pdir_fid: parent,
+    page: 1,
+    size: 200,
+    file_type: 'all'
+  })
+
+  return {
+    files: data.items.map((item) => ({
+      ...item,
+      file: item.file_type !== 0
+    })),
+    count: data.total
+  }
+}
+
+export const getQuarkConfig = async (): Promise<QuarkConfig> => {
+  return api.get('/quark/config')
+}
+
+export const syncQuarkFiles = async (): Promise<SyncResult> => {
+  return api.post('/quark/sync')
+}

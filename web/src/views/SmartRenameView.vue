@@ -312,7 +312,7 @@
               </div>
               <div class="stat-item">
                 <span class="stat-label">置信度</span>
-                <span class="stat-value info">{{ Math.round(previewData.average_confidence * 100) }}%</span>
+                <span class="stat-value info">{{ Math.round((previewData.average_confidence ?? 0) * 100) }}%</span>
               </div>
             </div>
           </div>
@@ -835,7 +835,9 @@ const selectedPath = ref('')
 const analyzing = ref(false)
 const executing = ref(false)
 const selectAll = ref(false)
-const filterType = ref<'all' | 'pending' | 'confirmed' | 'matched'>('all')
+const filterType = ref<'all' | 'pending' | 'confirmed' | 'matched' | 'high_confidence' | 'low_confidence'>('all')
+const sortBy = ref<'filename' | 'confidence' | 'type' | 'status'>('filename')
+const searchKeyword = ref('')
 
 // 云盘模式状态
 const isCloudMode = ref(false)
@@ -852,6 +854,11 @@ const options = reactive({
   recursive: true,
   createFolders: true,
   autoConfirm: false,
+  includeQuality: false,
+  includeSource: false,
+  includeTmdbId: false,
+  backupBeforeRename: false,
+  dryRun: false,
   aiThreshold: 70
 })
 
@@ -876,8 +883,10 @@ const previewData = ref<{
   total_items: number
   matched_items: number
   needs_confirmation: number
+  average_confidence?: number
   algorithm_used: string
   naming_standard: string
+  analysis_time?: number
 } | null>(null)
 
 const selectedItems = ref<string[]>([])
@@ -888,6 +897,7 @@ const editingItem = reactive<Partial<SmartRenameItem>>({})
 
 // Settings
 const showSettings = ref(false)
+const showHelp = ref(false)
 const settingsTab = ref('template')
 
 // Result dialog
@@ -912,15 +922,39 @@ const filteredItems = computed(() => {
 
   let items = previewData.value.items
 
+  if (searchKeyword.value.trim()) {
+    const keyword = searchKeyword.value.trim().toLowerCase()
+    items = items.filter((item) => {
+      const original = (item.original_name || item.original_path || '').toLowerCase()
+      const renamed = (item.new_name || '').toLowerCase()
+      return original.includes(keyword) || renamed.includes(keyword)
+    })
+  }
+
   if (filterType.value === 'pending') {
     items = items.filter(i => i.needs_confirmation)
   } else if (filterType.value === 'confirmed') {
     items = items.filter(i => !i.needs_confirmation)
   } else if (filterType.value === 'matched') {
     items = items.filter(i => i.tmdb_id)
+  } else if (filterType.value === 'high_confidence') {
+    items = items.filter(i => (i.overall_confidence || 0) >= 0.9)
+  } else if (filterType.value === 'low_confidence') {
+    items = items.filter(i => (i.overall_confidence || 0) < 0.6)
   }
 
-  return items
+  const sortedItems = [...items]
+  if (sortBy.value === 'confidence') {
+    sortedItems.sort((a, b) => (b.overall_confidence || 0) - (a.overall_confidence || 0))
+  } else if (sortBy.value === 'type') {
+    sortedItems.sort((a, b) => (a.media_type || '').localeCompare(b.media_type || ''))
+  } else if (sortBy.value === 'status') {
+    sortedItems.sort((a, b) => Number(Boolean(a.needs_confirmation)) - Number(Boolean(b.needs_confirmation)))
+  } else {
+    sortedItems.sort((a, b) => (a.original_name || a.original_path).localeCompare(b.original_name || b.original_path))
+  }
+
+  return sortedItems
 })
 
 /**
@@ -1221,6 +1255,56 @@ const removeItem = (item: SmartRenameItem) => {
 const saveSettings = () => {
   ElMessage.success('配置已保存')
   showSettings.value = false
+}
+
+const confirmSelected = () => {
+  if (!previewData.value || selectedItems.value.length === 0) return
+  const selectedSet = new Set(selectedItems.value)
+  previewData.value.items = previewData.value.items.map((item) =>
+    selectedSet.has(item.original_path) ? { ...item, needs_confirmation: false } : item
+  )
+  ElMessage.success(`已确认 ${selectedItems.value.length} 个文件`)
+}
+
+const editSelected = () => {
+  if (!previewData.value || selectedItems.value.length === 0) return
+  if (selectedItems.value.length > 1) {
+    ElMessage.info('批量编辑开发中，请先选择单个文件')
+    return
+  }
+  const item = previewData.value.items.find((i) => i.original_path === selectedItems.value[0])
+  if (item) {
+    editItem(item)
+  }
+}
+
+const refreshPreview = async () => {
+  await startAnalysis()
+}
+
+const exportPreview = () => {
+  if (!previewData.value) return
+
+  const payload = {
+    exported_at: new Date().toISOString(),
+    batch_id: previewData.value.batch_id,
+    total_items: previewData.value.total_items,
+    matched_items: previewData.value.matched_items,
+    needs_confirmation: previewData.value.needs_confirmation,
+    items: previewData.value.items
+  }
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `smart-rename-preview-${Date.now()}.json`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+
+  ElMessage.success('预览结果已导出')
 }
 
 /**

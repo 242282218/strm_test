@@ -132,7 +132,7 @@
               <div class="cache-label">缓存条目</div>
             </div>
             <div class="cache-item">
-              <div class="cache-value">{{ cacheStats.hitRate }}%</div>
+              <div class="cache-value">{{ cacheStats.hit_rate }}%</div>
               <div class="cache-label">命中率</div>
             </div>
             <div class="cache-item">
@@ -215,7 +215,7 @@ const services = ref<ServiceStatus[]>([])
 // 缓存统计
 const cacheStats = ref<CacheDetail>({
   size: 0,
-  hitRate: 0,
+  hit_rate: 0,
   ttl: 600
 })
 

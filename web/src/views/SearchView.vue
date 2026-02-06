@@ -401,7 +401,7 @@ const saveToCloud = async (item: SearchResult) => {
   }
 
   try {
-    const { value: targetDir } = await ElMessageBox.prompt(
+    const promptResult = await ElMessageBox.prompt(
       '请输入转存目录，例如 /电影 或 /电视剧',
       '转存到夸克网盘',
       {
@@ -411,6 +411,7 @@ const saveToCloud = async (item: SearchResult) => {
         inputPlaceholder: '例如 /电影'
       }
     )
+    const targetDir = (promptResult as { value?: string }).value
 
     let quarkDriveId: number | undefined
     try {
