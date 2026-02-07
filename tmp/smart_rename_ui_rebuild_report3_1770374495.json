@@ -1,8 +1,0 @@
-{
-  "preview_status": null,
-  "execute_status": null,
-  "rollback_status": null,
-  "errors": [
-    "Timeout 30000ms exceeded."
-  ]
-}
