@@ -79,7 +79,9 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     if status_code >= 500:
         logger.exception(f"HTTP exception: {status_code} | request_id={request_id}")
         message = "服务器内部错误"
-        detail = None
+        # Return sanitized detail for easier debugging in self-hosted deployments.
+        # Sensitive values are redacted.
+        detail = redact_sensitive(str(exc.detail)) if exc.detail else None
     else:
         logger.warning(f"HTTP exception: {status_code} - {exc.detail} | request_id={request_id}")
         message = _STATUS_MESSAGE.get(status_code, "请求失败")
