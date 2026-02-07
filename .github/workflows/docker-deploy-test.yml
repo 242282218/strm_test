@@ -306,16 +306,83 @@ jobs:
         run: |
           cat > remote-deploy.sh <<'EOF'
           set -euo pipefail
+
+          SUDO=""
+          if [ "$(id -u)" -ne 0 ]; then
+            SUDO="sudo"
+          fi
+
+          ensure_docker() {
+            if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+              return 0
+            fi
+
+            if [ -f /etc/os-release ]; then
+              . /etc/os-release
+            else
+              echo "Unsupported OS: /etc/os-release not found"
+              exit 1
+            fi
+
+            case "${ID:-}" in
+              ubuntu|debian)
+                $SUDO apt-get update
+                $SUDO apt-get install -y ca-certificates curl gnupg lsb-release
+                $SUDO install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL "https://download.docker.com/linux/${ID}/gpg" | $SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                $SUDO chmod a+r /etc/apt/keyrings/docker.gpg
+                CODENAME="${VERSION_CODENAME:-}"
+                if [ -z "$CODENAME" ]; then
+                  CODENAME="$(lsb_release -cs)"
+                fi
+                echo \
+                  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${ID} ${CODENAME} stable" | \
+                  $SUDO tee /etc/apt/sources.list.d/docker.list > /dev/null
+                $SUDO apt-get update
+                $SUDO apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+              centos|rhel|rocky|almalinux)
+                if command -v dnf >/dev/null 2>&1; then
+                  $SUDO dnf -y install dnf-plugins-core
+                  $SUDO dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                  $SUDO dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                else
+                  $SUDO yum -y install yum-utils
+                  $SUDO yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                  $SUDO yum -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                fi
+                ;;
+              fedora)
+                $SUDO dnf -y install dnf-plugins-core
+                $SUDO dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+                $SUDO dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+              *)
+                echo "Unsupported Linux distro: ${ID:-unknown}"
+                exit 1
+                ;;
+            esac
+
+            $SUDO systemctl enable --now docker || true
+          }
+
+          ensure_docker
+
+          DOCKER_BIN="docker"
+          if [ -n "$SUDO" ]; then
+            DOCKER_BIN="$SUDO docker"
+          fi
+
           mkdir -p /root/strm_test/data
           cd /root/strm_test
 
           if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+            echo "$GHCR_TOKEN" | $DOCKER_BIN login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           fi
 
-          docker compose pull
-          docker compose up -d --remove-orphans
-          docker compose ps
+          $DOCKER_BIN compose pull
+          $DOCKER_BIN compose up -d --remove-orphans
+          $DOCKER_BIN compose ps
           curl -fsS http://127.0.0.1:18000/health
           EOF
 
