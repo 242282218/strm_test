@@ -1,4 +1,4 @@
-"""
+﻿"""
 夸克服务模块
 
 参考: OpenList driver.go
@@ -33,6 +33,30 @@ class QuarkService:
         self.cookie = cookie
         self.referer = referer
         logger.info("QuarkService initialized")
+
+    @staticmethod
+    def _looks_like_fid(segment: str) -> bool:
+        s = (segment or "").strip().lower()
+        if len(s) != 32:
+            return False
+        return all(ch in "0123456789abcdef" for ch in s)
+
+    @staticmethod
+    def _file_model_from_info(info: Dict[str, Any]) -> FileModel:
+        is_dir = info.get("file_type") == 0
+        return FileModel(
+            fid=info.get("fid", ""),
+            file_name=info.get("file_name", "Unknown"),
+            file=not is_dir,
+            category=info.get("category", 0),
+            size=info.get("size", 0),
+            l_created_at=info.get("l_created_at", 0),
+            l_updated_at=info.get("l_updated_at", 0),
+            created_at=info.get("created_at", 0),
+            updated_at=info.get("updated_at", 0),
+            mime_type=info.get("mime_type"),
+            etag=info.get("etag"),
+        )
 
     async def get_files(
         self,
@@ -113,61 +137,122 @@ class QuarkService:
         """
         result = await self.client.get_download_link(file_id)
         download_url = result.get("url", "")
+        latest_cookie = self.client.cookie or self.cookie
+        self.cookie = latest_cookie
 
         logger.debug(f"Got download link for {file_id}")
 
         return LinkModel(
             url=download_url,
             headers={
-                "Cookie": self.cookie,
+                "Cookie": latest_cookie,
                 "Referer": self.referer,
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/2.5.20 Chrome/100.0.4896.160 Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch"
             },
             concurrency=3,
             part_size=10 * 1024 * 1024  # 10MB
         )
-
     async def get_file_by_path(self, path: str) -> FileModel:
         """
-        根据路径获取文件信息
-        
+        根据路径获取文件信息。
+
         Args:
             path: 文件路径 (e.g. "Movies/Inception/Inception.mp4")
-            
+
         Returns:
-            FileModel: 文件信息，如果未找到返回None
+            FileModel: 文件信息，如果未找到返回 None
         """
         parts = [p for p in path.split("/") if p]
         current_fid = "0"
         current_file = None
-        
+        start_index = 0
+
         if not parts:
             # 根目录
             return FileModel(
-                fid="0", 
-                file_name="/", 
-                is_dir=True, 
-                size=0, 
+                fid="0",
+                file_name="/",
+                file=False,
+                size=0,
                 category=0,
+                l_created_at=0,
+                l_updated_at=0,
                 created_at=0,
-                updated_at=0
+                updated_at=0,
             )
 
-        for part in parts:
+        # 兼容 legacy 路径: 以 fid 作为首段（如 fid/目录/文件）
+        first = parts[0]
+        if self._looks_like_fid(first):
+            try:
+                info = await self.client.get_file_info(first)
+                if info and info.get("fid"):
+                    current_file = self._file_model_from_info(info)
+                    current_fid = current_file.fid
+                    start_index = 1
+            except Exception:
+                # 首段虽然像 fid，但也可能是普通目录名，回退为标准路径解析
+                current_fid = "0"
+                current_file = None
+                start_index = 0
+
+        for part in parts[start_index:]:
             found = False
             files = await self.get_files(parent=current_fid)
-            
+
             for file in files:
-                if file.file_name == part:
+                if file.file_name == part or unescape(file.file_name) == part:
                     current_fid = file.fid
                     current_file = file
                     found = True
                     break
-            
+
             if not found:
                 return None
-                
+
         return current_file
+
+    async def get_file_info(self, fid: str) -> Dict[str, Any]:
+        """
+        获取单个文件/目录信息。
+        """
+        return await self.client.get_file_info(fid)
+
+    async def get_full_path_by_fid(self, fid: str) -> str:
+        """
+        通过 fid 反查完整路径（以文件名路径表示，不包含根 "0"）。
+
+        示例:
+            Movies/Inception/Inception.mkv
+        """
+        current_fid = (fid or "").strip()
+        if not current_fid:
+            return ""
+
+        parts: List[str] = []
+        visited = set()
+
+        while current_fid and current_fid != "0":
+            if current_fid in visited:
+                logger.warning(f"Detected fid loop while resolving path: {current_fid}")
+                break
+            visited.add(current_fid)
+
+            info = await self.client.get_file_info(current_fid)
+            if not info:
+                break
+
+            name = unescape((info.get("file_name") or "").strip())
+            if name:
+                parts.append(name)
+
+            parent = str(info.get("pdir_fid") or "0").strip()
+            if not parent or parent == current_fid:
+                break
+            current_fid = parent
+
+        parts.reverse()
+        return "/".join(parts)
 
     async def get_transcoding_link(self, file_id: str) -> LinkModel:
         """
@@ -447,3 +532,4 @@ class QuarkService:
         
         logger.info(f"递归扫描完成，找到 {len(all_video_files)} 个视频文件")
         return all_video_files[:max_files]
+

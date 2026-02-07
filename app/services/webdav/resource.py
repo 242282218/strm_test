@@ -1,4 +1,4 @@
-import mimetypes
+﻿import mimetypes
 from wsgidav.dav_provider import DAVCollection, DAVNonCollection
 from wsgidav.dav_error import DAVError
 from app.services.quark_service import QuarkService
@@ -87,21 +87,23 @@ class QuarkFileResource(DAVNonCollection, QuarkResource):
 
     def get_content(self):
         """
-        获取文件内容
-        核心逻辑：获取直链并重定向
+        获取文件内容。
+        核心逻辑：优先跳转到可直接播放的转码链接。
         """
         try:
-            # 获取下载链接
+            # 优先使用转码链接：通常无需夸克 Cookie/Referer，播放器兼容性更高
             link = self.provider.sync_call(
-                self.quark_service.get_download_link(self.file_info.fid)
+                self.quark_service.get_transcoding_link(self.file_info.fid)
             )
-            
+            if not link or not getattr(link, "url", None):
+                # 兜底到下载链接（部分环境可能需要特定请求头）
+                link = self.provider.sync_call(
+                    self.quark_service.get_download_link(self.file_info.fid)
+                )
+
             logger.info(f"Redirecting {self.path} to {link.url[:50]}...")
-            
-            # WsgiDAV 302 重定向支持
-            # 注意：这需要客户端支持处理 302 跳转
             raise DAVError(307, add_headers=[("Location", link.url)])
-            
+
         except DAVError:
             raise
         except Exception as e:
@@ -115,3 +117,4 @@ class QuarkFileResource(DAVNonCollection, QuarkResource):
     def get_etag(self):
         """获取 ETag"""
         return None
+

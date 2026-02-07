@@ -8,8 +8,6 @@ STRM 服务模块
 
 from __future__ import annotations
 
-from typing import List
-
 from app.core.database import Database
 from app.core.logging import get_logger
 from app.services.strm_generator import STRMGenerator
@@ -29,6 +27,7 @@ class StrmService:
         strm_url_mode: str = "redirect",
         max_files: int = 0,
         only_video: bool = True,
+        overwrite_existing: bool = False,
     ):
         self.cookie = cookie
         self.database = database
@@ -37,6 +36,7 @@ class StrmService:
         self.strm_url_mode = strm_url_mode
         self.max_files = max_files
         self.only_video = only_video
+        self.overwrite_existing = overwrite_existing
         self._generator: STRMGenerator | None = None
         logger.info(f"StrmService initialized, mode={strm_url_mode}, recursive={recursive}")
 
@@ -51,16 +51,25 @@ class StrmService:
             p = p.rstrip("/")
         return p
 
-    async def scan_directory(self, remote_path: str, local_path: str, concurrent_limit: int = 5) -> List[str]:
+    async def scan_directory(self, remote_path: str, local_path: str, concurrent_limit: int = 5) -> dict:
         remote_path = self._normalize_remote_path(remote_path)
         remote_prefix = remote_path.strip("/")  # used for WebDAV path & proxy fallback
+        resolved_remote_prefix = remote_prefix
 
         self._generator = STRMGenerator(
             cookie=self.cookie,
             output_dir=local_path,
             base_url=self.base_url,
             strm_url_mode=self.strm_url_mode,
+            overwrite_existing=self.overwrite_existing,
         )
+        result = {
+            "strms": [],
+            "generated_count": 0,
+            "skipped_count": 0,
+            "failed_count": 0,
+            "total_files": 0,
+        }
 
         try:
             if remote_path == "/":
@@ -72,7 +81,11 @@ class StrmService:
                     recursive=self.recursive,
                     concurrent_limit=concurrent_limit,
                 )
-                generated = stats.get("files", [])
+                result["strms"] = stats.get("files", [])
+                result["generated_count"] = stats.get("generated_files", 0)
+                result["skipped_count"] = stats.get("skipped_files", 0)
+                result["failed_count"] = stats.get("failed_files", 0)
+                result["total_files"] = stats.get("total_files", 0)
             else:
                 # 先尝试通过路径获取文件
                 node = await self._generator.service.get_file_by_path(remote_path)
@@ -80,7 +93,8 @@ class StrmService:
                 # 如果路径查找失败，尝试通过文件ID获取（支持从前端文件浏览器直接传入ID）
                 if not node:
                     try:
-                        file_info = await self._generator.service.client.get_file_info(remote_path.lstrip('/'))
+                        fid = remote_path.lstrip("/")
+                        file_info = await self._generator.service.get_file_info(fid)
                         if file_info and file_info.get('fid'):
                             from app.models.quark import FileModel
                             info = file_info
@@ -98,6 +112,10 @@ class StrmService:
                                 l_updated_at=info.get('l_updated_at', 0)
                             )
                             logger.info(f"Got file by ID: {node.file_name}, is_dir={node.is_dir}, file={node.file}")
+                            full_path = await self._generator.service.get_full_path_by_fid(node.fid)
+                            if full_path:
+                                resolved_remote_prefix = full_path
+                                logger.info(f"Resolved full path by fid: {node.fid} -> {resolved_remote_prefix}")
                     except Exception as e:
                         logger.warning(f"Failed to get file by ID: {e}")
                 
@@ -107,20 +125,29 @@ class StrmService:
                 if node.is_dir:
                     stats = await self._generator.generate_strm_files(
                         root_id=node.fid,
-                        remote_path=remote_prefix,
+                        remote_path=resolved_remote_prefix,
                         only_video=self.only_video,
                         max_files=self.max_files,
                         recursive=self.recursive,
                         concurrent_limit=concurrent_limit,
                     )
-                    generated = stats.get("files", [])
+                    result["strms"] = stats.get("files", [])
+                    result["generated_count"] = stats.get("generated_files", 0)
+                    result["skipped_count"] = stats.get("skipped_files", 0)
+                    result["failed_count"] = stats.get("failed_files", 0)
+                    result["total_files"] = stats.get("total_files", 0)
                 else:
-                    file_remote_path = remote_prefix or node.file_name
+                    file_remote_path = resolved_remote_prefix or node.file_name
                     rel_path = await self._generator.generate_single_file_strm(
                         file_id=node.fid,
                         remote_path=file_remote_path,
                     )
-                    generated = [rel_path] if rel_path else []
+                    result["total_files"] = 1
+                    if rel_path:
+                        result["strms"] = [rel_path]
+                        result["generated_count"] = 1
+                    else:
+                        result["skipped_count"] = 1
 
             # 保存扫描记录（用于 UI 展示/历史），失败不影响主流程
             try:
@@ -136,7 +163,7 @@ class StrmService:
             except Exception as e:
                 logger.warning(f"Trigger Emby refresh failed (ignored): {e}")
 
-            return generated
+            return result
         finally:
             await self.close()
 
@@ -145,4 +172,3 @@ class StrmService:
             await self._generator.close()
             self._generator = None
         logger.debug("StrmService closed")
-

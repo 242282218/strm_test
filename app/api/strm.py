@@ -23,6 +23,7 @@ async def scan_directory(
     concurrent_limit: int = Query(5, ge=MIN_CONCURRENT_LIMIT, le=MAX_CONCURRENT_LIMIT),
     base_url: str = Query("http://localhost:8000", description="代理服务器基础URL"),
     strm_url_mode: str = Query("redirect", description="URL模式: redirect/stream/direct/webdav"),
+    overwrite: bool = Query(False, description="是否覆盖已存在的 STRM 文件"),
     _auth: None = Depends(require_api_key),
     cookie: str = Depends(get_quark_cookie)
 ):
@@ -42,10 +43,17 @@ async def scan_directory(
             database=database,
             recursive=recursive,
             base_url=base_url,
-            strm_url_mode=strm_url_mode
+            strm_url_mode=strm_url_mode,
+            overwrite_existing=overwrite,
         )
-        strms = await service.scan_directory(remote_path, local_path, concurrent_limit)
-        return {"strms": strms, "count": len(strms)}
+        result = await service.scan_directory(remote_path, local_path, concurrent_limit)
+        return {
+            "strms": result.get("strms", []),
+            "count": result.get("generated_count", 0),
+            "skipped": result.get("skipped_count", 0),
+            "failed": result.get("failed_count", 0),
+            "total": result.get("total_files", 0),
+        }
     except InputValidationError:
         raise
     except Exception as e:

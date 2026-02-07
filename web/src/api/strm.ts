@@ -3,6 +3,9 @@ import api from './index'
 export interface ScanResult {
     strms: string[]
     count: number
+    skipped?: number
+    failed?: number
+    total?: number
 }
 
 /**
@@ -16,6 +19,7 @@ export const scanDirectory = (params: {
     recursive?: boolean
     concurrent_limit?: number
     base_url?: string
+    overwrite?: boolean
     strm_url_mode?: 'redirect' | 'stream' | 'direct' | 'webdav'
 }): Promise<ScanResult> => {
     return api.post('/strm/scan', null, { params })

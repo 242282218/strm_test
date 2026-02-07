@@ -34,7 +34,8 @@ class STRMGenerator:
         output_dir: str = "./strm",
         base_url: str = "http://localhost:8000",
         use_transcoding: bool = True,
-        strm_url_mode: StrmUrlMode = "redirect"
+        strm_url_mode: StrmUrlMode = "redirect",
+        overwrite_existing: bool = False,
     ):
         """
         初始化STRM生成器
@@ -68,6 +69,7 @@ class STRMGenerator:
         self.base_url = fixed_base_url.rstrip("/")
         self.use_transcoding = use_transcoding
         self.strm_url_mode = strm_url_mode
+        self.overwrite_existing = overwrite_existing
         self.service = QuarkService(cookie=cookie)
 
         # 确保输出目录存在
@@ -239,7 +241,7 @@ class STRMGenerator:
         strm_path = self.output_dir / f"{remote_path}.strm"
 
         # 检查文件是否已存在
-        if strm_path.exists():
+        if strm_path.exists() and not self.overwrite_existing:
             logger.debug(f"STRM file already exists: {strm_path}")
             return None
 

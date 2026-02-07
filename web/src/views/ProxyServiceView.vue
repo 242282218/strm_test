@@ -116,6 +116,10 @@
               <el-switch v-model="strmForm.recursive" :disabled="generating" />
               <span class="form-tip ml-2">扫描子目录（仅对文件夹有效）</span>
             </el-form-item>
+            <el-form-item label="覆盖已存在">
+              <el-switch v-model="strmForm.overwrite" :disabled="generating" />
+              <span class="form-tip ml-2">开启后会重写已有 STRM 文件</span>
+            </el-form-item>
             <el-form-item label="并发限制">
               <el-slider v-model="strmForm.concurrent_limit" :min="1" :max="10" :disabled="generating" show-stops />
             </el-form-item>
@@ -136,13 +140,14 @@
           <div v-if="strmResult" class="strm-result">
             <el-divider />
             <el-alert
-              :type="strmResult.success ? 'success' : 'error'"
+              :type="strmResult.alertType"
               :title="strmResult.message"
               :closable="false"
               show-icon
             />
             <div v-if="strmResult.count !== undefined" class="strm-stats">
               <el-statistic title="生成数量" :value="strmResult.count" />
+              <el-statistic title="跳过数量" :value="strmResult.skipped || 0" />
             </div>
           </div>
         </el-card>
@@ -369,6 +374,7 @@ const strmForm = reactive({
   local_path: './strm',
   strm_url_mode: 'redirect',
   recursive: true,
+  overwrite: false,
   concurrent_limit: 5,
   base_url: 'http://localhost:8000'
 })
@@ -384,8 +390,10 @@ const strmRules: FormRules = {
 
 const strmResult = ref<{
   success: boolean
+  alertType: 'success' | 'warning' | 'error'
   message: string
   count?: number
+  skipped?: number
 } | null>(null)
 
 // 文件浏览器相关
@@ -582,6 +590,7 @@ const toggleSelection = (item: FileItem, selected: boolean) => {
 
 const removeBrowserSelection = (index: number) => {
   const item = browserSelection.value[index]
+  if (!item) return
   const fileItem = fileList.value.find(f => f.id === item.id)
   if (fileItem) {
     fileItem.selected = false
@@ -645,6 +654,9 @@ const generateStrm = async () => {
       }
       
       let totalCount = 0
+      let totalSkipped = 0
+      let totalFailed = 0
+      let totalCandidates = 0
       
       // 逐个处理选中的路径
       for (const pathItem of selectedPaths.value) {
@@ -653,22 +665,51 @@ const generateStrm = async () => {
           local_path: strmForm.local_path,
           recursive: pathItem.type === 'folder' ? strmForm.recursive : false,
           concurrent_limit: strmForm.concurrent_limit,
+          overwrite: strmForm.overwrite,
           strm_url_mode: strmForm.strm_url_mode as 'redirect' | 'stream' | 'direct' | 'webdav',
           base_url: baseUrl
         })
         totalCount += result.count
+        totalSkipped += result.skipped || 0
+        totalFailed += result.failed || 0
+        totalCandidates += result.total || 0
+      }
+
+      let message = ''
+      let alertType: 'success' | 'warning' | 'error' = 'success'
+      if (totalCount > 0) {
+        message = `生成完成：新增 ${totalCount} 个，跳过 ${totalSkipped} 个`
+        alertType = 'success'
+      } else if (totalSkipped > 0) {
+        message = `未生成新文件：跳过 ${totalSkipped} 个（已存在）`
+        alertType = 'warning'
+      } else if (totalCandidates === 0) {
+        message = '未找到可生成的媒体文件'
+        alertType = 'warning'
+      } else {
+        message = `生成失败：失败 ${totalFailed} 个`
+        alertType = 'error'
       }
 
       strmResult.value = {
-        success: true,
-        message: `STRM 生成成功`,
-        count: totalCount
+        success: alertType !== 'error',
+        alertType,
+        message,
+        count: totalCount,
+        skipped: totalSkipped,
       }
 
-      ElMessage.success(`成功生成 ${totalCount} 个 STRM 文件`)
+      if (alertType === 'success') {
+        ElMessage.success(message)
+      } else if (alertType === 'warning') {
+        ElMessage.warning(message)
+      } else {
+        ElMessage.error(message)
+      }
     } catch (error: unknown) {
       strmResult.value = {
         success: false,
+        alertType: 'error',
         message: 'STRM 生成失败'
       }
       ElMessage.error('STRM 生成失败')
@@ -769,7 +810,9 @@ onMounted(() => {
 
 .strm-stats {
   margin-top: 16px;
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  gap: 24px;
 }
 
 /* 已选路径区域 */

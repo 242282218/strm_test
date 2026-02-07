@@ -126,3 +126,41 @@ def test_strm_scan_generates_strm_for_modes(client, tmp_path, monkeypatch, mode,
         assert "u:p@" in content
     else:
         assert "path=video/a.mp4" in content
+
+
+def test_strm_scan_reports_skipped_when_file_exists(client, tmp_path, monkeypatch):
+    async def fake_get_file_by_path(self, path: str):
+        assert path == "/video"
+        return _dir("dir1", "video")
+
+    async def fake_get_files(self, parent: str, page_size: int = 100, only_video: bool = False):
+        if parent == "dir1":
+            return [_file("f1", "a.mp4")]
+        return []
+
+    monkeypatch.setattr(QuarkService, "get_file_by_path", fake_get_file_by_path, raising=True)
+    monkeypatch.setattr(QuarkService, "get_files", fake_get_files, raising=True)
+
+    out_dir = tmp_path / "out"
+    params = {
+        "remote_path": "/video",
+        "local_path": str(out_dir),
+        "recursive": "true",
+        "concurrent_limit": "2",
+        "base_url": "http://example.com:8000",
+        "strm_url_mode": "redirect",
+    }
+
+    first = client.post("/api/strm/scan", params=params)
+    assert first.status_code == 200
+    first_data = first.json()
+    assert first_data["count"] == 1
+    assert first_data["skipped"] == 0
+    assert first_data["total"] == 1
+
+    second = client.post("/api/strm/scan", params=params)
+    assert second.status_code == 200
+    second_data = second.json()
+    assert second_data["count"] == 0
+    assert second_data["skipped"] == 1
+    assert second_data["total"] == 1

@@ -1,4 +1,4 @@
-"""
+﻿"""
 代理API路由
 
 参考: go-emby2openlist internal/service/emby/redirect.go
@@ -54,7 +54,8 @@ async def test_stream_endpoint():
 async def proxy_stream(
     request: Request,
     file_id: str,
-    range_header: str = None
+    range_header: str = None,
+    source: str = Query("transcoding", description="上游源: transcoding 或 download"),
 ):
     """
     代理视频流 (Stream Mode)
@@ -81,20 +82,38 @@ async def proxy_stream(
     try:
         file_id = validate_identifier(file_id, "file_id")
         
-        # 1. 获取直链 URL
-        # 使用 ProxyService 获取带缓存的 URL
-        redirect_url = None
-        async with ProxyService(cookie=cookie) as service:
-            redirect_url = await service.get_download_url(file_id)
-            
+        # 1. 获取上游 URL 和请求头（优先转码，卡顿时更稳定）
+        service = QuarkService(cookie=cookie)
+        try:
+            selected_source = (source or "transcoding").strip().lower()
+            if selected_source not in {"transcoding", "download"}:
+                selected_source = "transcoding"
+
+            if selected_source == "download":
+                link = await service.get_download_link(file_id)
+            else:
+                try:
+                    link = await service.get_transcoding_link(file_id)
+                except Exception:
+                    # 转码链路不可用时回退下载直链
+                    link = await service.get_download_link(file_id)
+        finally:
+            await service.close()
+
+        redirect_url = link.url if link else None
         if not redirect_url:
-             raise HTTPException(status_code=502, detail="Failed to resolve download URL")
+            raise HTTPException(status_code=502, detail="Failed to resolve download URL")
              
         # 2. 准备请求头
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://pan.quark.cn/",
         }
+        if link and link.headers:
+            for header_name in ("Cookie", "Referer", "User-Agent"):
+                header_value = link.headers.get(header_name)
+                if header_value:
+                    headers[header_name] = header_value
         
         # 优先使用 header 中的 Range，其次查找 query param (某些播放器可能不传 header)
         if not range_header:
@@ -103,7 +122,7 @@ async def proxy_stream(
         if range_header:
             headers["Range"] = range_header
             
-        logger.info(f"Stream proxy for {file_id}, range: {range_header}")
+        logger.info(f"Stream proxy for {file_id}, source: {source}, range: {range_header}")
 
         # 3. 创建生成器与响应
         # 注意: 我们需要在生成器内部管理 session 生命周期
@@ -180,18 +199,11 @@ async def proxy_stream(
 
 @router.get("/redirect/{file_id}")
 async def redirect_302(
-    file_id: str, 
+    file_id: str,
     path: Optional[str] = Query(None, description="文件路径，用于WebDAV兜底")
 ):
     """
-    302重定向到夸克直链 (支持智能兜底)
-
-    Args:
-        file_id: 文件ID
-        path: 文件路径 (可选)
-
-    Returns:
-        302重定向响应
+    302重定向到夸克直链（支持智能兜底）。
     """
     cookie = config.get_quark_cookie()
 
@@ -200,46 +212,65 @@ async def redirect_302(
 
     try:
         file_id = validate_identifier(file_id, "file_id")
-        
-        # 初始化服务
-        # 注意: 这里仍然使用 ProxyService 来管理 QuarkService 的生命周期
-        # 或者我们直接实例化 QuarkService
+
         from app.services.quark_service import QuarkService
-        
+
         service = QuarkService(cookie=cookie)
         resolver = LinkResolver(quark_service=service)
         fallback = WebDAVFallback()
-        
-        redirect_url = None
-        error_msg = None
-        
+
+        redirect_url: Optional[str] = None
+        error_msg: Optional[str] = None
+
+        async def _is_playable_without_quark_headers(url: str) -> bool:
+            """检查 URL 在无夸克 Cookie/Referer 前提下是否可直接拉流。"""
+            import aiohttp
+
+            headers = {
+                "User-Agent": "Mozilla/5.0",
+                "Range": "bytes=0-1",
+            }
+            timeout = aiohttp.ClientTimeout(total=8)
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(url, headers=headers, allow_redirects=True) as resp:
+                        return resp.status in (200, 206)
+            except Exception:
+                return False
+
         try:
-            # 1. 尝试解析直链 (Quark ID -> AList Path)
+            # 1) 优先解析下载直链
             redirect_url = await resolver.resolve(file_id, path)
             logger.info(f"Resolved direct link for {file_id}")
-            
+
+            # 2) 若直链依赖夸克请求头导致播放器不可播，则回退到转码直链
+            if redirect_url and not await _is_playable_without_quark_headers(redirect_url):
+                logger.warning(f"Resolved direct link is not directly playable, fallback to transcoding: {file_id}")
+                try:
+                    trans_link = await service.get_transcoding_link(file_id)
+                    if trans_link and trans_link.url:
+                        redirect_url = trans_link.url
+                        logger.info(f"Using transcoding link for redirect fallback: {file_id}")
+                except Exception as trans_exc:
+                    logger.warning(f"Transcoding fallback failed for {file_id}: {trans_exc}")
         except Exception as e:
             logger.warning(f"Link resolution failed: {e}")
             error_msg = str(e)
-            
-            # 2. 尝试 WebDAV 兜底
-            if path:
-                logger.info(f"Attempting WebDAV fallback for path: {path}")
-                redirect_url = fallback.get_fallback_url(path)
-                if redirect_url:
-                    logger.warning(f"Using WebDAV fallback for {file_id}")
-            else:
-                logger.warning(f"No path provided, cannot use WebDAV fallback for {file_id}")
 
-        # 关闭服务
+        # 3) 若仍失败，尝试 WebDAV 兜底
+        if not redirect_url and path:
+            logger.info(f"Attempting WebDAV fallback for path: {path}")
+            redirect_url = fallback.get_fallback_url(path)
+            if redirect_url:
+                logger.warning(f"Using WebDAV fallback for {file_id}")
+
         await service.close()
-        
+
         if redirect_url:
-            # 记录最终跳转
             logger.info(f"302 redirect to: {redirect_url[:60]}... (Total len: {len(redirect_url)})")
             return RedirectResponse(url=redirect_url, status_code=302)
-        else:
-            raise HTTPException(status_code=502, detail=f"Failed to resolve link: {error_msg}")
+
+        raise HTTPException(status_code=502, detail=f"Failed to resolve link: {error_msg}")
 
     except InputValidationError:
         raise
@@ -368,3 +399,4 @@ async def get_cache_stats():
     except Exception as e:
         logger.error(f"Failed to get cache stats: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
