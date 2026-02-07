@@ -75,6 +75,18 @@ const router = createRouter({
           name: 'SmartRename',
           component: () => import('@/views/SmartRenameView.vue'),
           meta: { title: '智能重命名', icon: 'MagicStick' }
+        },
+        {
+          path: '/proxy-service',
+          name: 'ProxyService',
+          component: () => import('@/views/ProxyServiceView.vue'),
+          meta: { title: '代理服务', icon: 'Link' }
+        },
+        {
+          path: '/webdav',
+          name: 'WebDAV',
+          component: () => import('@/views/WebDAVView.vue'),
+          meta: { title: 'WebDAV 挂载', icon: 'FolderOpened' }
         }
       ]
     },

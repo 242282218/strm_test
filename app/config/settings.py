@@ -400,7 +400,7 @@ class SecurityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     api_key: str = Field("", description="API key for protected endpoints", max_length=2048)
-    require_api_key: bool = Field(False, description="Require API key for protected endpoints")
+    require_api_key: bool = Field(True, description="Require API key for protected endpoints")
 
     @field_validator('api_key')
     @classmethod

@@ -152,10 +152,12 @@ const loadRecords = async (): Promise<void> => {
       page: pagination.page,
       size: pagination.size
     })
-    records.value = data.items
-    total.value = data.total
+    records.value = data.items || []
+    total.value = data.total || 0
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '加载记录失败')
+    records.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

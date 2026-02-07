@@ -329,11 +329,7 @@ class STRMGenerator:
             password = webdav_cfg.get("password", "")
 
             parsed = urlparse(self.base_url)
-            netloc = parsed.netloc
-            if username and password and "@" not in netloc:
-                netloc = f"{quote(username)}:{quote(password)}@{netloc}"
-
-            base = urlunparse((parsed.scheme, netloc, parsed.path.rstrip("/"), "", "", "")).rstrip("/")
+            base = urlunparse((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", "", "")).rstrip("/")
             safe_path = "/" + (remote_path or "").lstrip("/")
             encoded_path = quote(safe_path, safe="/")
 

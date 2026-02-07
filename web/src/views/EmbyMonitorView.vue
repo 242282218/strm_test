@@ -291,10 +291,12 @@ const loadEvents = async (): Promise<void> => {
       page: pagination.page,
       size: pagination.size
     })
-    events.value = data.items
-    total.value = data.total
+    events.value = data.items || []
+    total.value = data.total || 0
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '加载事件失败')
+    events.value = []
+    total.value = 0
   } finally {
     loading.events = false
   }

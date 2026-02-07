@@ -70,9 +70,9 @@
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { categoryStrategyApi, type CategoryStrategy, type CategoryPreviewResponse } from '@/api/categoryStrategy'
+import { showError, showSuccess } from '@/utils/error'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -111,14 +111,14 @@ const loadStrategy = async (): Promise<void> => {
   loading.value = true
   try {
     const data = await categoryStrategyApi.get()
-    form.enabled = data.enabled
-    form.folder_names.anime = data.folder_names.anime
-    form.folder_names.movie = data.folder_names.movie
-    form.folder_names.tv = data.folder_names.tv
-    form.anime_keywords = data.anime_keywords
-    keywordText.value = data.anime_keywords.join(', ')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.detail || '加载策略失败')
+    form.enabled = data.enabled ?? true
+    form.folder_names.anime = data.folder_names?.anime ?? '动漫文件夹'
+    form.folder_names.movie = data.folder_names?.movie ?? '电影'
+    form.folder_names.tv = data.folder_names?.tv ?? '电视剧'
+    form.anime_keywords = data.anime_keywords || []
+    keywordText.value = (data.anime_keywords || []).join(', ')
+  } catch (error: unknown) {
+    showError(error, '加载策略失败')
   } finally {
     loading.value = false
   }
@@ -137,13 +137,17 @@ const saveStrategy = async (): Promise<void> => {
       }
     }
     const updated = await categoryStrategyApi.update(payload)
-    form.enabled = updated.enabled
-    form.anime_keywords = updated.anime_keywords
-    form.folder_names = updated.folder_names
-    keywordText.value = updated.anime_keywords.join(', ')
-    ElMessage.success('分类策略已保存')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.detail || '保存策略失败')
+    form.enabled = updated.enabled ?? true
+    form.anime_keywords = updated.anime_keywords || []
+    form.folder_names = updated.folder_names || {
+      anime: '动漫文件夹',
+      movie: '电影',
+      tv: '电视剧'
+    }
+    keywordText.value = (updated.anime_keywords || []).join(', ')
+    showSuccess('分类策略已保存')
+  } catch (error: unknown) {
+    showError(error, '保存策略失败')
   } finally {
     saving.value = false
   }
@@ -161,8 +165,8 @@ const runPreview = async (): Promise<void> => {
       file_name: preview.file_name.trim(),
       media_type: preview.media_type
     })
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.detail || '预览失败')
+  } catch (error: unknown) {
+    showError(error, '预览失败')
   } finally {
     preview.loading = false
   }

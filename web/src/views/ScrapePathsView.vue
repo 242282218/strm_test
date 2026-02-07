@@ -285,10 +285,12 @@ const loadPaths = async (): Promise<void> => {
       page: pagination.page,
       size: pagination.size
     })
-    paths.value = data.items
-    total.value = data.total
+    paths.value = data.items || []
+    total.value = data.total || 0
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '加载刮削目录失败')
+    paths.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

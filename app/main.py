@@ -203,6 +203,7 @@ async def add_request_id(request: Request, call_next):
 
     return response
 
+# CORS 配置 - 默认只允许本地开发环境
 cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
 cors_allow_credentials_env = os.getenv("CORS_ALLOW_CREDENTIALS", "")
 
@@ -212,30 +213,55 @@ try:
 except Exception as exc:
     logger.warning(f"Failed to load config for CORS: {exc}")
 
+# 默认只允许本地开发环境，生产环境必须显式配置
+_default_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 if cors_origins_env:
     allow_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
-elif config_for_cors and getattr(config_for_cors, "cors", None):
-    allow_origins = config_for_cors.cors.allow_origins or ["*"]
+elif config_for_cors and getattr(config_for_cors, "cors", None) and config_for_cors.cors.allow_origins:
+    allow_origins = config_for_cors.cors.allow_origins
+    # 如果配置为 *，则使用默认值并发出警告
+    if allow_origins == ["*"]:
+        logger.warning("CORS allow_origins is '*' - using default safe origins instead")
+        allow_origins = _default_origins
 else:
-    allow_origins = ["*"]
+    # 默认使用安全的本地开发环境配置
+    allow_origins = _default_origins
+    logger.info(f"Using default CORS origins: {allow_origins}")
 
 if cors_allow_credentials_env:
     allow_credentials = cors_allow_credentials_env.lower() in {"1", "true", "yes"}
 elif config_for_cors and getattr(config_for_cors, "cors", None):
     allow_credentials = bool(config_for_cors.cors.allow_credentials)
 else:
-    allow_credentials = False
+    allow_credentials = True  # 默认允许凭证，因为默认来源是安全的
 
 if allow_origins == ["*"] and allow_credentials:
     logger.warning("CORS allow_origins is '*' - disabling credentials to avoid invalid CORS config")
     allow_credentials = False
 
-if config_for_cors and getattr(config_for_cors, "cors", None):
-    allow_methods = config_for_cors.cors.allow_methods or ["*"]
-    allow_headers = config_for_cors.cors.allow_headers or ["*"]
+# 限制允许的 HTTP 方法
+_default_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+if config_for_cors and getattr(config_for_cors, "cors", None) and config_for_cors.cors.allow_methods:
+    allow_methods = config_for_cors.cors.allow_methods
+    if allow_methods == ["*"]:
+        allow_methods = _default_methods
 else:
-    allow_methods = ["*"]
-    allow_headers = ["*"]
+    allow_methods = _default_methods
+
+# 限制允许的请求头
+_default_headers = ["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"]
+if config_for_cors and getattr(config_for_cors, "cors", None) and config_for_cors.cors.allow_headers:
+    allow_headers = config_for_cors.cors.allow_headers
+    if allow_headers == ["*"]:
+        allow_headers = _default_headers
+else:
+    allow_headers = _default_headers
 
 app.add_middleware(
     CORSMiddleware,
@@ -257,7 +283,7 @@ app.include_router(quark.router)
 app.include_router(strm.router)
 app.include_router(proxy.router)
 app.include_router(emby.router)
-app.include_router(scrape.router)
+app.include_router(scrape.router, prefix="/api")
 # 设置 prefix 以符合 API 设计
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(cloud_drive.router, prefix="/api/drives", tags=["Cloud Drives"])
@@ -327,4 +353,4 @@ async def get_config():
 if __name__ == "__main__":
     import uvicorn
     workers = int(os.getenv("WEB_CONCURRENCY", "1"))
-    uvicorn.run(app, host="0.0.0.0", port=8000, workers=workers)
+    uvicorn.run(app, host="0.0.0.0", port=8001, workers=workers)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
@@ -21,9 +22,19 @@ from app.services.cron_service import get_cron_service
 from app.services.scrape_service import ScrapeService, get_scrape_service
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/api/scrape", tags=["scrape"])
+router = APIRouter(prefix="/scrape", tags=["scrape"])
 
 _CRON_HANDLER_REGISTERED = False
+
+# 用于防止重复任务启动的锁
+_path_job_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_path_job_lock(path_id: str) -> asyncio.Lock:
+    """获取指定 path_id 的任务启动锁"""
+    if path_id not in _path_job_locks:
+        _path_job_locks[path_id] = asyncio.Lock()
+    return _path_job_locks[path_id]
 
 
 class ScrapeOptions(BaseModel):
@@ -331,46 +342,53 @@ def _classify_file_name(
 
 
 async def _start_path_job(path_id: str) -> Dict[str, Any]:
-    db = SessionLocal()
-    try:
-        path = db.query(ScrapePath).filter(ScrapePath.path_id == path_id).first()
-        if not path:
-            return {"ok": False, "reason": "not_found"}
-        _refresh_path_status(db, path)
+    """启动路径刮削任务，使用锁防止竞态条件"""
+    # 获取该 path_id 的专用锁
+    lock = _get_path_job_lock(path_id)
+    
+    # 使用锁确保同一时间只有一个请求在检查状态和启动任务
+    async with lock:
+        db = SessionLocal()
+        try:
+            path = db.query(ScrapePath).filter(ScrapePath.path_id == path_id).first()
+            if not path:
+                return {"ok": False, "reason": "not_found"}
+            _refresh_path_status(db, path)
 
-        if path.status == "running" and path.last_job_id:
-            running_job = db.query(ScrapeJob).filter(ScrapeJob.job_id == path.last_job_id).first()
-            if running_job and running_job.status == "running":
-                return {
-                    "ok": True,
-                    "started": False,
-                    "already_running": True,
-                    "job_id": running_job.job_id,
-                    "path_id": path.path_id,
-                }
+            # 双重检查：获取锁后再次确认状态
+            if path.status == "running" and path.last_job_id:
+                running_job = db.query(ScrapeJob).filter(ScrapeJob.job_id == path.last_job_id).first()
+                if running_job and running_job.status == "running":
+                    return {
+                        "ok": True,
+                        "started": False,
+                        "already_running": True,
+                        "job_id": running_job.job_id,
+                        "path_id": path.path_id,
+                    }
 
-        service = get_scrape_service()
-        job = await service.create_job(
-            target_path=path.source_path,
-            media_type=path.media_type,
-            options=_build_path_options(path),
-        )
-        started = await service.start_job(job.job_id)
-        if not started:
-            return {"ok": False, "reason": "start_failed"}
+            service = get_scrape_service()
+            job = await service.create_job(
+                target_path=path.source_path,
+                media_type=path.media_type,
+                options=_build_path_options(path),
+            )
+            started = await service.start_job(job.job_id)
+            if not started:
+                return {"ok": False, "reason": "start_failed"}
 
-        path.last_job_id = job.job_id
-        path.status = "running"
-        db.commit()
-        return {
-            "ok": True,
-            "started": True,
-            "already_running": False,
-            "job_id": job.job_id,
-            "path_id": path.path_id,
-        }
-    finally:
-        db.close()
+            path.last_job_id = job.job_id
+            path.status = "running"
+            db.commit()
+            return {
+                "ok": True,
+                "started": True,
+                "already_running": False,
+                "job_id": job.job_id,
+                "path_id": path.path_id,
+            }
+        finally:
+            db.close()
 
 
 def _ensure_scrape_path_cron_handler_registered() -> None:
@@ -447,7 +465,8 @@ async def list_jobs(
     return jobs
 
 
-@router.get("/pathes", response_model=ScrapePathListResponse)
+@router.get("/paths", response_model=ScrapePathListResponse)
+@router.get("/pathes", response_model=ScrapePathListResponse, include_in_schema=False)  # 保留旧路由以兼容
 async def list_scrape_paths(
     keyword: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
@@ -483,7 +502,8 @@ async def list_scrape_paths(
     return ScrapePathListResponse(items=items, total=total)
 
 
-@router.post("/pathes", response_model=ScrapePathDto)
+@router.post("/paths", response_model=ScrapePathDto)
+@router.post("/pathes", response_model=ScrapePathDto, include_in_schema=False)  # 保留旧路由以兼容
 async def create_scrape_path(
     request: ScrapePathCreateRequest,
     _auth: None = Depends(require_api_key),
@@ -509,7 +529,8 @@ async def create_scrape_path(
     return path
 
 
-@router.get("/pathes/{path_id}", response_model=ScrapePathDto)
+@router.get("/paths/{path_id}", response_model=ScrapePathDto)
+@router.get("/pathes/{path_id}", response_model=ScrapePathDto, include_in_schema=False)  # 保留旧路由以兼容
 async def get_scrape_path(path_id: str, db: Session = Depends(get_db)):
     path = db.query(ScrapePath).filter(ScrapePath.path_id == path_id).first()
     if not path:
@@ -518,7 +539,8 @@ async def get_scrape_path(path_id: str, db: Session = Depends(get_db)):
     return path
 
 
-@router.put("/pathes/{path_id}", response_model=ScrapePathDto)
+@router.put("/paths/{path_id}", response_model=ScrapePathDto)
+@router.put("/pathes/{path_id}", response_model=ScrapePathDto, include_in_schema=False)  # 保留旧路由以兼容
 async def update_scrape_path(
     path_id: str,
     request: ScrapePathUpdateRequest,
@@ -538,7 +560,8 @@ async def update_scrape_path(
     return path
 
 
-@router.delete("/pathes/{path_id}")
+@router.delete("/paths/{path_id}")
+@router.delete("/pathes/{path_id}", include_in_schema=False)  # 保留旧路由以兼容
 async def delete_scrape_path(
     path_id: str,
     _auth: None = Depends(require_api_key),
@@ -556,7 +579,8 @@ async def delete_scrape_path(
     return {"deleted": True, "path_id": path_id}
 
 
-@router.post("/pathes/start")
+@router.post("/paths/start")
+@router.post("/pathes/start", include_in_schema=False)  # 保留旧路由以兼容
 async def start_scrape_path(
     body: ScrapePathActionRequest,
     _auth: None = Depends(require_api_key),
@@ -569,7 +593,8 @@ async def start_scrape_path(
     return result
 
 
-@router.post("/pathes/stop")
+@router.post("/paths/stop")
+@router.post("/pathes/stop", include_in_schema=False)  # 保留旧路由以兼容
 async def stop_scrape_path(
     body: ScrapePathActionRequest,
     _auth: None = Depends(require_api_key),
@@ -592,7 +617,8 @@ async def stop_scrape_path(
     }
 
 
-@router.post("/pathes/toggle-cron")
+@router.post("/paths/toggle-cron")
+@router.post("/pathes/toggle-cron", include_in_schema=False)  # 保留旧路由以兼容
 async def toggle_scrape_path_cron(
     body: ScrapePathToggleCronRequest,
     _auth: None = Depends(require_api_key),
@@ -759,26 +785,68 @@ async def re_scrape_records(
     return {"requested": len(body.record_ids), "updated": updated, "queued_jobs": queued_jobs}
 
 
+class ClearRecordsRequest(BaseModel):
+    """清理记录请求"""
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool = Field(
+        default=False,
+        description="必须设置为 true 以确认删除操作"
+    )
+
+
 @router.post("/clear-failed")
 async def clear_failed_records(
+    body: ClearRecordsRequest,
     _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
+    """清理失败的刮削记录
+    
+    需要设置 confirm=true 来确认删除操作
+    """
+    if not body.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing confirmation. Set confirm=true to proceed with deletion."
+        )
+    
     failed_query = db.query(ScrapeRecord).filter(
         ScrapeRecord.status.in_(["scrape_failed", "rename_failed"])
     )
     count = failed_query.count()
     failed_query.delete(synchronize_session=False)
     db.commit()
+    logger.info("Cleared %d failed scrape records", count)
     return {"cleared": count}
+
+
+class TruncateRecordsRequest(BaseModel):
+    """清空记录请求"""
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool = Field(
+        default=False,
+        description="必须设置为 true 以确认删除操作"
+    )
 
 
 @router.post("/truncate-all")
 async def truncate_all_records(
+    body: TruncateRecordsRequest,
     _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
+    """清空所有刮削记录
+    
+    危险操作！需要设置 confirm=true 来确认删除操作
+    """
+    if not body.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing confirmation. Set confirm=true to proceed with deletion. This is a destructive operation!"
+        )
+    
     count = db.query(ScrapeRecord).count()
     db.query(ScrapeRecord).delete(synchronize_session=False)
     db.commit()
+    logger.warning("Truncated all %d scrape records", count)
     return {"truncated": count}

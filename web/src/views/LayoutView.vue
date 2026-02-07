@@ -92,6 +92,8 @@ const menuItems = [
   { path: '/scrape-records', title: '刮削记录', icon: 'Document' },
   { path: '/settings/category-strategy', title: '二级分类策略', icon: 'CollectionTag' },
   { path: '/emby-monitor', title: 'Emby 监控', icon: 'Monitor' },
+  { path: '/proxy-service', title: '代理服务', icon: 'Link' },
+  { path: '/webdav', title: 'WebDAV 挂载', icon: 'Folder' },
   { path: '/tasks', title: '任务管理', icon: 'List' },
   { path: '/config', title: '系统配置', icon: 'Setting' }
 ]

@@ -491,6 +491,12 @@ const openSettings = () => {
   router.push('/config')
 }
 
+// 窗口大小改变处理函数
+const handleResize = () => {
+  taskChart?.resize()
+  fileChart?.resize()
+}
+
 onMounted(async () => {
   initCharts()
 
@@ -503,15 +509,15 @@ onMounted(async () => {
   // 更新文件类型图表
   updateFileTypeChart()
 
-  window.addEventListener('resize', () => {
-    taskChart?.resize()
-    fileChart?.resize()
-  })
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
   taskChart?.dispose()
   fileChart?.dispose()
+  taskChart = null
+  fileChart = null
 })
 </script>
 

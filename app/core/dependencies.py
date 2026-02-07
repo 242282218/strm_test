@@ -11,7 +11,6 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 config = get_config()
-config_service = get_config_service()
 
 def _extract_bearer(authorization: str | None) -> str | None:
     if not authorization:
@@ -23,7 +22,7 @@ def _extract_bearer(authorization: str | None) -> str | None:
 
 def _get_security_config():
     try:
-        cfg = config_service.get_config()
+        cfg = get_config_service().get_config()
         security = getattr(cfg, "security", None)
         if security:
             return security.api_key or None, bool(security.require_api_key)

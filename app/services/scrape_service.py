@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -16,6 +17,15 @@ from app.core.logging import get_logger
 from app.core.metrics_collector import get_metrics_collector
 from app.core.retry import TransientError, retry_on_transient
 from app.core.validators import validate_path
+from app.core.path_security import (
+    safe_open,
+    safe_makedirs,
+    safe_rename,
+    safe_symlink,
+    safe_hardlink,
+    validate_file_path,
+    PathSecurityError,
+)
 from app.models.scrape import CategoryStrategy, ScrapeItem, ScrapeJob, ScrapeRecord
 from app.services.emby_service import get_emby_service
 from app.services.notification_service import (
@@ -46,6 +56,7 @@ class ScrapeService:
     """Scrape pipeline service with staged state transitions."""
 
     _instance = None
+    _lock = threading.Lock()
 
     def __init__(
         self,
@@ -63,11 +74,18 @@ class ScrapeService:
         self.state_machine = ScrapeStateMachine()
         self._active_jobs: dict[str, asyncio.Task] = {}
         self.metrics_collector = get_metrics_collector()
+        # 添加信号量限制并发任务数
+        self._job_semaphore = asyncio.Semaphore(10)
+        self._job_lock = asyncio.Lock()
 
     @classmethod
     def get_instance(cls) -> "ScrapeService":
-        if not cls._instance:
-            cls._instance = ScrapeService()
+        """线程安全的单例获取方法"""
+        if cls._instance is None:
+            with cls._lock:
+                # 双重检查锁定模式
+                if cls._instance is None:
+                    cls._instance = ScrapeService()
         return cls._instance
 
     async def create_job(
@@ -102,51 +120,79 @@ class ScrapeService:
             db.close()
 
     async def start_job(self, job_id: str) -> bool:
-        """Start job in background with idempotent protection."""
+        """Start job in background with idempotent protection and concurrency limit."""
         existing_task = self._active_jobs.get(job_id)
         if existing_task and not existing_task.done():
             logger.info("Job %s is already running", job_id)
             return True
 
-        db = self.db_session_factory()
-        try:
-            job = db.query(ScrapeJob).filter(ScrapeJob.job_id == job_id).first()
-            if not job:
-                logger.error("Job %s not found", job_id)
-                return False
+        # 使用信号量限制并发任务数
+        async with self._job_semaphore:
+            db = None
+            try:
+                db = self.db_session_factory()
+                job = db.query(ScrapeJob).filter(ScrapeJob.job_id == job_id).first()
+                if not job:
+                    logger.error("Job %s not found", job_id)
+                    return False
 
-            if job.status == "running":
-                # Recover in case process restarted and in-memory task was lost.
+                if job.status == "running":
+                    # Recover in case process restarted and in-memory task was lost.
+                    task = asyncio.create_task(self._process_job(job_id))
+                    self._active_jobs[job_id] = task
+                    return True
+
+                job.status = "running"
+                job.started_at = datetime.now()
+                db.commit()
+
                 task = asyncio.create_task(self._process_job(job_id))
                 self._active_jobs[job_id] = task
                 return True
-
-            job.status = "running"
-            job.started_at = datetime.now()
-            db.commit()
-
-            task = asyncio.create_task(self._process_job(job_id))
-            self._active_jobs[job_id] = task
-            return True
-        finally:
-            db.close()
+            except Exception as e:
+                logger.error("Error starting job %s: %s", job_id, e)
+                return False
+            finally:
+                if db:
+                    try:
+                        db.close()
+                    except Exception as e:
+                        logger.warning("Error closing database connection: %s", e)
 
     async def stop_job(self, job_id: str) -> bool:
         """Cancel running job."""
-        db = self.db_session_factory()
+        db = None
         try:
+            db = self.db_session_factory()
             job = db.query(ScrapeJob).filter(ScrapeJob.job_id == job_id).first()
             if not job:
                 return False
             job.status = "cancelled"
             job.completed_at = datetime.now()
             db.commit()
+        except Exception as e:
+            logger.error("Error stopping job %s: %s", job_id, e)
+            return False
         finally:
-            db.close()
+            if db:
+                try:
+                    db.close()
+                except Exception as e:
+                    logger.warning("Error closing database connection: %s", e)
 
+        # 取消正在运行的任务
         task = self._active_jobs.get(job_id)
         if task and not task.done():
-            task.cancel()
+            try:
+                task.cancel()
+                # 等待任务实际取消，但设置超时
+                await asyncio.wait_for(task, timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Timeout waiting for job %s to cancel", job_id)
+            except asyncio.CancelledError:
+                pass  # 预期内的异常
+            except Exception as e:
+                logger.warning("Error cancelling job %s: %s", job_id, e)
         return True
 
     async def _process_job(self, job_id: str):
@@ -159,8 +205,9 @@ class ScrapeService:
             f"job_id={job_id}",
         )
 
-        db = self.db_session_factory()
+        db = None
         try:
+            db = self.db_session_factory()
             job = db.query(ScrapeJob).filter(ScrapeJob.job_id == job_id).first()
             if not job:
                 logger.error("Job %s disappeared before execution", job_id)
@@ -364,12 +411,25 @@ class ScrapeService:
                 str(exc),
             )
         finally:
-            task = self._active_jobs.get(job_id)
-            if task and task.done():
-                self._active_jobs.pop(job_id, None)
-            elif job_id in self._active_jobs and self._active_jobs[job_id].cancelled():
-                self._active_jobs.pop(job_id, None)
-            db.close()
+            # 确保任务从活跃列表中移除
+            try:
+                task = self._active_jobs.get(job_id)
+                if task:
+                    if task.done() or task.cancelled():
+                        self._active_jobs.pop(job_id, None)
+                    else:
+                        # 如果任务还在运行，尝试取消
+                        task.cancel()
+                        self._active_jobs.pop(job_id, None)
+            except Exception as e:
+                logger.warning("Error cleaning up active job %s: %s", job_id, e)
+            
+            # 确保数据库连接关闭
+            if db:
+                try:
+                    db.close()
+                except Exception as e:
+                    logger.warning("Error closing database connection for job %s: %s", job_id, e)
 
     def _transition_item_status(self, item: ScrapeItem, target_status: str) -> None:
         current = item.status or "pending"
@@ -528,12 +588,31 @@ class ScrapeService:
             file_dir = os.path.dirname(item.file_path)
             base_name = os.path.splitext(item.file_name)[0]
 
+            # 验证文件目录是否在允许范围内
+            try:
+                validate_file_path(file_dir)
+            except PathSecurityError as e:
+                logger.error(f"Path security error for file_dir: {file_dir}, error: {e}")
+                return False, self._standardize_error(
+                    "PATH_SECURITY_ERROR",
+                    "File directory is outside of allowed directories",
+                    str(e),
+                )
+
             if options.get("generate_nfo", True):
                 nfo_content = self._build_simple_nfo(item)
                 nfo_path = os.path.join(file_dir, f"{base_name}.nfo")
                 if options.get("force_overwrite") or not os.path.exists(nfo_path):
-                    with open(nfo_path, "w", encoding="utf-8") as nfo_fp:
-                        nfo_fp.write(nfo_content)
+                    try:
+                        with safe_open(nfo_path, "w", encoding="utf-8") as nfo_fp:
+                            nfo_fp.write(nfo_content)
+                    except PathSecurityError as e:
+                        logger.error(f"Path security error writing NFO: {e}")
+                        return False, self._standardize_error(
+                            "PATH_SECURITY_ERROR",
+                            "Cannot write NFO file outside of allowed directories",
+                            str(e),
+                        )
                 item.nfo_path = nfo_path
 
             if options.get("download_images", True):
@@ -641,16 +720,18 @@ class ScrapeService:
 
     def _build_simple_nfo(self, item: ScrapeItem) -> str:
         title = item.title or os.path.splitext(item.file_name)[0]
-        year_tag = f"<year>{item.year}</year>" if item.year else ""
-        tmdb_tag = f"<tmdbid>{item.tmdb_id}</tmdbid>" if item.tmdb_id else ""
+        # 对所有字段进行 XML 转义，防止注入攻击
+        escaped_title = self._xml_escape(str(title))
+        year_tag = f"<year>{self._xml_escape(str(item.year))}</year>" if item.year else ""
+        tmdb_tag = f"<tmdbid>{self._xml_escape(str(item.tmdb_id))}</tmdbid>" if item.tmdb_id else ""
 
         if item.media_type == "tv":
-            season_tag = f"<season>{item.season}</season>" if item.season is not None else ""
-            episode_tag = f"<episode>{item.episode}</episode>" if item.episode is not None else ""
+            season_tag = f"<season>{self._xml_escape(str(item.season))}</season>" if item.season is not None else ""
+            episode_tag = f"<episode>{self._xml_escape(str(item.episode))}</episode>" if item.episode is not None else ""
             return (
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                 "<episodedetails>\n"
-                f"  <title>{self._xml_escape(title)}</title>\n"
+                f"  <title>{escaped_title}</title>\n"
                 f"  {season_tag}\n"
                 f"  {episode_tag}\n"
                 f"  {tmdb_tag}\n"
@@ -660,7 +741,7 @@ class ScrapeService:
         return (
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
             "<movie>\n"
-            f"  <title>{self._xml_escape(title)}</title>\n"
+            f"  <title>{escaped_title}</title>\n"
             f"  {year_tag}\n"
             f"  {tmdb_tag}\n"
             "</movie>\n"
@@ -687,10 +768,30 @@ class ScrapeService:
                 category_key = self._resolve_category_key(item, source_file, strategy)
                 category_folder = strategy["folder_names"].get(category_key) or DEFAULT_CATEGORY_FOLDERS[category_key]
                 target_root = os.path.join(dest_root, category_folder)
-        os.makedirs(target_root, exist_ok=True)
+        
+        # 使用安全的目录创建
+        try:
+            safe_makedirs(target_root, exist_ok=True)
+        except PathSecurityError as e:
+            return (
+                False,
+                None,
+                self._standardize_error("PATH_SECURITY_ERROR", "Target directory is outside of allowed directories", str(e)),
+            )
 
         target_name = self._build_target_filename(item, source_file)
         target_path = os.path.join(target_root, target_name)
+
+        # 验证源文件和目标路径
+        try:
+            validate_file_path(source_file, check_exists=True)
+            validate_file_path(target_path)
+        except PathSecurityError as e:
+            return (
+                False,
+                None,
+                self._standardize_error("PATH_SECURITY_ERROR", "File path is outside of allowed directories", str(e)),
+            )
 
         if os.path.abspath(source_file) == os.path.abspath(target_path):
             return True, target_path, None
@@ -704,19 +805,28 @@ class ScrapeService:
         mode = options.get("rename_mode", "move")
         try:
             if mode == "move":
-                shutil.move(source_file, target_path)
+                safe_rename(source_file, target_path)
             elif mode == "copy":
+                # 复制操作使用 shutil，但需要先验证路径
+                validate_file_path(source_file, check_exists=True)
+                validate_file_path(target_path)
                 shutil.copy2(source_file, target_path)
             elif mode == "hardlink":
-                os.link(source_file, target_path)
+                safe_hardlink(source_file, target_path)
             elif mode == "softlink":
-                os.symlink(source_file, target_path)
+                safe_symlink(source_file, target_path)
             else:
                 return (
                     False,
                     None,
                     self._standardize_error("INVALID_RENAME_MODE", "Unsupported rename mode", mode),
                 )
+        except PathSecurityError as e:
+            return (
+                False,
+                None,
+                self._standardize_error("PATH_SECURITY_ERROR", "File operation blocked for security reasons", str(e)),
+            )
         except Exception as exc:
             return (
                 False,
@@ -801,7 +911,9 @@ class ScrapeService:
         if not url:
             return False
         try:
-            async with aiohttp.ClientSession() as session:
+            # 配置超时：连接超时10秒，总超时30秒
+            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url) as resp:
                     if resp.status in {408, 429} or resp.status >= 500:
                         raise TransientError(f"Download transient error: {resp.status}")
@@ -810,6 +922,8 @@ class ScrapeService:
                         with open(save_path, "wb") as image_fp:
                             image_fp.write(content)
                         return True
+        except asyncio.TimeoutError:
+            logger.warning("Timeout downloading image from %s", url)
         except TransientError:
             raise
         except Exception as exc:
