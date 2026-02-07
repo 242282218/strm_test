@@ -13,14 +13,18 @@ from app.services.quark_service import QuarkService
 from app.services.smart_rename_service import get_smart_rename_service, SmartRenameOptions, AlgorithmType, NamingStandard
 from app.services.ai_connectivity_service import get_ai_connectivity_service
 from app.services.strm_generator import generate_strm_from_quark
+from app.services.config_service import get_config_service
 from app.core.config_manager import get_config
 from app.core.logging import get_logger
 from app.core.dependencies import get_quark_cookie, get_only_video_flag, require_api_key
 from app.core.validators import validate_identifier, validate_path, InputValidationError
 from app.core.constants import MAX_PATH_LENGTH, MAX_FILES_LIMIT
+import os
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/quark", tags=["夸克服务"])
+
+CONFIG_PATH = os.getenv("CONFIG_PATH", "config.yaml")
 
 
 # ========== 请求/响应模型 ==========
@@ -214,7 +218,7 @@ async def get_download_link(
 
 
 @router.get("/transcoding/{file_id}")
-async def get_transcoding_link(file_id: str, cookie: str = None):
+async def get_transcoding_link(file_id: str, cookie: str = Depends(get_quark_cookie)):
     """
     获取转码直链
 
@@ -227,11 +231,6 @@ async def get_transcoding_link(file_id: str, cookie: str = None):
     Returns:
         转码链接信息
     """
-    cookie = cookie or config.get_quark_cookie()
-
-    if not cookie:
-        raise HTTPException(status_code=400, detail="Cookie is required. Please provide cookie parameter or set it in config.yaml")
-
     service = None
     try:
         file_id = validate_identifier(file_id, "file_id")
@@ -349,13 +348,15 @@ async def get_quark_config(_auth: None = Depends(require_api_key)):
     返回配置信息（不包含敏感数据）
     """
     try:
-        quark_config = config.get_quark_config()
-        # 隐藏敏感信息
+        config_service = get_config_service(CONFIG_PATH)
+        app_config = config_service.get_config()
+        quark_config = app_config.quark
+
         safe_config = {
-            "referer": quark_config.get("referer", "https://pan.quark.cn/"),
-            "root_id": quark_config.get("root_id", "0"),
-            "only_video": quark_config.get("only_video", True),
-            "cookie_configured": bool(quark_config.get("cookie", ""))
+            "referer": quark_config.referer,
+            "root_id": quark_config.root_id,
+            "only_video": quark_config.only_video,
+            "cookie_configured": bool(quark_config.cookie),
         }
         return safe_config
     except InputValidationError:
@@ -388,10 +389,12 @@ async def sync_quark_files(
     Returns:
         同步结果
     """
-    cookie = cookie or config.get_quark_cookie()
-    root_id = root_id or config.get_quark_root_id()
+    config_service = get_config_service(CONFIG_PATH)
+    app_config = config_service.get_config()
+    cookie = cookie or app_config.quark.cookie
+    root_id = root_id or app_config.quark.root_id
     if only_video is None:
-        only_video = config.get_quark_only_video()
+        only_video = app_config.quark.only_video
 
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie is required. Please provide cookie parameter or set it in config.yaml")

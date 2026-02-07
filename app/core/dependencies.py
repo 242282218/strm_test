@@ -107,7 +107,13 @@ async def get_only_video_flag(only_video: bool = None) -> bool:
         only_video布尔值
     """
     if only_video is None:
-        only_video = config.get_quark_only_video()
+        try:
+            cfg = get_config_service().get_config()
+            quark_cfg = getattr(cfg, "quark", None)
+            only_video = bool(getattr(quark_cfg, "only_video", True))
+        except Exception as exc:
+            logger.warning(f"Failed to read quark only_video from ConfigService: {exc}")
+            only_video = config.get_quark_only_video()
 
     return only_video
 
@@ -121,5 +127,16 @@ async def get_root_id(root_id: str = None) -> str:
     Returns:
         根目录ID
     """
-    root_id = root_id or config.get_quark_root_id()
+    root_id = (root_id or "").strip()
+    if not root_id:
+        try:
+            cfg = get_config_service().get_config()
+            quark_cfg = getattr(cfg, "quark", None)
+            root_id = (getattr(quark_cfg, "root_id", "") or "").strip()
+        except Exception as exc:
+            logger.warning(f"Failed to read quark root_id from ConfigService: {exc}")
+            root_id = ""
+
+    if not root_id:
+        root_id = (config.get_quark_root_id() or "").strip()
     return root_id
