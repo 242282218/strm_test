@@ -266,11 +266,27 @@ class StrmValidator:
                         invalid_files.append(strm_file)
                         return
 
-                    # 验证URL
+                    # Validate URL. Many proxy endpoints do not implement HEAD; use GET+Range to
+                    # keep bandwidth low while still proving the stream is accessible.
                     logger.info(f"({idx}/{total_files}) Validating: {url}")
                     async with aiohttp.ClientSession() as session:
-                        async with session.head(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                            if response.status in [200, 206, 302]:
+                        headers = {
+                            "Range": "bytes=0-1",
+                            "User-Agent": "Mozilla/5.0",
+                        }
+                        async with session.get(
+                            url,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=12),
+                            allow_redirects=True,
+                        ) as response:
+                            # 200/206 prove content access; 302/307 can happen if redirects are not followed.
+                            if response.status in (200, 206, 302, 307):
+                                # Read a tiny chunk so the request isn't optimized away.
+                                try:
+                                    await response.content.read(2)
+                                except Exception:
+                                    pass
                                 logger.info(f"Valid .strm file: {strm_file}")
                                 valid_files.append(strm_file)
                             else:

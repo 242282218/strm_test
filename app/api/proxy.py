@@ -294,6 +294,15 @@ async def redirect_302(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.head("/redirect/{file_id}")
+async def redirect_302_head(
+    file_id: str,
+    path: Optional[str] = Query(None, description="文件路径，用于WebDAV兜底"),
+):
+    # Some clients and validators send HEAD requests before GET.
+    return await redirect_302(file_id=file_id, path=path)
+
+
 @router.get("/transcoding/{file_id}")
 async def get_transcoding_link(file_id: str):
     """
