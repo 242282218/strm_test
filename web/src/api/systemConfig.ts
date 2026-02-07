@@ -29,7 +29,20 @@ export interface AIModelsConfigUpdateRequest {
   glm: AIModelConfigUpdateItem
 }
 
-export type SystemConfigResponse = Record<string, any>
+export interface QuarkConfigResponse {
+  configured: boolean
+  cookie_masked: string
+  referer: string
+  root_id: string
+  only_video: boolean
+}
+
+export interface QuarkConfigUpdateRequest {
+  cookie: string
+  referer: string
+  root_id: string
+  only_video: boolean
+}
 
 export const getAIModelsConfig = (): Promise<AIModelsConfigResponse> => {
   return api.get('/system-config/ai-models')
@@ -41,10 +54,10 @@ export const updateAIModelsConfig = (
   return api.post('/system-config/ai-models', data)
 }
 
-export const getSystemConfig = (): Promise<SystemConfigResponse> => {
-  return api.get('/system-config/')
+export const getQuarkConfig = (): Promise<QuarkConfigResponse> => {
+  return api.get('/system-config/quark')
 }
 
-export const updateSystemConfig = (data: SystemConfigResponse): Promise<SystemConfigResponse> => {
-  return api.post('/system-config/', data)
+export const updateQuarkConfig = (data: QuarkConfigUpdateRequest): Promise<QuarkConfigResponse> => {
+  return api.post('/system-config/quark', data)
 }

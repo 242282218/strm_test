@@ -192,6 +192,87 @@ def _resolve_api_key_update(new_value: str, current_value: str) -> str:
     return value
 
 
+class QuarkConfigUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cookie: str = Field("", max_length=8192)
+    referer: str = Field("https://pan.quark.cn/", min_length=1, max_length=2048)
+    root_id: str = Field("0", min_length=1, max_length=64)
+    only_video: bool = Field(True)
+
+    @field_validator("referer")
+    @classmethod
+    def validate_referer(cls, v: str) -> str:
+        value = v.strip()
+        validate_http_url(value, "quark.referer")
+        return value
+
+    @field_validator("root_id")
+    @classmethod
+    def validate_root_id(cls, v: str) -> str:
+        value = v.strip()
+        if not value:
+            raise ValueError("root_id cannot be empty")
+        return value
+
+
+def _build_quark_response(config) -> dict:
+    quark = getattr(config, "quark", None)
+    cookie = quark.cookie if quark else ""
+    return {
+        "configured": bool(cookie),
+        "cookie_masked": mask_secret(cookie, prefix_len=6, suffix_len=6),
+        "referer": quark.referer if quark else "https://pan.quark.cn/",
+        "root_id": quark.root_id if quark else "0",
+        "only_video": bool(quark.only_video) if quark else True,
+    }
+
+
+@router.get("/quark")
+async def get_quark_config(_auth: None = Depends(require_api_key)):
+    """Get Quark config with masked cookie."""
+    try:
+        config_service = get_config_service(CONFIG_PATH)
+        config = config_service.get_config()
+        return _build_quark_response(config)
+    except Exception as e:
+        logger.error(f"Failed to read Quark config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/quark")
+async def update_quark_config(
+    payload: QuarkConfigUpdateRequest,
+    _auth: None = Depends(require_api_key),
+):
+    """Update Quark config safely (blank/masked cookie keeps current value)."""
+    try:
+        config_service = get_config_service(CONFIG_PATH)
+        current = config_service.get_config()
+        config_dict = current.model_dump()
+
+        current_cookie = config_dict.get("quark", {}).get("cookie", "")
+        incoming_cookie = (payload.cookie or "").strip()
+        if not incoming_cookie or "*" in incoming_cookie:
+            resolved_cookie = current_cookie
+        else:
+            resolved_cookie = incoming_cookie
+
+        config_dict["quark"]["cookie"] = resolved_cookie
+        config_dict["quark"]["referer"] = payload.referer
+        config_dict["quark"]["root_id"] = payload.root_id
+        config_dict["quark"]["only_video"] = payload.only_video
+
+        updated = config_service.update_config(config_dict)
+        logger.info("Quark configuration updated")
+        return _build_quark_response(updated)
+    except ConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to update Quark config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/ai-models")
 async def get_ai_models_config(_auth: None = Depends(require_api_key)):
     """Get current AI model config with masked sensitive values."""

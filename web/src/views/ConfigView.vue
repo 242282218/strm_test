@@ -10,6 +10,55 @@
       <el-card class="config-card" shadow="never">
         <template #header>
           <div class="card-header">
+            <span>夸克配置</span>
+          </div>
+        </template>
+
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="支持在界面中配置 Quark Cookie。Cookie 字段留空表示保持当前值不变。"
+          class="hint"
+        />
+
+        <el-form label-width="130px" class="config-form" v-loading="quarkLoading">
+          <el-form-item label="当前 Cookie 状态">
+            <el-input :model-value="quarkForm.cookie_masked || '未配置'" readonly />
+          </el-form-item>
+
+          <el-form-item label="新 Cookie">
+            <el-input
+              v-model="quarkForm.cookie"
+              type="textarea"
+              :rows="4"
+              resize="vertical"
+              placeholder="粘贴一整行 cookie，留空保持当前值"
+            />
+          </el-form-item>
+
+          <el-form-item label="Referer">
+            <el-input v-model="quarkForm.referer" clearable />
+          </el-form-item>
+
+          <el-form-item label="Root ID">
+            <el-input v-model="quarkForm.root_id" clearable />
+          </el-form-item>
+
+          <el-form-item label="仅处理视频">
+            <el-switch v-model="quarkForm.only_video" />
+          </el-form-item>
+
+          <div class="form-actions">
+            <el-button type="primary" :loading="quarkSaving" @click="saveQuarkConfig">保存夸克配置</el-button>
+            <el-button :disabled="quarkSaving" @click="cancelQuarkChanges">取消</el-button>
+          </div>
+        </el-form>
+      </el-card>
+
+      <el-card class="config-card" shadow="never">
+        <template #header>
+          <div class="card-header">
             <span>AI 模型配置</span>
           </div>
         </template>
@@ -67,37 +116,6 @@
           </div>
         </el-form>
       </el-card>
-
-      <el-card class="config-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span>全量系统配置</span>
-          </div>
-        </template>
-
-        <el-alert
-          type="warning"
-          :closable="false"
-          show-icon
-          title="此区域可直接编辑全部配置变量。敏感字段显示为脱敏值，保留星号表示不变，填写新值可覆盖。"
-          class="hint"
-        />
-
-        <div class="raw-editor" v-loading="fullConfigLoading">
-          <el-input
-            v-model="fullConfigText"
-            type="textarea"
-            :rows="22"
-            resize="vertical"
-            placeholder="请输入完整 JSON 配置"
-          />
-        </div>
-
-        <div class="form-actions">
-          <el-button type="primary" :loading="fullConfigSaving" @click="saveFullConfig">保存全量配置</el-button>
-          <el-button :disabled="fullConfigSaving || fullConfigLoading" @click="reloadFullConfig">重新加载</el-button>
-        </div>
-      </el-card>
     </div>
   </div>
 </template>
@@ -108,12 +126,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import EmbyConfigCard from '@/components/EmbyConfigCard.vue'
 import {
   getAIModelsConfig,
-  getSystemConfig,
-  updateSystemConfig,
+  getQuarkConfig,
   updateAIModelsConfig,
+  updateQuarkConfig,
   type AIModelsConfigResponse,
   type AIProvider,
-  type SystemConfigResponse
+  type QuarkConfigResponse
 } from '@/api/systemConfig'
 
 interface AIFormState {
@@ -123,6 +141,15 @@ interface AIFormState {
   base_url: string
   model: string
   timeout: number
+}
+
+interface QuarkFormState {
+  configured: boolean
+  cookie_masked: string
+  cookie: string
+  referer: string
+  root_id: string
+  only_video: boolean
 }
 
 type AIFormMap = Record<AIProvider, AIFormState>
@@ -150,14 +177,23 @@ const defaults: Record<AIProvider, { base_url: string; model: string; timeout: n
 const loading = ref(false)
 const saving = ref(false)
 const snapshot = ref<AIModelsConfigResponse | null>(null)
-const fullConfigLoading = ref(false)
-const fullConfigSaving = ref(false)
-const fullConfigText = ref('')
+const quarkLoading = ref(false)
+const quarkSaving = ref(false)
+const quarkSnapshot = ref<QuarkConfigResponse | null>(null)
 
 const form = reactive<AIFormMap>({
   kimi: { api_key: '', api_key_masked: '', configured: false, ...defaults.kimi },
   deepseek: { api_key: '', api_key_masked: '', configured: false, ...defaults.deepseek },
   glm: { api_key: '', api_key_masked: '', configured: false, ...defaults.glm }
+})
+
+const quarkForm = reactive<QuarkFormState>({
+  configured: false,
+  cookie_masked: '',
+  cookie: '',
+  referer: 'https://pan.quark.cn/',
+  root_id: '0',
+  only_video: true
 })
 
 const providerTitle = (provider: AIProvider): string => {
@@ -190,42 +226,51 @@ const loadConfig = async (): Promise<void> => {
   }
 }
 
-const formatConfigText = (data: SystemConfigResponse): string => {
-  return JSON.stringify(data, null, 2)
+const applyQuarkConfig = (data: QuarkConfigResponse): void => {
+  quarkForm.configured = !!data.configured
+  quarkForm.cookie_masked = data.cookie_masked || ''
+  quarkForm.cookie = ''
+  quarkForm.referer = data.referer
+  quarkForm.root_id = data.root_id
+  quarkForm.only_video = !!data.only_video
 }
 
-const loadFullConfig = async (): Promise<void> => {
-  fullConfigLoading.value = true
+const loadQuarkConfig = async (): Promise<void> => {
+  quarkLoading.value = true
   try {
-    const data = await getSystemConfig()
-    fullConfigText.value = formatConfigText(data)
+    const data = await getQuarkConfig()
+    quarkSnapshot.value = data
+    applyQuarkConfig(data)
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.detail || '加载全量系统配置失败')
+    ElMessage.error(error?.response?.data?.detail || '加载夸克配置失败')
   } finally {
-    fullConfigLoading.value = false
+    quarkLoading.value = false
   }
 }
 
-const saveFullConfig = async (): Promise<void> => {
-  fullConfigSaving.value = true
+const saveQuarkConfig = async (): Promise<void> => {
+  quarkSaving.value = true
   try {
-    const payload = JSON.parse(fullConfigText.value || '{}') as SystemConfigResponse
-    const updated = await updateSystemConfig(payload)
-    fullConfigText.value = formatConfigText(updated)
-    ElMessage.success('全量系统配置已保存')
+    const updated = await updateQuarkConfig({
+      cookie: quarkForm.cookie.trim(),
+      referer: quarkForm.referer.trim(),
+      root_id: quarkForm.root_id.trim(),
+      only_video: !!quarkForm.only_video
+    })
+    quarkSnapshot.value = updated
+    applyQuarkConfig(updated)
+    ElMessage.success('夸克配置已保存')
   } catch (error: any) {
-    if (error instanceof SyntaxError) {
-      ElMessage.error('配置 JSON 格式错误，请修正后重试')
-    } else {
-      ElMessage.error(error?.response?.data?.detail || '保存全量系统配置失败')
-    }
+    ElMessage.error(error?.response?.data?.detail || '保存夸克配置失败')
   } finally {
-    fullConfigSaving.value = false
+    quarkSaving.value = false
   }
 }
 
-const reloadFullConfig = async (): Promise<void> => {
-  await loadFullConfig()
+const cancelQuarkChanges = (): void => {
+  if (!quarkSnapshot.value) return
+  applyQuarkConfig(quarkSnapshot.value)
+  ElMessage.info('已取消未保存的更改')
 }
 
 const buildPayload = () => {
@@ -292,7 +337,7 @@ const resetToDefaults = async (): Promise<void> => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadConfig(), loadFullConfig()])
+  await Promise.all([loadConfig(), loadQuarkConfig()])
 })
 </script>
 
@@ -362,7 +407,4 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.raw-editor {
-  margin-top: 8px;
-}
 </style>
