@@ -213,3 +213,81 @@ jobs:
           echo "### GHCR Image" >> "$GITHUB_STEP_SUMMARY"
           echo "- docker pull ${{ steps.image_meta.outputs.image_name }}:branch-${{ steps.image_meta.outputs.branch_tag }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- docker pull ${{ steps.image_meta.outputs.image_name }}:sha-${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-test-machine:
+    if: ${{ github.event_name == 'push' && github.ref_name != 'main' }}
+    needs:
+      - publish-ghcr
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TEST_HOST: 149.88.74.147
+
+    steps:
+      - name: Prepare image metadata
+        id: image_meta
+        run: |
+          BRANCH_TAG=$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9._-]#-#g')
+          IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
+          IMAGE_REF="${IMAGE_NAME}:branch-${BRANCH_TAG}"
+          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare SSH key
+        run: |
+          if [ -z "${{ secrets.TEST_SSH_PRIVATE_KEY }}" ] || [ -z "${{ secrets.TEST_SSH_USER }}" ]; then
+            echo "Missing required secrets: TEST_SSH_PRIVATE_KEY or TEST_SSH_USER"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.TEST_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$TEST_HOST" >> ~/.ssh/known_hosts
+
+      - name: Create deploy compose file
+        run: |
+          cat > deploy-compose.yml <<EOF
+          name: strm_test
+          services:
+            app:
+              image: ${{ steps.image_meta.outputs.image_ref }}
+              container_name: strm_test
+              restart: unless-stopped
+              ports:
+                - "18000:18000"
+              environment:
+                PORT: "18000"
+                WEB_CONCURRENCY: "1"
+                CONFIG_PATH: /data/config.yaml
+              volumes:
+                - /root/strm_test/data:/data
+          EOF
+
+      - name: Upload compose to test machine
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" "mkdir -p /root/strm_test"
+          scp -i ~/.ssh/id_ed25519 deploy-compose.yml \
+            "${{ secrets.TEST_SSH_USER }}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+
+      - name: Deploy on test machine
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" \
+            "GHCR_USERNAME='${{ secrets.TEST_GHCR_USERNAME }}' GHCR_TOKEN='${{ secrets.TEST_GHCR_TOKEN }}' bash -s" <<'EOF'
+          set -euo pipefail
+          mkdir -p /root/strm_test/data
+          cd /root/strm_test
+
+          if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          fi
+
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker compose ps
+          curl -fsS http://127.0.0.1:18000/health
+          EOF
+
+      - name: Publish deployment URL
+        run: |
+          echo "### Test Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: http://$TEST_HOST:18000/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: ${{ steps.image_meta.outputs.image_ref }}" >> "$GITHUB_STEP_SUMMARY"
