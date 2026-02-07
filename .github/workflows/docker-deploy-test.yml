@@ -215,7 +215,7 @@ jobs:
           echo "- docker pull ${{ steps.image_meta.outputs.image_name }}:sha-${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-test-machine:
-    if: ${{ github.event_name == 'push' && github.ref_name != 'main' && secrets.TEST_SSH_PRIVATE_KEY != '' && secrets.TEST_SSH_USER != '' }}
+    if: ${{ github.event_name == 'push' && github.ref_name != 'main' && secrets.TEST_SSH_USER != '' && (secrets.TEST_SSH_PRIVATE_KEY != '' || secrets.TEST_SSH_PASSWORD != '') }}
     needs:
       - publish-ghcr
     runs-on: ubuntu-latest
@@ -232,12 +232,20 @@ jobs:
           IMAGE_REF="${IMAGE_NAME}:branch-${BRANCH_TAG}"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare SSH key
+      - name: Prepare SSH auth
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.TEST_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$TEST_HOST" >> ~/.ssh/known_hosts
+
+          if [ -n "${{ secrets.TEST_SSH_PRIVATE_KEY }}" ]; then
+            printf '%s\n' "${{ secrets.TEST_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+            chmod 600 ~/.ssh/id_ed25519
+            echo "auth_method=key" >> "$GITHUB_ENV"
+          else
+            sudo apt-get update
+            sudo apt-get install -y sshpass
+            echo "auth_method=password" >> "$GITHUB_ENV"
+          fi
 
       - name: Create deploy compose file
         run: |
@@ -260,14 +268,19 @@ jobs:
 
       - name: Upload compose to test machine
         run: |
-          ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" "mkdir -p /root/strm_test"
-          scp -i ~/.ssh/id_ed25519 deploy-compose.yml \
-            "${{ secrets.TEST_SSH_USER }}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+          if [ "$auth_method" = "key" ]; then
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" "mkdir -p /root/strm_test"
+            scp -i ~/.ssh/id_ed25519 deploy-compose.yml \
+              "${{ secrets.TEST_SSH_USER }}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+          else
+            sshpass -p "${{ secrets.TEST_SSH_PASSWORD }}" ssh "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" "mkdir -p /root/strm_test"
+            sshpass -p "${{ secrets.TEST_SSH_PASSWORD }}" scp deploy-compose.yml \
+              "${{ secrets.TEST_SSH_USER }}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+          fi
 
       - name: Deploy on test machine
         run: |
-          ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" \
-            "GHCR_USERNAME='${{ secrets.TEST_GHCR_USERNAME }}' GHCR_TOKEN='${{ secrets.TEST_GHCR_TOKEN }}' bash -s" <<'EOF'
+          cat > remote-deploy.sh <<'EOF'
           set -euo pipefail
           mkdir -p /root/strm_test/data
           cd /root/strm_test
@@ -281,6 +294,14 @@ jobs:
           docker compose ps
           curl -fsS http://127.0.0.1:18000/health
           EOF
+
+          if [ "$auth_method" = "key" ]; then
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" \
+              "GHCR_USERNAME='${{ secrets.TEST_GHCR_USERNAME }}' GHCR_TOKEN='${{ secrets.TEST_GHCR_TOKEN }}' bash -s" < remote-deploy.sh
+          else
+            sshpass -p "${{ secrets.TEST_SSH_PASSWORD }}" ssh "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" \
+              "GHCR_USERNAME='${{ secrets.TEST_GHCR_USERNAME }}' GHCR_TOKEN='${{ secrets.TEST_GHCR_TOKEN }}' bash -s" < remote-deploy.sh
+          fi
 
       - name: Publish deployment URL
         run: |
