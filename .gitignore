@@ -63,9 +63,6 @@ tests/verify_*.py
 verify_*.py
 config.test*.yaml
 
-# Docker
-.dockerignore
-
 # Reference projects
 Reference project/
 .trae/

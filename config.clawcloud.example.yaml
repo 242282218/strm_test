@@ -1,0 +1,61 @@
+database: /data/quark_strm.db
+log_level: INFO
+log_file: /data/logs/quark_strm.log
+colored_log: true
+timeout: 30
+create_sub_directory: false
+
+exts:
+  - .mp4
+  - .mkv
+  - .avi
+  - .mov
+  - .flv
+  - .wmv
+
+alt_exts:
+  - .srt
+  - .ass
+  - .ssa
+
+endpoints:
+  - base_url: http://localhost:8000
+    token: ""
+    username: ""
+    password: ""
+    insecure_tls_verify: false
+    max_connections: 5
+    dirs:
+      - local_directory: /data/strm
+        remote_directories:
+          - /video
+        not_recursive: false
+        create_sub_directory: false
+        disabled: false
+        force_refresh: false
+
+quark:
+  cookie: ""
+  referer: https://pan.quark.cn/
+  root_id: "0"
+  only_video: true
+
+webdav:
+  enabled: false
+  mount_path: /dav
+  username: ""
+  password: ""
+  read_only: true
+
+cors:
+  allow_origins:
+    - "*"
+  allow_credentials: false
+  allow_methods:
+    - "*"
+  allow_headers:
+    - "*"
+
+security:
+  api_key: ""
+  require_api_key: false

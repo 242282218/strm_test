@@ -10,10 +10,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
-COPY config.yaml .
+COPY config.clawcloud.example.yaml ./config.clawcloud.example.yaml
+
+RUN mkdir -p /data/logs /data/strm /app/output /app/tmp
 
 EXPOSE 8000
 
+ENV CONFIG_PATH=/data/config.yaml
+ENV PORT=8000
 ENV WEB_CONCURRENCY=1
 
-CMD uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY}
+CMD ["sh", "-c", "if [ ! -f \"$CONFIG_PATH\" ]; then cp /app/config.clawcloud.example.yaml \"$CONFIG_PATH\"; fi && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-1}"]
