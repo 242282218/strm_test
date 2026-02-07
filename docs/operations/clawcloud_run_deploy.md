@@ -1,6 +1,7 @@
 # ClawCloud Run Deployment (This Repository)
 
-This guide deploys the current project as a single backend service on ClawCloud Run.
+This guide deploys the current project as a single full-stack service on ClawCloud Run.
+The container serves frontend and backend on the same port.
 
 ## 1. Prepare source
 
@@ -63,6 +64,7 @@ Redeploy or restart after config changes.
 
 After app is running:
 
+- Open `https://<your-app-domain>/` for frontend UI
 - `GET /health` should return `status: ok`
 - Example: `https://<your-app-domain>/health`
 

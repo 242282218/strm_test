@@ -6,12 +6,13 @@ FastAPI主应用
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 import time
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import ORJSONResponse, FileResponse
 from asgiref.wsgi import WsgiToAsgi
 from app.api import quark, strm, proxy, emby, scrape, tasks, strm_validator, quark_sdk, search, rename, dashboard, tmdb, monitoring, smart_rename, file_manager
 from app.api.v1 import api_router as v1_router
@@ -48,6 +49,30 @@ logger = get_logger(__name__)
 
 config: AppConfig = None
 config_service = None
+WEB_DIST_DIR = Path(__file__).resolve().parent.parent / "web_dist"
+NON_SPA_PREFIXES = (
+    "api",
+    "dav",
+    "docs",
+    "redoc",
+    "openapi.json",
+    "health",
+    "config",
+)
+
+
+def _get_frontend_file(relative_path: str) -> Path | None:
+    if not WEB_DIST_DIR.exists():
+        return None
+
+    root = WEB_DIST_DIR.resolve()
+    candidate = (WEB_DIST_DIR / relative_path).resolve()
+    if not str(candidate).startswith(str(root)):
+        return None
+
+    if candidate.is_file():
+        return candidate
+    return None
 
 
 def init_app():
@@ -315,9 +340,13 @@ app.include_router(monitoring.router, prefix="/api", tags=["monitoring"])
 
 @app.get("/")
 async def root():
-    """根路径"""
+    """Serve frontend index when available."""
+    index_file = _get_frontend_file("index.html")
+    if index_file:
+        return FileResponse(index_file)
+
     return {
-        "name": "夸克STRM系统",
+        "name": "Quark STRM",
         "version": "0.1.0",
         "status": "running"
     }
@@ -353,6 +382,26 @@ async def get_config(_auth: None = Depends(require_api_key)):
         "endpoints_count": len(config.endpoints)
     }
 
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str):
+    normalized = full_path.lstrip("/")
+    if any(
+        normalized == prefix or normalized.startswith(f"{prefix}/")
+        for prefix in NON_SPA_PREFIXES
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    static_file = _get_frontend_file(normalized)
+    if static_file:
+        return FileResponse(static_file)
+
+    index_file = _get_frontend_file("index.html")
+    if index_file:
+        return FileResponse(index_file)
+
+    raise HTTPException(status_code=404, detail="Not found")
 
 if __name__ == "__main__":
     import uvicorn
