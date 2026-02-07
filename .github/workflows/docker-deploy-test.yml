@@ -215,16 +215,36 @@ jobs:
           echo "- docker pull ${{ steps.image_meta.outputs.image_name }}:sha-${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-test-machine:
-    if: ${{ github.event_name == 'push' && github.ref_name != 'main' && secrets.TEST_SSH_USER != '' && (secrets.TEST_SSH_PRIVATE_KEY != '' || secrets.TEST_SSH_PASSWORD != '') }}
+    if: ${{ github.event_name == 'push' && github.ref_name != 'main' }}
     needs:
       - publish-ghcr
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       TEST_HOST: 149.88.74.147
+      TEST_SSH_USER: ${{ secrets.TEST_SSH_USER }}
+      TEST_SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+      TEST_SSH_PASSWORD: ${{ secrets.TEST_SSH_PASSWORD }}
+      TEST_GHCR_USERNAME: ${{ secrets.TEST_GHCR_USERNAME }}
+      TEST_GHCR_TOKEN: ${{ secrets.TEST_GHCR_TOKEN }}
 
     steps:
+      - name: Validate deploy credentials
+        run: |
+          echo "skip_deploy=false" >> "$GITHUB_ENV"
+          if [ -z "${TEST_SSH_USER:-}" ]; then
+            echo "skip_deploy=true" >> "$GITHUB_ENV"
+            echo "TEST_SSH_USER is missing, skip remote deploy."
+            exit 0
+          fi
+          if [ -z "${TEST_SSH_PRIVATE_KEY:-}" ] && [ -z "${TEST_SSH_PASSWORD:-}" ]; then
+            echo "skip_deploy=true" >> "$GITHUB_ENV"
+            echo "Neither TEST_SSH_PRIVATE_KEY nor TEST_SSH_PASSWORD is set, skip remote deploy."
+            exit 0
+          fi
+
       - name: Prepare image metadata
+        if: env.skip_deploy != 'true'
         id: image_meta
         run: |
           BRANCH_TAG=$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9._-]#-#g')
@@ -233,12 +253,13 @@ jobs:
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare SSH auth
+        if: env.skip_deploy != 'true'
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H "$TEST_HOST" >> ~/.ssh/known_hosts
 
-          if [ -n "${{ secrets.TEST_SSH_PRIVATE_KEY }}" ]; then
-            printf '%s\n' "${{ secrets.TEST_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          if [ -n "${TEST_SSH_PRIVATE_KEY:-}" ]; then
+            printf '%s\n' "${TEST_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
             chmod 600 ~/.ssh/id_ed25519
             echo "auth_method=key" >> "$GITHUB_ENV"
           else
@@ -248,6 +269,7 @@ jobs:
           fi
 
       - name: Create deploy compose file
+        if: env.skip_deploy != 'true'
         run: |
           cat > deploy-compose.yml <<EOF
           name: strm_test
@@ -267,18 +289,20 @@ jobs:
           EOF
 
       - name: Upload compose to test machine
+        if: env.skip_deploy != 'true'
         run: |
           if [ "$auth_method" = "key" ]; then
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" "mkdir -p /root/strm_test"
+            ssh -i ~/.ssh/id_ed25519 "${TEST_SSH_USER}@$TEST_HOST" "mkdir -p /root/strm_test"
             scp -i ~/.ssh/id_ed25519 deploy-compose.yml \
-              "${{ secrets.TEST_SSH_USER }}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+              "${TEST_SSH_USER}@$TEST_HOST:/root/strm_test/docker-compose.yml"
           else
-            sshpass -p "${{ secrets.TEST_SSH_PASSWORD }}" ssh "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" "mkdir -p /root/strm_test"
-            sshpass -p "${{ secrets.TEST_SSH_PASSWORD }}" scp deploy-compose.yml \
-              "${{ secrets.TEST_SSH_USER }}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+            sshpass -p "${TEST_SSH_PASSWORD}" ssh "${TEST_SSH_USER}@$TEST_HOST" "mkdir -p /root/strm_test"
+            sshpass -p "${TEST_SSH_PASSWORD}" scp deploy-compose.yml \
+              "${TEST_SSH_USER}@$TEST_HOST:/root/strm_test/docker-compose.yml"
           fi
 
       - name: Deploy on test machine
+        if: env.skip_deploy != 'true'
         run: |
           cat > remote-deploy.sh <<'EOF'
           set -euo pipefail
@@ -296,15 +320,22 @@ jobs:
           EOF
 
           if [ "$auth_method" = "key" ]; then
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" \
-              "GHCR_USERNAME='${{ secrets.TEST_GHCR_USERNAME }}' GHCR_TOKEN='${{ secrets.TEST_GHCR_TOKEN }}' bash -s" < remote-deploy.sh
+            ssh -i ~/.ssh/id_ed25519 "${TEST_SSH_USER}@$TEST_HOST" \
+              "GHCR_USERNAME='${TEST_GHCR_USERNAME}' GHCR_TOKEN='${TEST_GHCR_TOKEN}' bash -s" < remote-deploy.sh
           else
-            sshpass -p "${{ secrets.TEST_SSH_PASSWORD }}" ssh "${{ secrets.TEST_SSH_USER }}@$TEST_HOST" \
-              "GHCR_USERNAME='${{ secrets.TEST_GHCR_USERNAME }}' GHCR_TOKEN='${{ secrets.TEST_GHCR_TOKEN }}' bash -s" < remote-deploy.sh
+            sshpass -p "${TEST_SSH_PASSWORD}" ssh "${TEST_SSH_USER}@$TEST_HOST" \
+              "GHCR_USERNAME='${TEST_GHCR_USERNAME}' GHCR_TOKEN='${TEST_GHCR_TOKEN}' bash -s" < remote-deploy.sh
           fi
 
       - name: Publish deployment URL
+        if: env.skip_deploy != 'true'
         run: |
           echo "### Test Deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "- URL: http://$TEST_HOST:18000/" >> "$GITHUB_STEP_SUMMARY"
           echo "- Image: ${{ steps.image_meta.outputs.image_ref }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deployment skipped notice
+        if: env.skip_deploy == 'true'
+        run: |
+          echo "### Test Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Skipped: missing TEST_SSH_USER or SSH auth secret." >> "$GITHUB_STEP_SUMMARY"
