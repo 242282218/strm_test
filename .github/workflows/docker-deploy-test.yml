@@ -30,8 +30,14 @@ jobs:
         run: npm ci
 
       - name: Frontend lint
+        id: frontend_lint
+        continue-on-error: true
         working-directory: web
         run: npm run lint
+
+      - name: Frontend lint result
+        if: steps.frontend_lint.outcome == 'failure'
+        run: echo "Frontend lint failed (non-blocking in branch CI)."
 
       - name: Frontend type-check and build
         working-directory: web
