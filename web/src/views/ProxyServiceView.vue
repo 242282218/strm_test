@@ -42,15 +42,51 @@
               <el-tag type="warning" size="small">批量生成</el-tag>
             </div>
           </template>
+          
+          <!-- 已选路径列表 -->
+          <div class="selected-paths-section">
+            <div class="section-header">
+              <span class="section-title">已选网盘路径</span>
+              <el-button type="primary" size="small" :icon="FolderOpened" @click="openFileBrowser">
+                添加文件夹/文件
+              </el-button>
+            </div>
+            
+            <div v-if="selectedPaths.length === 0" class="empty-paths">
+              <el-empty description="请点击上方按钮选择网盘文件夹或文件" :image-size="80" />
+            </div>
+            
+            <el-table v-else :data="selectedPaths" size="small" border>
+              <el-table-column type="index" width="50" />
+              <el-table-column label="路径" min-width="200">
+                <template #default="{ row }">
+                  <div class="path-item">
+                    <el-icon v-if="row.type === 'folder'" class="path-icon folder"><Folder /></el-icon>
+                    <el-icon v-else class="path-icon file"><Document /></el-icon>
+                    <span class="path-text" :title="row.path">{{ row.path }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="类型" width="80">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.type === 'folder' ? 'primary' : 'info'">
+                    {{ row.type === 'folder' ? '文件夹' : '文件' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80" fixed="right">
+                <template #default="{ $index }">
+                  <el-button link type="danger" size="small" @click="removePath($index)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <el-divider />
+
           <el-form label-width="120px" :model="strmForm" :rules="strmRules" ref="strmFormRef">
-            <el-form-item label="网盘路径" prop="remote_path">
-              <el-input 
-                v-model="strmForm.remote_path" 
-                placeholder="/video" 
-                :disabled="generating"
-              />
-              <div class="form-tip">要扫描的夸克网盘目录路径</div>
-            </el-form-item>
             <el-form-item label="本地路径" prop="local_path">
               <el-input 
                 v-model="strmForm.local_path" 
@@ -58,6 +94,14 @@
                 :disabled="generating"
               />
               <div class="form-tip">STRM 文件保存的本地目录</div>
+            </el-form-item>
+            <el-form-item label="服务器地址">
+              <el-input 
+                v-model="strmForm.base_url" 
+                placeholder="http://localhost:8000" 
+                :disabled="generating"
+              />
+              <div class="form-tip">Emby 访问代理服务的地址（如 http://192.168.1.100:8000）</div>
             </el-form-item>
             <el-form-item label="URL 模式" prop="strm_url_mode">
               <el-select v-model="strmForm.strm_url_mode" style="width: 100%" :disabled="generating">
@@ -70,7 +114,7 @@
             </el-form-item>
             <el-form-item label="递归扫描">
               <el-switch v-model="strmForm.recursive" :disabled="generating" />
-              <span class="form-tip ml-2">扫描子目录</span>
+              <span class="form-tip ml-2">扫描子目录（仅对文件夹有效）</span>
             </el-form-item>
             <el-form-item label="并发限制">
               <el-slider v-model="strmForm.concurrent_limit" :min="1" :max="10" :disabled="generating" show-stops />
@@ -80,10 +124,12 @@
                 type="primary" 
                 :loading="generating" 
                 :icon="VideoCamera"
+                :disabled="selectedPaths.length === 0"
                 @click="generateStrm"
               >
                 {{ generating ? '生成中...' : '生成 STRM' }}
               </el-button>
+              <span v-if="selectedPaths.length === 0" class="form-tip ml-2">请先选择网盘路径</span>
             </el-form-item>
           </el-form>
 
@@ -193,15 +239,105 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 文件浏览器弹窗 -->
+    <el-dialog
+      v-model="fileBrowserVisible"
+      title="选择网盘文件/文件夹"
+      width="700px"
+      :close-on-click-modal="false"
+    >
+      <div class="file-browser">
+        <!-- 面包屑导航 -->
+        <div class="breadcrumb-bar">
+          <el-button link :icon="ArrowLeft" @click="goBack" :disabled="currentPath === '/'">
+            返回上级
+          </el-button>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item 
+              v-for="(item, index) in breadcrumbItems" 
+              :key="index"
+              @click="jumpToPath(index)"
+              class="breadcrumb-clickable"
+            >
+              {{ item.name || '根目录' }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
+
+        <!-- 文件列表 -->
+        <div class="file-list" v-loading="browsing">
+          <div 
+            v-for="item in fileList" 
+            :key="item.id"
+            class="file-item"
+            :class="{ 
+              'is-folder': item.type === 'folder',
+              'is-selected': item.selected
+            }"
+            @click.self="handleItemClick(item)"
+          >
+            <div class="file-checkbox-wrapper" @click.stop>
+              <el-checkbox 
+                v-model="item.selected" 
+                @change="(val: boolean) => toggleSelection(item, val)"
+              />
+            </div>
+            <div class="file-content" @click="handleContentClick(item)">
+              <el-icon class="file-icon" :size="40" :class="item.type === 'folder' ? 'folder-icon' : 'file-icon'">
+                <Folder v-if="item.type === 'folder'" />
+                <Document v-else />
+              </el-icon>
+              <div class="file-info">
+                <div class="file-name">{{ item.name }}</div>
+                <div class="file-meta">{{ item.type === 'folder' ? '文件夹' : formatSize(item.size) }}</div>
+              </div>
+            </div>
+          </div>
+          <el-empty v-if="fileList.length === 0" description="空文件夹" :image-size="80" />
+        </div>
+
+        <!-- 已选文件预览 -->
+        <div class="selection-preview" v-if="browserSelection.length > 0">
+          <div class="selection-header">
+            <span>已选择 {{ browserSelection.length }} 项</span>
+            <el-button link type="danger" size="small" @click="clearBrowserSelection">
+              清空
+            </el-button>
+          </div>
+          <el-scrollbar max-height="100px">
+            <div class="selection-tags">
+              <el-tag
+                v-for="(item, index) in browserSelection"
+                :key="item.id"
+                closable
+                size="small"
+                @close="removeBrowserSelection(index)"
+              >
+                {{ item.name }}
+              </el-tag>
+            </div>
+          </el-scrollbar>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="fileBrowserVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSelection">
+          确认选择 ({{ browserSelection.length }})
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Delete, VideoCamera } from '@element-plus/icons-vue'
+import { Refresh, Delete, VideoCamera, FolderOpened, Folder, Document, ArrowLeft } from '@element-plus/icons-vue'
 import { getProxyCacheStats, clearProxyCache, getRedirectUrl, getProxyStreamUrl, type ProxyCacheStats } from '@/api/proxy'
 import { scanDirectory, type ScanResult } from '@/api/strm'
+import { browseFiles, type FileItem } from '@/api/fileManager'
 import type { FormInstance, FormRules } from 'element-plus'
 
 const stats = ref<ProxyCacheStats | null>(null)
@@ -219,19 +355,25 @@ const testResult = ref<{
   url?: string
 } | null>(null)
 
+// 已选路径列表
+interface SelectedPath {
+  path: string
+  type: 'folder' | 'file'
+  id?: string
+}
+
+const selectedPaths = ref<SelectedPath[]>([])
+
 const strmFormRef = ref<FormInstance>()
 const strmForm = reactive({
-  remote_path: '/video',
   local_path: './strm',
   strm_url_mode: 'redirect',
   recursive: true,
-  concurrent_limit: 5
+  concurrent_limit: 5,
+  base_url: 'http://localhost:8000'
 })
 
 const strmRules: FormRules = {
-  remote_path: [
-    { required: true, message: '请输入网盘路径', trigger: 'blur' }
-  ],
   local_path: [
     { required: true, message: '请输入本地路径', trigger: 'blur' }
   ],
@@ -245,6 +387,21 @@ const strmResult = ref<{
   message: string
   count?: number
 } | null>(null)
+
+// 文件浏览器相关
+const fileBrowserVisible = ref(false)
+const currentPath = ref('/')
+const fileList = ref<FileItem[]>([])
+const browsing = ref(false)
+const browserSelection = ref<FileItem[]>([])
+
+const breadcrumbItems = computed(() => {
+  const paths = currentPath.value.split('/').filter(Boolean)
+  return [{ name: '', path: '/' }, ...paths.map((name, index) => ({
+    name,
+    path: '/' + paths.slice(0, index + 1).join('/')
+  }))]
+})
 
 const apiEndpoints = [
   { name: 'STRM 生成', method: 'POST', path: '/api/strm/scan', description: '扫描目录生成 STRM 文件' },
@@ -338,8 +495,138 @@ const copyUrl = () => {
   }
 }
 
+// 文件浏览器方法
+const openFileBrowser = () => {
+  fileBrowserVisible.value = true
+  currentPath.value = '/'
+  browserSelection.value = []
+  loadFileList()
+}
+
+const loadFileList = async () => {
+  browsing.value = true
+  try {
+    const res = await browseFiles(currentPath.value)
+    fileList.value = res.items.map(item => ({
+      id: item.id,
+      name: item.name,
+      path: item.path,
+      // 后端返回 file_type，前端使用 type
+      type: (item as any).file_type || item.type,
+      size: item.size,
+      selected: browserSelection.value.some(s => s.id === item.id)
+    }))
+    console.log('Loaded files:', fileList.value)
+  } catch (error) {
+    console.error('Load file list error:', error)
+    ElMessage.error('加载文件列表失败')
+  } finally {
+    browsing.value = false
+  }
+}
+
+const goBack = () => {
+  const paths = currentPath.value.split('/').filter(Boolean)
+  if (paths.length > 0) {
+    paths.pop()
+    currentPath.value = '/' + paths.join('/')
+    loadFileList()
+  }
+}
+
+const jumpToPath = (index: number) => {
+  if (index === 0) {
+    currentPath.value = '/'
+  } else {
+    const paths = currentPath.value.split('/').filter(Boolean)
+    currentPath.value = '/' + paths.slice(0, index).join('/')
+  }
+  loadFileList()
+}
+
+// 处理整个卡片的点击（点击空白区域）
+const handleItemClick = (item: FileItem) => {
+  console.log('Card clicked:', item.name, 'type:', item.type)
+  if (item.type === 'folder') {
+    currentPath.value = item.path
+    loadFileList()
+  }
+}
+
+// 处理内容区域的点击
+const handleContentClick = (item: FileItem) => {
+  console.log('Content clicked:', item.name, 'type:', item.type)
+  if (item.type === 'folder') {
+    // 文件夹：进入目录
+    currentPath.value = item.path
+    loadFileList()
+  } else {
+    // 文件：切换选中状态
+    item.selected = !item.selected
+    toggleSelection(item, item.selected)
+  }
+}
+
+const isSelected = (item: FileItem) => {
+  return browserSelection.value.some(s => s.id === item.id)
+}
+
+const toggleSelection = (item: FileItem, selected: boolean) => {
+  const index = browserSelection.value.findIndex(s => s.id === item.id)
+  if (selected && index === -1) {
+    browserSelection.value.push(item)
+  } else if (!selected && index > -1) {
+    browserSelection.value.splice(index, 1)
+  }
+}
+
+const removeBrowserSelection = (index: number) => {
+  const item = browserSelection.value[index]
+  const fileItem = fileList.value.find(f => f.id === item.id)
+  if (fileItem) {
+    fileItem.selected = false
+  }
+  browserSelection.value.splice(index, 1)
+}
+
+const clearBrowserSelection = () => {
+  fileList.value.forEach(item => item.selected = false)
+  browserSelection.value = []
+}
+
+const confirmSelection = () => {
+  browserSelection.value.forEach(item => {
+    selectedPaths.value.push({
+      path: item.path,
+      type: item.type as 'folder' | 'file',
+      id: item.id
+    })
+  })
+  fileBrowserVisible.value = false
+  ElMessage.success(`已添加 ${browserSelection.value.length} 个路径`)
+}
+
+const removePath = (index: number) => {
+  selectedPaths.value.splice(index, 1)
+}
+
+const formatSize = (size?: number) => {
+  if (!size) return ''
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024
+    i++
+  }
+  return size.toFixed(2) + ' ' + units[i]
+}
+
 const generateStrm = async () => {
   if (!strmFormRef.value) return
+  if (selectedPaths.value.length === 0) {
+    ElMessage.warning('请先选择网盘路径')
+    return
+  }
 
   await strmFormRef.value.validate(async (valid) => {
     if (!valid) return
@@ -348,21 +635,37 @@ const generateStrm = async () => {
     strmResult.value = null
 
     try {
-      const result = await scanDirectory({
-        remote_path: strmForm.remote_path,
-        local_path: strmForm.local_path,
-        recursive: strmForm.recursive,
-        concurrent_limit: strmForm.concurrent_limit,
-        strm_url_mode: strmForm.strm_url_mode as 'redirect' | 'stream' | 'direct' | 'webdav'
-      })
+      // 修复 base_url 格式（确保 http:// 有双斜杠）
+      let baseUrl = strmForm.base_url.trim()
+      if (baseUrl.match(/^http:\/[^/]/)) {
+        baseUrl = baseUrl.replace('http:/', 'http://')
+      }
+      if (baseUrl.match(/^https:\/[^/]/)) {
+        baseUrl = baseUrl.replace('https:/', 'https://')
+      }
+      
+      let totalCount = 0
+      
+      // 逐个处理选中的路径
+      for (const pathItem of selectedPaths.value) {
+        const result = await scanDirectory({
+          remote_path: pathItem.path,
+          local_path: strmForm.local_path,
+          recursive: pathItem.type === 'folder' ? strmForm.recursive : false,
+          concurrent_limit: strmForm.concurrent_limit,
+          strm_url_mode: strmForm.strm_url_mode as 'redirect' | 'stream' | 'direct' | 'webdav',
+          base_url: baseUrl
+        })
+        totalCount += result.count
+      }
 
       strmResult.value = {
         success: true,
         message: `STRM 生成成功`,
-        count: result.count
+        count: totalCount
       }
 
-      ElMessage.success(`成功生成 ${result.count} 个 STRM 文件`)
+      ElMessage.success(`成功生成 ${totalCount} 个 STRM 文件`)
     } catch (error: unknown) {
       strmResult.value = {
         success: false,
@@ -467,5 +770,170 @@ onMounted(() => {
 .strm-stats {
   margin-top: 16px;
   text-align: center;
+}
+
+/* 已选路径区域 */
+.selected-paths-section {
+  margin-bottom: 16px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.empty-paths {
+  padding: 20px 0;
+}
+
+.path-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.path-icon {
+  flex-shrink: 0;
+}
+
+.path-icon.folder {
+  color: #e6a23c;
+}
+
+.path-icon.file {
+  color: #909399;
+}
+
+.path-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 文件浏览器 */
+.file-browser {
+  min-height: 400px;
+}
+
+.breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.breadcrumb-clickable {
+  cursor: pointer;
+  color: var(--primary-color);
+}
+
+.breadcrumb-clickable:hover {
+  text-decoration: underline;
+}
+
+.file-list {
+  min-height: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
+  padding: 8px;
+}
+
+.file-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  border: 2px solid transparent;
+}
+
+.file-item:hover {
+  background: var(--bg-secondary);
+}
+
+.file-item.is-selected {
+  background: var(--primary-color-light);
+  border-color: var(--primary-color);
+}
+
+.file-checkbox-wrapper {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  padding: 4px;
+}
+
+.file-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding-top: 24px;
+  cursor: pointer;
+}
+
+.folder-icon {
+  color: #e6a23c;
+  margin-bottom: 8px;
+}
+
+.file-icon {
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.file-info {
+  text-align: center;
+  width: 100%;
+}
+
+.file-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+
+.file-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.selection-preview {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.selection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.selection-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 </style>

@@ -50,7 +50,7 @@ async def create_scrape_job(
 ):
     """创建刮削任务"""
     try:
-        validate_path(request.target_path, "target_path")
+        validate_path(request.target_path, "target_path", allow_absolute=True)
         
         job = await service.create_job(
             target_path=request.target_path,

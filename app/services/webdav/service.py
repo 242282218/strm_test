@@ -19,9 +19,11 @@ def get_webdav_app():
 
     logger.info(f"Initializing WebDAV service at {webdav_config.mount_path}")
     
-    # 获取认证信息
-    username = webdav_config.username or "admin"
-    password = webdav_config.password or "password"
+    username = (webdav_config.username or "").strip()
+    password = (webdav_config.password or "").strip()
+    if not username or not password:
+        logger.error("WebDAV credentials are required when WebDAV is enabled; service will not start")
+        return None
     
     # 构造 WsgiDAV 配置
     config = {

@@ -87,6 +87,18 @@ const router = createRouter({
           name: 'WebDAV',
           component: () => import('@/views/WebDAVView.vue'),
           meta: { title: 'WebDAV 挂载', icon: 'FolderOpened' }
+        },
+        {
+          path: '/notifications',
+          name: 'Notifications',
+          component: () => import('@/views/NotificationsView.vue'),
+          meta: { title: '通知配置', icon: 'Message' }
+        },
+        {
+          path: '/notifications/history',
+          name: 'NotificationHistory',
+          component: () => import('@/views/NotificationHistoryView.vue'),
+          meta: { title: '通知历史', icon: 'ChatDotSquare' }
         }
       ]
     },

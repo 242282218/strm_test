@@ -24,11 +24,11 @@
               </el-form-item>
 
               <el-form-item label="用户名" prop="username">
-                <el-input v-model="form.username" placeholder="admin" />
+                <el-input v-model="form.username" placeholder="请输入用户名" />
               </el-form-item>
 
               <el-form-item label="密码" prop="password">
-                <el-input v-model="form.password" type="password" placeholder="password" show-password />
+                <el-input v-model="form.password" type="password" placeholder="请输入密码" show-password />
               </el-form-item>
 
               <el-form-item label="只读模式">
@@ -168,10 +168,10 @@ const saving = ref(false)
 const loading = ref(false)
 
 const form = reactive<WebDAVConfig>({
-  enabled: true,
+  enabled: false,
   mount_path: '/dav',
-  username: 'admin',
-  password: 'password',
+  username: '',
+  password: '',
   read_only: true,
   fallback_enabled: true,
   url: 'http://localhost:5244/dav'

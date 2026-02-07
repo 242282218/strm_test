@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -61,7 +61,7 @@ class ScrapeJobCreateRequest(BaseModel):
     @field_validator("target_path")
     @classmethod
     def validate_target_path(cls, value: str) -> str:
-        return validate_path(value, "target_path")
+        return validate_path(value, "target_path", allow_absolute=True)
 
 
 class ScrapeJobResponse(BaseModel):
@@ -96,12 +96,12 @@ class ScrapePathCreateRequest(BaseModel):
     @field_validator("source_path")
     @classmethod
     def validate_source_path(cls, value: str) -> str:
-        return validate_path(value, "source_path")
+        return validate_path(value, "source_path", allow_absolute=True)
 
     @field_validator("dest_path")
     @classmethod
     def validate_dest_path(cls, value: str) -> str:
-        return validate_path(value, "dest_path")
+        return validate_path(value, "dest_path", allow_absolute=True)
 
     @field_validator("cron")
     @classmethod
@@ -133,14 +133,14 @@ class ScrapePathUpdateRequest(BaseModel):
     def validate_source_path(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return value
-        return validate_path(value, "source_path")
+        return validate_path(value, "source_path", allow_absolute=True)
 
     @field_validator("dest_path")
     @classmethod
     def validate_dest_path(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return value
-        return validate_path(value, "dest_path")
+        return validate_path(value, "dest_path", allow_absolute=True)
 
     @field_validator("cron")
     @classmethod
@@ -796,7 +796,7 @@ class ClearRecordsRequest(BaseModel):
 
 @router.post("/clear-failed")
 async def clear_failed_records(
-    body: ClearRecordsRequest,
+    body: ClearRecordsRequest = Body(...),
     _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
@@ -831,7 +831,7 @@ class TruncateRecordsRequest(BaseModel):
 
 @router.post("/truncate-all")
 async def truncate_all_records(
-    body: TruncateRecordsRequest,
+    body: TruncateRecordsRequest = Body(...),
     _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):

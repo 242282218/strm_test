@@ -42,6 +42,13 @@ class TestValidatePath:
             validate_path("C:\\Windows\\system32")
         assert "relative path" in str(exc_info.value).lower()
 
+    def test_absolute_path_allowed_with_explicit_flag(self):
+        """测试显式开启时允许绝对路径"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, "movie.mkv")
+            result = validate_path(test_file, allow_absolute=True)
+            assert result == test_file
+
     def test_null_bytes_rejected(self):
         """测试空字节应该被拒绝"""
         with pytest.raises(InputValidationError) as exc_info:

@@ -57,7 +57,15 @@ class STRMGenerator:
         """
         self.cookie = cookie
         self.output_dir = Path(output_dir)
-        self.base_url = base_url.rstrip("/")
+        # 修复 base_url 格式（确保 http:// 和 https:// 有双斜杠）
+        original_base_url = base_url
+        fixed_base_url = base_url
+        if base_url.startswith('http:/') and not base_url.startswith('http://'):
+            fixed_base_url = base_url.replace('http:/', 'http://', 1)
+        elif base_url.startswith('https:/') and not base_url.startswith('https://'):
+            fixed_base_url = base_url.replace('https:/', 'https://', 1)
+        # 移除末尾的斜杠
+        self.base_url = fixed_base_url.rstrip("/")
         self.use_transcoding = use_transcoding
         self.strm_url_mode = strm_url_mode
         self.service = QuarkService(cookie=cookie)
@@ -66,6 +74,8 @@ class STRMGenerator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"STRMGenerator initialized, output dir: {self.output_dir}, url_mode: {strm_url_mode}")
+        if original_base_url != self.base_url:
+            logger.info(f"Base URL fixed: {original_base_url} -> {self.base_url}")
 
     async def generate_strm_files(
         self,
@@ -239,10 +249,16 @@ class STRMGenerator:
         try:
             # 根据URL模式生成视频URL
             video_url = await self._generate_video_url(file_id, remote_path)
+            logger.info(f"DEBUG: Generated video_url = {video_url}")
 
             # 写入STRM文件
             with open(strm_path, 'w', encoding='utf-8') as f:
                 f.write(video_url)
+
+            # 验证写入的内容
+            with open(strm_path, 'r', encoding='utf-8') as f:
+                written_content = f.read()
+            logger.info(f"DEBUG: Written to file = {written_content}")
 
             logger.info(f"Generated STRM file: {strm_path} -> {video_url[:80]}...")
             return strm_path.relative_to(self.output_dir).as_posix()
@@ -329,7 +345,10 @@ class STRMGenerator:
             password = webdav_cfg.get("password", "")
 
             parsed = urlparse(self.base_url)
-            base = urlunparse((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", "", "")).rstrip("/")
+            netloc = parsed.netloc
+            if username and password and "@" not in netloc:
+                netloc = f"{quote(str(username))}:{quote(str(password))}@{netloc}"
+            base = urlunparse((parsed.scheme, netloc, parsed.path.rstrip("/"), "", "", "")).rstrip("/")
             safe_path = "/" + (remote_path or "").lstrip("/")
             encoded_path = quote(safe_path, safe="/")
 

@@ -19,7 +19,11 @@ from app.core.validators import validate_identifier, validate_proxy_path, valida
 from typing import Optional
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/api/proxy", tags=["代理服务"])
+router = APIRouter(
+    prefix="/api/proxy",
+    tags=["代理服务"],
+    dependencies=[Depends(require_api_key)],
+)
 
 # 获取配置管理器
 config = get_config()
@@ -144,9 +148,6 @@ async def proxy_stream(
             if k in upstream_resp.headers:
                 response_headers[k] = upstream_resp.headers[k]
         
-        # 强制允许跨域 (虽然 FastAPI CORSMiddleware 可能处理了，但代理流明确一下更好)
-        response_headers["Access-Control-Allow-Origin"] = "*"
-
         # 定义生成器
         async def iter_stream():
             try:
@@ -328,7 +329,7 @@ async def proxy_emby_request(request: Request, path: str):
 
 
 @router.post("/cache/clear")
-async def clear_cache(_auth: None = Depends(require_api_key)):
+async def clear_cache():
     """
     清除缓存
     """

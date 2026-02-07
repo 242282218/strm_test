@@ -7,7 +7,7 @@ FastAPI主应用
 from contextlib import asynccontextmanager
 from datetime import datetime
 import time
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -27,6 +27,7 @@ from app.core.exception_handler import (
 from app.core.exceptions import AppException, app_exception_handler
 from app.core.constants import REQUEST_ID_HEADER
 from app.core.validators import InputValidationError
+from app.core.dependencies import require_api_key
 from app.services.cache_service import get_cache_service
 from app.services.link_cache import get_link_cache_service
 from app.services.cron_service import get_cron_service
@@ -86,6 +87,9 @@ def _mount_webdav(app: FastAPI):
 
     mount_path = config.webdav.mount_path
     wsgi_app = get_webdav_app()
+    if wsgi_app is None:
+        logger.error("WebDAV is enabled but app initialization failed. WebDAV mount is skipped.")
+        return
     app.mount(mount_path, WsgiToAsgi(wsgi_app))
     app.state.webdav_mounted = True
     logger.info(f"WebDAV mounted at {mount_path}")
@@ -335,7 +339,7 @@ async def health():
 
 
 @app.get("/config")
-async def get_config():
+async def get_config(_auth: None = Depends(require_api_key)):
     """获取配置（敏感信息脱敏）"""
     if config is None:
         return {"error": "Config not loaded"}

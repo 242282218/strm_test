@@ -51,7 +51,7 @@ class RenamePreviewRequest(BaseModel):
     def validate_paths(cls, v):
         if v is None:
             return v
-        return validate_path(v, "target_path")
+        return validate_path(v, "target_path", allow_absolute=True)
 
     @model_validator(mode="after")
     def validate_target(self):

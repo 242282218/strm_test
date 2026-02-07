@@ -67,7 +67,7 @@ class SmartRenamePreviewRequest(BaseModel):
     @field_validator("target_path")
     @classmethod
     def validate_target_path(cls, v):
-        return validate_path(v, "target_path")
+        return validate_path(v, "target_path", allow_absolute=True)
 
 
 class SmartRenameItemResponse(BaseModel):
@@ -122,7 +122,11 @@ class SmartRenameExecuteRequest(BaseModel):
 
         validated: List[Dict[str, str]] = []
         for op in v:
-            original_path = validate_path((op or {}).get("original_path", ""), "original_path")
+            original_path = validate_path(
+                (op or {}).get("original_path", ""),
+                "original_path",
+                allow_absolute=True,
+            )
             new_name = ((op or {}).get("new_name", "") or "").strip()
             if not new_name:
                 raise InputValidationError("new_name is required")

@@ -270,7 +270,7 @@ Expected fields:
         except json.JSONDecodeError:
             pass
 
-        match = re.search(r"\\{.*\\}", cleaned, re.DOTALL)
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if match:
             json_str = match.group()
             try:

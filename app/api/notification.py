@@ -6,8 +6,13 @@ from app.core.db import get_db
 from app.models.notification import NotificationChannel, NotificationRule, NotificationLog
 from app.services.notification_service import get_notification_service, NotificationService, NotificationType, NotificationMessage
 from app.core.dependencies import require_api_key
+from app.core.security import mask_sensitive_data
 
-router = APIRouter(prefix="/api/notification", tags=["notification"])
+router = APIRouter(
+    prefix="/api/notification",
+    tags=["notification"],
+    dependencies=[Depends(require_api_key)],
+)
 
 # ==================== Pydantic Models ====================
 
@@ -71,12 +76,21 @@ class LogResponse(BaseModel):
     error_message: Optional[str]
     created_at: str # DateTime needed specialized handling or just default str
 
+
+def _to_channel_response(db_channel: NotificationChannel) -> ChannelResponse:
+    return ChannelResponse(
+        id=db_channel.id,
+        channel_type=db_channel.channel_type,
+        channel_name=db_channel.channel_name,
+        is_enabled=db_channel.is_enabled,
+        config=mask_sensitive_data(db_channel.config or {}),
+    )
+
 # ==================== Channels ====================
 
 @router.post("/channels", response_model=ChannelResponse)
 def create_channel(
     channel: ChannelCreate,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db)
 ):
     """创建通知渠道"""
@@ -88,18 +102,18 @@ def create_channel(
     db.add(db_channel)
     db.commit()
     db.refresh(db_channel)
-    return db_channel
+    return _to_channel_response(db_channel)
 
 @router.get("/channels", response_model=List[ChannelResponse])
 def list_channels(db: Session = Depends(get_db)):
     """获取所有渠道"""
-    return db.query(NotificationChannel).all()
+    channels = db.query(NotificationChannel).all()
+    return [_to_channel_response(channel) for channel in channels]
 
 @router.put("/channels/{channel_id}", response_model=ChannelResponse)
 async def update_channel(
     channel_id: int, 
     channel: ChannelUpdate, 
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -121,12 +135,11 @@ async def update_channel(
     # 只要有更新，就重载服务配置
     await service.reload()
     
-    return db_channel
+    return _to_channel_response(db_channel)
 
 @router.delete("/channels/{channel_id}")
 async def delete_channel(
     channel_id: int, 
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -144,7 +157,6 @@ async def delete_channel(
 @router.post("/channels/{channel_id}/test")
 async def test_channel(
     channel_id: int, 
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -175,7 +187,6 @@ async def test_channel(
 @router.post("/rules", response_model=RuleResponse)
 async def create_rule(
     rule: RuleCreate, 
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):
@@ -200,7 +211,6 @@ def list_rules(db: Session = Depends(get_db)):
 @router.delete("/rules/{rule_id}")
 async def delete_rule(
     rule_id: int, 
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service)
 ):

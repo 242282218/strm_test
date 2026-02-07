@@ -34,8 +34,8 @@ async def scan_directory(
     database = None
     service = None
     try:
-        remote_path = validate_path(remote_path, "remote_path")
-        local_path = validate_path(local_path, "local_path")
+        remote_path = validate_path(remote_path, "remote_path", allow_absolute=True)
+        local_path = validate_path(local_path, "local_path", allow_absolute=True)
         database = Database(resolve_db_path())
         service = StrmService(
             cookie=cookie,

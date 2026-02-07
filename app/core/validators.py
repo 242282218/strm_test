@@ -39,7 +39,8 @@ def validate_path(
     field_name: str = "path",
     max_length: int = MAX_PATH_LENGTH,
     base_dir: Optional[str] = None,
-    allowed_dirs: Optional[List[str]] = None
+    allowed_dirs: Optional[List[str]] = None,
+    allow_absolute: bool = False,
 ) -> str:
     """
     验证路径，防止路径遍历攻击
@@ -67,9 +68,10 @@ def validate_path(
     if any(p == '..' for p in parts):
         raise InputValidationError(f"{field_name} contains invalid path traversal sequence")
     
-    # 2. 检查是否以 / 或 \ 开头（绝对路径）
-    # 如果指定了 allowed_dirs，允许绝对路径（后续会验证是否在允许范围内）
-    if os.path.isabs(v) and allowed_dirs is None:
+    # 2. 绝对路径策略：
+    # - 默认仅允许相对路径
+    # - 显式允许时可接收绝对路径（后续仍会经过 base_dir/allowed_dirs 限制）
+    if os.path.isabs(v) and allowed_dirs is None and base_dir is None and not allow_absolute:
         raise InputValidationError(f"{field_name} must be a relative path")
     
     # 3. 检查是否包含空字节（用于绕过某些检查）

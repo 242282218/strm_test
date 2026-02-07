@@ -8,17 +8,41 @@
 
       <el-menu
         :default-active="$route.path"
+        :default-openeds="defaultOpeneds"
         :collapse="isCollapse"
         :collapse-transition="false"
         router
         class="sidebar-menu"
       >
-        <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
-          <el-icon>
-            <component :is="item.icon" />
-          </el-icon>
-          <template #title>{{ item.title }}</template>
-        </el-menu-item>
+        <template v-for="group in menuGroups" :key="group.title">
+          <!-- 单一项（概览） -->
+          <el-menu-item v-if="group.items.length === 1" :index="group.items[0].path">
+            <el-icon>
+              <component :is="group.icon" />
+            </el-icon>
+            <template #title>{{ group.items[0].title }}</template>
+          </el-menu-item>
+          
+          <!-- 分组菜单 -->
+          <el-sub-menu v-else :index="group.title">
+            <template #title>
+              <el-icon>
+                <component :is="group.icon" />
+              </el-icon>
+              <span>{{ group.title }}</span>
+            </template>
+            <el-menu-item 
+              v-for="item in group.items" 
+              :key="item.path" 
+              :index="item.path"
+            >
+              <el-icon>
+                <component :is="item.icon" />
+              </el-icon>
+              <template #title>{{ item.title }}</template>
+            </el-menu-item>
+          </el-sub-menu>
+        </template>
       </el-menu>
 
       <div class="sidebar-footer">
@@ -71,64 +95,161 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Cloudy, Expand, Fold, Moon, Sunny, UserFilled } from '@element-plus/icons-vue'
+import { 
+  ArrowDown, 
+  Cloudy, 
+  Expand, 
+  Fold, 
+  Moon, 
+  Sunny, 
+  UserFilled,
+  Odometer,
+  Search,
+  MagicStick,
+  FolderOpened,
+  Document,
+  CollectionTag,
+  Monitor,
+  Link,
+  Folder,
+  List,
+  Setting,
+  Film,
+  VideoPlay,
+  Tools,
+  Bell,
+  Message,
+  ChatDotSquare,
+  House
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import Breadcrumb from '@/components/Breadcrumb.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const isCollapse = ref(false)
 const isDark = ref(false)
 
-const menuItems = [
-  { path: '/dashboard', title: '概览', icon: 'Odometer' },
-  { path: '/search', title: '资源搜索', icon: 'Search' },
-  { path: '/smart-rename', title: '智能重命名', icon: 'MagicStick' },
-  { path: '/scrape-pathes', title: '刮削目录', icon: 'FolderOpened' },
-  { path: '/scrape-records', title: '刮削记录', icon: 'Document' },
-  { path: '/settings/category-strategy', title: '二级分类策略', icon: 'CollectionTag' },
-  { path: '/emby-monitor', title: 'Emby 监控', icon: 'Monitor' },
-  { path: '/proxy-service', title: '代理服务', icon: 'Link' },
-  { path: '/webdav', title: 'WebDAV 挂载', icon: 'Folder' },
-  { path: '/tasks', title: '任务管理', icon: 'List' },
-  { path: '/config', title: '系统配置', icon: 'Setting' }
+// 菜单分组配置
+interface MenuItem {
+  path: string
+  title: string
+  icon: string
+}
+
+interface MenuGroup {
+  title: string
+  icon: string
+  items: MenuItem[]
+}
+
+const menuGroups: MenuGroup[] = [
+  {
+    title: '概览',
+    icon: 'Odometer',
+    items: [
+      { path: '/dashboard', title: '概览', icon: 'House' }
+    ]
+  },
+  {
+    title: '任务管理',
+    icon: 'List',
+    items: [
+      { path: '/tasks', title: '任务管理', icon: 'List' }
+    ]
+  },
+  {
+    title: '资源管理',
+    icon: 'Folder',
+    items: [
+      { path: '/search', title: '资源搜索', icon: 'Search' },
+      { path: '/smart-rename', title: '智能重命名', icon: 'MagicStick' }
+    ]
+  },
+  {
+    title: '媒体刮削',
+    icon: 'Film',
+    items: [
+      { path: '/scrape-pathes', title: '刮削目录', icon: 'FolderOpened' },
+      { path: '/scrape-records', title: '刮削记录', icon: 'Document' },
+      { path: '/settings/category-strategy', title: '分类策略', icon: 'CollectionTag' }
+    ]
+  },
+  {
+    title: '播放服务',
+    icon: 'VideoPlay',
+    items: [
+      { path: '/proxy-service', title: '代理服务', icon: 'Link' },
+      { path: '/webdav', title: 'WebDAV', icon: 'Folder' },
+      { path: '/emby-monitor', title: 'Emby监控', icon: 'Monitor' }
+    ]
+  },
+  {
+    title: '通知服务',
+    icon: 'Bell',
+    items: [
+      { path: '/notifications', title: '通知配置', icon: 'Message' },
+      { path: '/notifications/history', title: '通知历史', icon: 'ChatDotSquare' }
+    ]
+  },
+  {
+    title: '系统管理',
+    icon: 'Tools',
+    items: [
+      { path: '/config', title: '系统配置', icon: 'Setting' }
+    ]
+  }
 ]
 
-const toggleCollapse = (): void => {
+// 计算默认展开的菜单
+const defaultOpeneds = computed(() => {
+  const currentPath = route.path
+  const openGroups: string[] = []
+  
+  menuGroups.forEach(group => {
+    if (group.items.length > 1) {
+      const isInGroup = group.items.some(item => currentPath.startsWith(item.path))
+      if (isInGroup) {
+        openGroups.push(group.title)
+      }
+    }
+  })
+  
+  return openGroups
+})
+
+const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
-const toggleTheme = (val: boolean): void => {
-  if (val) {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
+const toggleTheme = () => {
+  document.documentElement.classList.toggle('dark', isDark.value)
 }
 
-const handleCommand = (command: string): void => {
-  if (command === 'profile') {
-    ElMessage.info('个人中心开发中')
-    return
-  }
-  if (command === 'settings') {
-    router.push('/config')
-    return
-  }
-  if (command === 'logout') {
-    ElMessageBox.confirm('确认退出登录吗？', '提示', {
-      confirmButtonText: '确认',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }).then(() => {
-      authStore.logout()
-      router.push('/login')
-      ElMessage.success('已退出登录')
-    })
+const handleCommand = (command: string) => {
+  switch (command) {
+    case 'profile':
+      router.push('/profile')
+      break
+    case 'settings':
+      router.push('/config')
+      break
+    case 'logout':
+      ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        authStore.logout()
+        router.push('/login')
+        ElMessage.success('已退出登录')
+      })
+      break
   }
 }
 </script>
@@ -136,11 +257,10 @@ const handleCommand = (command: string): void => {
 <style scoped>
 .layout-container {
   height: 100vh;
-  background: var(--bg-primary);
 }
 
 .sidebar {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -158,33 +278,66 @@ const handleCommand = (command: string): void => {
 
 .logo-icon {
   color: var(--primary-color);
+  flex-shrink: 0;
 }
 
 .logo-text {
   margin-left: 12px;
   font-size: 18px;
   font-weight: 600;
-  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .sidebar-menu {
   flex: 1;
   border-right: none;
-  padding: 16px 0;
+  padding: 8px 0;
+}
+
+.sidebar-menu :deep(.el-menu-item) {
+  height: 44px;
+  line-height: 44px;
+  margin: 2px 8px;
+  border-radius: 6px;
+}
+
+.sidebar-menu :deep(.el-menu-item:hover) {
+  background: var(--bg-secondary);
+}
+
+.sidebar-menu :deep(.el-menu-item.is-active) {
+  background: var(--primary-color-light);
+  color: var(--primary-color);
+}
+
+.sidebar-menu :deep(.el-sub-menu__title) {
+  height: 44px;
+  line-height: 44px;
+  margin: 2px 8px;
+  border-radius: 6px;
+}
+
+.sidebar-menu :deep(.el-sub-menu__title:hover) {
+  background: var(--bg-secondary);
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-menu-item) {
+  height: 40px;
+  line-height: 40px;
+  padding-left: 48px !important;
 }
 
 .sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid var(--border-color);
+  height: 48px;
   display: flex;
+  align-items: center;
   justify-content: center;
+  border-top: 1px solid var(--border-color);
 }
 
 .header {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -195,7 +348,7 @@ const handleCommand = (command: string): void => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 .user-info {
@@ -204,12 +357,12 @@ const handleCommand = (command: string): void => {
   gap: 8px;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: var(--radius-md);
+  border-radius: 4px;
   transition: background 0.2s;
 }
 
 .user-info:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
 }
 
 .username {
@@ -218,9 +371,9 @@ const handleCommand = (command: string): void => {
 }
 
 .main-content {
-  padding: 24px;
+  background: var(--bg-secondary);
+  padding: 16px;
   overflow-y: auto;
-  background: var(--bg-primary);
 }
 
 .fade-enter-active,
@@ -231,11 +384,5 @@ const handleCommand = (command: string): void => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-@media (max-width: 768px) {
-  .username {
-    display: none;
-  }
 }
 </style>

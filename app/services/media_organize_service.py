@@ -81,8 +81,8 @@ class MediaOrganizeService:
                 return
 
             # 获取 WebDAV 配置用于构造 URL
-            webdav_user = self.config.get("webdav.username", "admin")
-            webdav_pass = self.config.get("webdav.password", "admin")
+            webdav_user = self.config.get("webdav.username", "")
+            webdav_pass = self.config.get("webdav.password", "")
             
             # 2. 处理文件
             for i, file in enumerate(scanned_files):

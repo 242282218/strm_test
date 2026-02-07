@@ -508,7 +508,7 @@ class SmartRenameService:
             - SmartRenamePreviewResult: 预览结果
         副作用: 写入数据库记录预览信息
         """
-        target_path = validate_path(target_path, "target_path")
+        target_path = validate_path(target_path, "target_path", allow_absolute=True)
         options = options or SmartRenameOptions()
         batch_id = str(uuid.uuid4())
         

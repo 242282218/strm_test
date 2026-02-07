@@ -342,7 +342,7 @@ async def browse_quark_directory(
 
 
 @router.get("/config")
-async def get_quark_config():
+async def get_quark_config(_auth: None = Depends(require_api_key)):
     """
     获取夸克配置信息
 
@@ -396,7 +396,7 @@ async def sync_quark_files(
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie is required. Please provide cookie parameter or set it in config.yaml")
 
-    output_dir = validate_path(output_dir, "output_dir")
+    output_dir = validate_path(output_dir, "output_dir", allow_absolute=True)
     root_id = validate_identifier(root_id, "root_id")
 
     try:

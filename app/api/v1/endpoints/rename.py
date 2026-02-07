@@ -67,7 +67,7 @@ async def preview_rename(
                 message="target_path or path is required",
                 status_code=422,
             )
-        target_path = validate_path(target_path, "target_path")
+        target_path = validate_path(target_path, "target_path", allow_absolute=True)
 
         options = request.options.model_dump() if request.options else {}
         if "recursive" not in options:

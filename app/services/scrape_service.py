@@ -34,7 +34,7 @@ from app.services.notification_service import (
     get_notification_service,
 )
 from app.services.scrape_state_machine import ScrapeStateMachine
-from app.services.tmdb_service import TMDBService, get_tmdb_service
+from app.services.tmdb_service import TMDBService
 from app.utils.media_parser import MediaParser
 
 logger = get_logger(__name__)
@@ -95,7 +95,7 @@ class ScrapeService:
         options: Optional[Dict[str, Any]] = None,
     ) -> ScrapeJob:
         """Create scrape job."""
-        target_path = validate_path(target_path, "target_path")
+        target_path = validate_path(target_path, "target_path", allow_absolute=True)
         job_id = str(uuid.uuid4())
         normalized_options = self._normalize_options(
             target_path=target_path,
@@ -525,10 +525,29 @@ class ScrapeService:
         if normalized["media_type"] not in {"auto", "movie", "tv"}:
             normalized["media_type"] = "auto"
 
-        normalized["source_path"] = validate_path(normalized["source_path"], "source_path")
-        normalized["dest_path"] = validate_path(normalized["dest_path"], "dest_path")
+        normalized["source_path"] = validate_path(normalized["source_path"], "source_path", allow_absolute=True)
+        normalized["dest_path"] = validate_path(normalized["dest_path"], "dest_path", allow_absolute=True)
 
         return normalized
+
+    def _build_allowed_dirs(self, options: Dict[str, Any], *extra_paths: Optional[str]) -> List[str]:
+        allowed_dirs: List[str] = []
+        def _append_dir(path: Optional[str]) -> None:
+            if not isinstance(path, str) or not path.strip():
+                return
+            abs_dir = os.path.abspath(path)
+            if abs_dir not in allowed_dirs:
+                allowed_dirs.append(abs_dir)
+            parent_dir = os.path.dirname(abs_dir)
+            if parent_dir and parent_dir not in allowed_dirs:
+                allowed_dirs.append(parent_dir)
+
+        for key in ("source_path", "dest_path", "target_path"):
+            _append_dir(options.get(key))
+
+        for path in extra_paths:
+            _append_dir(path)
+        return allowed_dirs
 
     def _scan_directory(self, path: str) -> List[str]:
         media_extensions = {".mp4", ".mkv", ".avi", ".mov", ".strm"}
@@ -587,10 +606,11 @@ class ScrapeService:
 
             file_dir = os.path.dirname(item.file_path)
             base_name = os.path.splitext(item.file_name)[0]
+            allowed_dirs = self._build_allowed_dirs(options, file_dir)
 
             # 验证文件目录是否在允许范围内
             try:
-                validate_file_path(file_dir)
+                validate_file_path(file_dir, allowed_dirs=allowed_dirs)
             except PathSecurityError as e:
                 logger.error(f"Path security error for file_dir: {file_dir}, error: {e}")
                 return False, self._standardize_error(
@@ -604,7 +624,7 @@ class ScrapeService:
                 nfo_path = os.path.join(file_dir, f"{base_name}.nfo")
                 if options.get("force_overwrite") or not os.path.exists(nfo_path):
                     try:
-                        with safe_open(nfo_path, "w", encoding="utf-8") as nfo_fp:
+                        with safe_open(nfo_path, "w", encoding="utf-8", allowed_dirs=allowed_dirs) as nfo_fp:
                             nfo_fp.write(nfo_content)
                     except PathSecurityError as e:
                         logger.error(f"Path security error writing NFO: {e}")
@@ -653,15 +673,6 @@ class ScrapeService:
         }
 
         tmdb = self.tmdb_service
-        if not tmdb:
-            from app.core.config_manager import ConfigManager
-            from app.services.cache_service import get_cache_service
-
-            cfg = ConfigManager()
-            api_key = cfg.get("api_keys.tmdb_api_key") or cfg.get("tmdb.api_key")
-            if api_key:
-                tmdb = get_tmdb_service(api_key=api_key, cache_service=get_cache_service())
-                self.tmdb_service = tmdb
 
         if not tmdb:
             return metadata
@@ -762,6 +773,7 @@ class ScrapeService:
 
         dest_root = options.get("dest_path") or os.path.dirname(source_file)
         target_root = dest_root
+        allowed_dirs = self._build_allowed_dirs(options, os.path.dirname(source_file), dest_root)
         if options.get("enable_secondary_category", True):
             strategy = self._get_category_strategy()
             if strategy["enabled"]:
@@ -771,7 +783,7 @@ class ScrapeService:
         
         # 使用安全的目录创建
         try:
-            safe_makedirs(target_root, exist_ok=True)
+            safe_makedirs(target_root, exist_ok=True, allowed_dirs=allowed_dirs)
         except PathSecurityError as e:
             return (
                 False,
@@ -784,8 +796,8 @@ class ScrapeService:
 
         # 验证源文件和目标路径
         try:
-            validate_file_path(source_file, check_exists=True)
-            validate_file_path(target_path)
+            validate_file_path(source_file, check_exists=True, allowed_dirs=allowed_dirs)
+            validate_file_path(target_path, allowed_dirs=allowed_dirs)
         except PathSecurityError as e:
             return (
                 False,
@@ -805,16 +817,16 @@ class ScrapeService:
         mode = options.get("rename_mode", "move")
         try:
             if mode == "move":
-                safe_rename(source_file, target_path)
+                safe_rename(source_file, target_path, allowed_dirs=allowed_dirs)
             elif mode == "copy":
                 # 复制操作使用 shutil，但需要先验证路径
-                validate_file_path(source_file, check_exists=True)
-                validate_file_path(target_path)
+                validate_file_path(source_file, check_exists=True, allowed_dirs=allowed_dirs)
+                validate_file_path(target_path, allowed_dirs=allowed_dirs)
                 shutil.copy2(source_file, target_path)
             elif mode == "hardlink":
-                safe_hardlink(source_file, target_path)
+                safe_hardlink(source_file, target_path, allowed_dirs=allowed_dirs)
             elif mode == "softlink":
-                safe_symlink(source_file, target_path)
+                safe_symlink(source_file, target_path, allowed_dirs=allowed_dirs)
             else:
                 return (
                     False,

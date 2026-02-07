@@ -186,7 +186,7 @@ class RenameService:
         options: Dict[str, Any] = None
     ) -> RenamePreviewResult:
         """预览重命名结果（不实际修改文件）"""
-        target_path = validate_path(target_path, "target_path")
+        target_path = validate_path(target_path, "target_path", allow_absolute=True)
         options = options or {}
         batch_id = str(uuid.uuid4())
         

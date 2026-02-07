@@ -8,7 +8,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.api.scrape import (
+    ClearRecordsRequest,
     RecordIdsRequest,
+    TruncateRecordsRequest,
     clear_failed_records,
     get_scrape_record,
     list_scrape_records,
@@ -90,12 +92,19 @@ async def test_scrape_records_query_and_bulk_actions(tmp_path: Path):
         assert failed_record.error_code is None
         assert failed_record.error_message is None
 
-        clear_result = await clear_failed_records(_auth=None, db=db)
+        clear_result = await clear_failed_records(
+            body=ClearRecordsRequest(confirm=True),
+            _auth=None,
+            db=db,
+        )
         assert clear_result["cleared"] == 1
 
-        truncate_result = await truncate_all_records(_auth=None, db=db)
+        truncate_result = await truncate_all_records(
+            body=TruncateRecordsRequest(confirm=True),
+            _auth=None,
+            db=db,
+        )
         assert truncate_result["truncated"] == 2
         assert db.query(ScrapeRecord).count() == 0
     finally:
         db.close()
-

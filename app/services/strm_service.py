@@ -74,7 +74,33 @@ class StrmService:
                 )
                 generated = stats.get("files", [])
             else:
+                # 先尝试通过路径获取文件
                 node = await self._generator.service.get_file_by_path(remote_path)
+                
+                # 如果路径查找失败，尝试通过文件ID获取（支持从前端文件浏览器直接传入ID）
+                if not node:
+                    try:
+                        file_info = await self._generator.service.client.get_file_info(remote_path.lstrip('/'))
+                        if file_info and file_info.get('fid'):
+                            from app.models.quark import FileModel
+                            info = file_info
+                            # file_type: 0=目录, 1=文件
+                            is_dir = info.get('file_type') == 0
+                            node = FileModel(
+                                fid=info['fid'],
+                                file_name=info.get('file_name', 'Unknown'),
+                                file=not is_dir,  # file=True 表示是文件，False表示是目录
+                                category=info.get('category', 0),
+                                size=info.get('size', 0),
+                                created_at=info.get('created_at', 0),
+                                updated_at=info.get('updated_at', 0),
+                                l_created_at=info.get('l_created_at', 0),
+                                l_updated_at=info.get('l_updated_at', 0)
+                            )
+                            logger.info(f"Got file by ID: {node.file_name}, is_dir={node.is_dir}, file={node.file}")
+                    except Exception as e:
+                        logger.warning(f"Failed to get file by ID: {e}")
+                
                 if not node:
                     raise ValueError(f"Remote path not found: {remote_path}")
 
