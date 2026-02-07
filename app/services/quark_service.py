@@ -118,6 +118,10 @@ class QuarkService:
 
             except Exception as e:
                 logger.error(f"Failed to get files from {parent}: {str(e)}")
+                # If the first page fails, surface the error to the API layer so callers
+                # can distinguish "empty directory" from "auth/network failure".
+                if page == 1:
+                    raise
                 break
 
         logger.debug(f"Got {len(files)} files from {parent}")
