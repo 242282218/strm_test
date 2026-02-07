@@ -1,0 +1,72 @@
+name: Docker Deploy Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  docker-deploy-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare runtime files
+        run: |
+          cp config.example.yaml config.yaml
+          mkdir -p logs strm
+          touch quark_strm.db
+
+      - name: Validate compose file
+        run: docker compose config -q
+
+      - name: Build docker image
+        run: docker compose build
+
+      - name: Start services
+        run: docker compose up -d
+
+      - name: Wait for health endpoint
+        run: |
+          for i in $(seq 1 45); do
+            if curl -fsS "http://127.0.0.1:8000/health" > /tmp/health.json; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check failed after waiting."
+          docker compose ps
+          docker compose logs --no-color
+          exit 1
+
+      - name: Smoke test root endpoint
+        run: curl -fsS "http://127.0.0.1:8000/"
+
+      - name: Capture runtime diagnostics
+        if: always()
+        run: |
+          docker compose ps > compose-ps.txt || true
+          docker compose logs --no-color > compose-logs.txt || true
+
+      - name: Upload docker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quark-strm-docker-diagnostics
+          path: |
+            compose-ps.txt
+            compose-logs.txt
+            logs
+          if-no-files-found: warn
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v --remove-orphans || true
