@@ -73,7 +73,19 @@ async def get_quark_cookie(cookie: str = None) -> str:
     Raises:
         HTTPException: 当Cookie未配置时
     """
-    cookie = cookie or config.get_quark_cookie()
+    # Prefer explicit request param, then ConfigService(CONFIG_PATH), then ConfigManager fallback.
+    cookie = (cookie or "").strip()
+    if not cookie:
+        try:
+            cfg = get_config_service().get_config()
+            quark_cfg = getattr(cfg, "quark", None)
+            cookie = (getattr(quark_cfg, "cookie", "") or "").strip()
+        except Exception as exc:
+            logger.warning(f"Failed to read quark cookie from ConfigService: {exc}")
+            cookie = ""
+
+    if not cookie:
+        cookie = (config.get_quark_cookie() or "").strip()
 
     if not cookie:
         logger.warning("Cookie not configured")

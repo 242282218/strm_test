@@ -138,7 +138,8 @@ class ConfigManager:
 
 
 # 全局配置管理器实例
-config_manager = ConfigManager()
+# Global instance should respect CONFIG_PATH in container environments.
+config_manager = ConfigManager(os.getenv("CONFIG_PATH", "config.yaml"))
 
 
 _config_manager_instance: Optional[ConfigManager] = None

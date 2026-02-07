@@ -181,6 +181,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -204,6 +207,7 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ steps.image_meta.outputs.image_name }}:branch-${{ steps.image_meta.outputs.branch_tag }}
             ${{ steps.image_meta.outputs.image_name }}:sha-${{ github.sha }}
@@ -292,13 +296,13 @@ jobs:
         if: env.skip_deploy != 'true'
         run: |
           if [ "$auth_method" = "key" ]; then
-            ssh -i ~/.ssh/id_ed25519 "${TEST_SSH_USER}@$TEST_HOST" "mkdir -p /root/strm_test"
+            ssh -i ~/.ssh/id_ed25519 "${TEST_SSH_USER}@$TEST_HOST" "mkdir -p ~/strm_test"
             scp -i ~/.ssh/id_ed25519 deploy-compose.yml \
-              "${TEST_SSH_USER}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+              "${TEST_SSH_USER}@$TEST_HOST:~/strm_test/docker-compose.yml"
           else
-            sshpass -p "${TEST_SSH_PASSWORD}" ssh "${TEST_SSH_USER}@$TEST_HOST" "mkdir -p /root/strm_test"
+            sshpass -p "${TEST_SSH_PASSWORD}" ssh "${TEST_SSH_USER}@$TEST_HOST" "mkdir -p ~/strm_test"
             sshpass -p "${TEST_SSH_PASSWORD}" scp deploy-compose.yml \
-              "${TEST_SSH_USER}@$TEST_HOST:/root/strm_test/docker-compose.yml"
+              "${TEST_SSH_USER}@$TEST_HOST:~/strm_test/docker-compose.yml"
           fi
 
       - name: Deploy on test machine
@@ -373,8 +377,13 @@ jobs:
             DOCKER_BIN="$SUDO docker"
           fi
 
-          mkdir -p /root/strm_test/data
-          cd /root/strm_test
+          APP_DIR="${APP_DIR:-$HOME/strm_test}"
+          if [ "${APP_DIR#/}" = "$APP_DIR" ]; then
+            APP_DIR="$HOME/$APP_DIR"
+          fi
+
+          mkdir -p "$APP_DIR/data"
+          cd "$APP_DIR"
 
           if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
             echo "$GHCR_TOKEN" | $DOCKER_BIN login ghcr.io -u "$GHCR_USERNAME" --password-stdin
@@ -382,16 +391,32 @@ jobs:
 
           $DOCKER_BIN compose pull
           $DOCKER_BIN compose up -d --remove-orphans
-          $DOCKER_BIN compose ps
-          curl -fsS http://127.0.0.1:18000/health
+          $DOCKER_BIN compose ps || true
+
+          ok=0
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:18000/health >/tmp/quark-health.json; then
+              cat /tmp/quark-health.json
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "Health check failed, printing docker diagnostics..."
+            $DOCKER_BIN compose ps || true
+            $DOCKER_BIN compose logs --no-color --tail=200 || true
+            exit 1
+          fi
           EOF
 
           if [ "$auth_method" = "key" ]; then
             ssh -i ~/.ssh/id_ed25519 "${TEST_SSH_USER}@$TEST_HOST" \
-              "GHCR_USERNAME='${TEST_GHCR_USERNAME}' GHCR_TOKEN='${TEST_GHCR_TOKEN}' bash -s" < remote-deploy.sh
+              "APP_DIR='strm_test' GHCR_USERNAME='${TEST_GHCR_USERNAME}' GHCR_TOKEN='${TEST_GHCR_TOKEN}' bash -s" < remote-deploy.sh
           else
             sshpass -p "${TEST_SSH_PASSWORD}" ssh "${TEST_SSH_USER}@$TEST_HOST" \
-              "GHCR_USERNAME='${TEST_GHCR_USERNAME}' GHCR_TOKEN='${TEST_GHCR_TOKEN}' bash -s" < remote-deploy.sh
+              "APP_DIR='strm_test' GHCR_USERNAME='${TEST_GHCR_USERNAME}' GHCR_TOKEN='${TEST_GHCR_TOKEN}' bash -s" < remote-deploy.sh
           fi
 
       - name: Publish deployment URL

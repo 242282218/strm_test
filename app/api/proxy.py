@@ -25,9 +25,22 @@ router = APIRouter(
     dependencies=[Depends(require_api_key)],
 )
 
-# 获取配置管理器
+# Prefer ConfigService(CONFIG_PATH) at runtime; ConfigManager may be initialized with a different path
+# in some deployment setups.
 config = get_config()
 config_service = get_config_service()
+
+
+def _get_quark_cookie_from_config() -> str:
+    try:
+        cfg = config_service.get_config()
+        quark_cfg = getattr(cfg, "quark", None)
+        cookie = (getattr(quark_cfg, "cookie", "") or "").strip()
+        if cookie:
+            return cookie
+    except Exception as exc:
+        logger.warning(f"Failed to read quark cookie from ConfigService: {exc}")
+    return (config.get_quark_cookie() or "").strip()
 
 
 @router.get("/stream/test")
@@ -74,7 +87,7 @@ async def proxy_stream(
     import aiohttp
     from fastapi.responses import StreamingResponse
     
-    cookie = config.get_quark_cookie()
+    cookie = _get_quark_cookie_from_config()
 
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie not configured")
@@ -205,7 +218,7 @@ async def redirect_302(
     """
     302重定向到夸克直链（支持智能兜底）。
     """
-    cookie = config.get_quark_cookie()
+    cookie = _get_quark_cookie_from_config()
 
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie not configured")
@@ -294,7 +307,7 @@ async def get_transcoding_link(file_id: str):
     Returns:
         302重定向到转码直链
     """
-    cookie = config.get_quark_cookie()
+    cookie = _get_quark_cookie_from_config()
 
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie not configured")
@@ -364,7 +377,7 @@ async def clear_cache():
     """
     清除缓存
     """
-    cookie = config.get_quark_cookie()
+    cookie = _get_quark_cookie_from_config()
 
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie not configured")
@@ -385,7 +398,7 @@ async def get_cache_stats():
     """
     获取缓存统计
     """
-    cookie = config.get_quark_cookie()
+    cookie = _get_quark_cookie_from_config()
 
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie not configured")
