@@ -215,7 +215,7 @@ jobs:
           echo "- docker pull ${{ steps.image_meta.outputs.image_name }}:sha-${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-test-machine:
-    if: ${{ github.event_name == 'push' && github.ref_name != 'main' }}
+    if: ${{ github.event_name == 'push' && github.ref_name != 'main' && secrets.TEST_SSH_PRIVATE_KEY != '' && secrets.TEST_SSH_USER != '' }}
     needs:
       - publish-ghcr
     runs-on: ubuntu-latest
@@ -234,10 +234,6 @@ jobs:
 
       - name: Prepare SSH key
         run: |
-          if [ -z "${{ secrets.TEST_SSH_PRIVATE_KEY }}" ] || [ -z "${{ secrets.TEST_SSH_USER }}" ]; then
-            echo "Missing required secrets: TEST_SSH_PRIVATE_KEY or TEST_SSH_USER"
-            exit 1
-          fi
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.TEST_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
