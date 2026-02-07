@@ -31,9 +31,7 @@ jobs:
 
       - name: Frontend lint
         working-directory: web
-        run: |
-          npx oxlint .
-          npx eslint . --max-warnings=0
+        run: npm run lint
 
       - name: Frontend type-check and build
         working-directory: web
