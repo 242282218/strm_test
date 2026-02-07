@@ -29,6 +29,8 @@ export interface AIModelsConfigUpdateRequest {
   glm: AIModelConfigUpdateItem
 }
 
+export type SystemConfigResponse = Record<string, any>
+
 export const getAIModelsConfig = (): Promise<AIModelsConfigResponse> => {
   return api.get('/system-config/ai-models')
 }
@@ -37,4 +39,12 @@ export const updateAIModelsConfig = (
   data: AIModelsConfigUpdateRequest
 ): Promise<AIModelsConfigResponse> => {
   return api.post('/system-config/ai-models', data)
+}
+
+export const getSystemConfig = (): Promise<SystemConfigResponse> => {
+  return api.get('/system-config/')
+}
+
+export const updateSystemConfig = (data: SystemConfigResponse): Promise<SystemConfigResponse> => {
+  return api.post('/system-config/', data)
 }

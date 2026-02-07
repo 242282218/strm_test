@@ -19,7 +19,7 @@ alt_exts:
   - .ssa
 
 endpoints:
-  - base_url: http://localhost:8000
+  - base_url: http://localhost:18000
     token: ""
     username: ""
     password: ""

@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, HTTPException, Depends
 from app.services.config_service import get_config_service, ConfigError
 from app.core.logging import get_logger
 from app.core.dependencies import require_api_key
 from app.core.security import mask_secret
+from app.core.constants import SENSITIVE_FIELD_NAMES
 import os
 import aiohttp
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -12,6 +15,42 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/system-config", tags=["系统配置"])
 
 CONFIG_PATH = os.getenv("CONFIG_PATH", "config.yaml")
+
+
+def _is_sensitive_key(key: str) -> bool:
+    key_lower = key.lower()
+    return any(name in key_lower for name in SENSITIVE_FIELD_NAMES)
+
+
+def _is_masked_placeholder(value: object) -> bool:
+    return isinstance(value, str) and "*" in value
+
+
+def _merge_sensitive_values(current: object, incoming: object, key_name: str = "") -> object:
+    """
+    Merge incoming config with current config.
+    For sensitive fields, masked placeholders keep existing values.
+    """
+    if isinstance(incoming, dict) and isinstance(current, dict):
+        merged: dict[str, object] = {}
+        for key, value in incoming.items():
+            current_value = current.get(key)
+            if _is_sensitive_key(key) and _is_masked_placeholder(value):
+                merged[key] = current_value
+                continue
+            merged[key] = _merge_sensitive_values(current_value, value, key)
+        return merged
+
+    if isinstance(incoming, list) and isinstance(current, list):
+        result: list[object] = []
+        for index, value in enumerate(incoming):
+            current_value = current[index] if index < len(current) else None
+            result.append(_merge_sensitive_values(current_value, value, key_name))
+        return result
+
+    if _is_sensitive_key(key_name) and _is_masked_placeholder(incoming):
+        return current
+    return incoming
 
 
 def get_config_path():
@@ -65,7 +104,9 @@ async def update_config(config_data: dict, _auth: None = Depends(require_api_key
     """
     try:
         config_service = get_config_service(CONFIG_PATH)
-        config = config_service.update_config(config_data)
+        current_config = config_service.get_config().model_dump()
+        merged_payload = _merge_sensitive_values(current_config, config_data)
+        config = config_service.update_config(merged_payload)
         logger.info("System configuration updated")
         return config_service.get_safe_config()
     except ConfigError as e:

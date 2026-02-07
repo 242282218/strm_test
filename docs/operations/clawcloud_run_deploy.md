@@ -24,14 +24,14 @@ The container serves frontend and backend on the same port.
 
 Use these values:
 
-- Container port: `8000`
+- Container port: `18000`
 - Start command: leave empty (use Dockerfile CMD)
 - CPU/Memory: start small (`0.5 vCPU`, `512 MiB`)
 - Replicas: `1`
 
 Environment variables:
 
-- `PORT=8000`
+- `PORT=18000`
 - `WEB_CONCURRENCY=1`
 - `CONFIG_PATH=/data/config.yaml`
 
@@ -74,5 +74,5 @@ If startup fails:
 
 1. Check app logs for config validation errors.
 2. Confirm `/data/config.yaml` exists and is valid YAML.
-3. Confirm container port is `8000`.
+3. Confirm container port is `18000`.
 4. Confirm environment `CONFIG_PATH=/data/config.yaml`.

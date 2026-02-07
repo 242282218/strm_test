@@ -5,7 +5,7 @@ services:
     build: .
     container_name: quark-strm
     ports:
-      - "8000:8000"
+      - "18000:18000"
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./quark_strm.db:/app/quark_strm.db
@@ -13,4 +13,5 @@ services:
       - ./logs:/app/logs
     environment:
       - CONFIG_PATH=/app/config.yaml
+      - PORT=18000
     restart: unless-stopped

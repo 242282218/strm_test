@@ -67,6 +67,37 @@
           </div>
         </el-form>
       </el-card>
+
+      <el-card class="config-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span>全量系统配置</span>
+          </div>
+        </template>
+
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          title="此区域可直接编辑全部配置变量。敏感字段显示为脱敏值，保留星号表示不变，填写新值可覆盖。"
+          class="hint"
+        />
+
+        <div class="raw-editor" v-loading="fullConfigLoading">
+          <el-input
+            v-model="fullConfigText"
+            type="textarea"
+            :rows="22"
+            resize="vertical"
+            placeholder="请输入完整 JSON 配置"
+          />
+        </div>
+
+        <div class="form-actions">
+          <el-button type="primary" :loading="fullConfigSaving" @click="saveFullConfig">保存全量配置</el-button>
+          <el-button :disabled="fullConfigSaving || fullConfigLoading" @click="reloadFullConfig">重新加载</el-button>
+        </div>
+      </el-card>
     </div>
   </div>
 </template>
@@ -77,9 +108,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import EmbyConfigCard from '@/components/EmbyConfigCard.vue'
 import {
   getAIModelsConfig,
+  getSystemConfig,
+  updateSystemConfig,
   updateAIModelsConfig,
   type AIModelsConfigResponse,
-  type AIProvider
+  type AIProvider,
+  type SystemConfigResponse
 } from '@/api/systemConfig'
 
 interface AIFormState {
@@ -116,6 +150,9 @@ const defaults: Record<AIProvider, { base_url: string; model: string; timeout: n
 const loading = ref(false)
 const saving = ref(false)
 const snapshot = ref<AIModelsConfigResponse | null>(null)
+const fullConfigLoading = ref(false)
+const fullConfigSaving = ref(false)
+const fullConfigText = ref('')
 
 const form = reactive<AIFormMap>({
   kimi: { api_key: '', api_key_masked: '', configured: false, ...defaults.kimi },
@@ -151,6 +188,44 @@ const loadConfig = async (): Promise<void> => {
   } finally {
     loading.value = false
   }
+}
+
+const formatConfigText = (data: SystemConfigResponse): string => {
+  return JSON.stringify(data, null, 2)
+}
+
+const loadFullConfig = async (): Promise<void> => {
+  fullConfigLoading.value = true
+  try {
+    const data = await getSystemConfig()
+    fullConfigText.value = formatConfigText(data)
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '加载全量系统配置失败')
+  } finally {
+    fullConfigLoading.value = false
+  }
+}
+
+const saveFullConfig = async (): Promise<void> => {
+  fullConfigSaving.value = true
+  try {
+    const payload = JSON.parse(fullConfigText.value || '{}') as SystemConfigResponse
+    const updated = await updateSystemConfig(payload)
+    fullConfigText.value = formatConfigText(updated)
+    ElMessage.success('全量系统配置已保存')
+  } catch (error: any) {
+    if (error instanceof SyntaxError) {
+      ElMessage.error('配置 JSON 格式错误，请修正后重试')
+    } else {
+      ElMessage.error(error?.response?.data?.detail || '保存全量系统配置失败')
+    }
+  } finally {
+    fullConfigSaving.value = false
+  }
+}
+
+const reloadFullConfig = async (): Promise<void> => {
+  await loadFullConfig()
 }
 
 const buildPayload = () => {
@@ -217,7 +292,7 @@ const resetToDefaults = async (): Promise<void> => {
 }
 
 onMounted(async () => {
-  await loadConfig()
+  await Promise.all([loadConfig(), loadFullConfig()])
 })
 </script>
 
@@ -285,5 +360,9 @@ onMounted(async () => {
   margin-top: 8px;
   display: flex;
   gap: 10px;
+}
+
+.raw-editor {
+  margin-top: 8px;
 }
 </style>
