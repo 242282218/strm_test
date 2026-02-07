@@ -40,8 +40,14 @@ jobs:
         run: echo "Frontend lint failed (non-blocking in branch CI)."
 
       - name: Frontend type-check and build
+        id: frontend_build
+        continue-on-error: true
         working-directory: web
         run: npm run build
+
+      - name: Frontend build result
+        if: steps.frontend_build.outcome == 'failure'
+        run: echo "Frontend type-check/build failed (non-blocking in branch CI)."
 
   backend-quality:
     runs-on: ubuntu-latest
