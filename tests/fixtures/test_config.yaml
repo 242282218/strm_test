@@ -1,0 +1,89 @@
+alist:
+  enabled: false
+  mount_path: /
+  token: ''
+  url: http://localhost:5244
+alt_exts:
+- .srt
+- .ass
+api_keys: null
+colored_log: true
+cors:
+  allow_credentials: false
+  allow_headers:
+  - '*'
+  allow_methods:
+  - '*'
+  allow_origins:
+  - '*'
+create_sub_directory: false
+database: quark_strm.db
+deepseek:
+  api_key: ''
+  base_url: https://api.deepseek.com/v1
+  model: deepseek-chat
+  timeout: 20
+emby:
+  api_key: ''
+  delete_execute_enabled: false
+  enabled: false
+  notify_on_complete: true
+  refresh:
+    cron: null
+    episode_aggregate_window_seconds: 10
+    library_ids: []
+    on_rename: true
+    on_strm_generate: true
+  timeout: 30
+  url: ''
+endpoints: []
+exts:
+- .mp4
+- .mkv
+- .avi
+- .mov
+glm:
+  api_key: ''
+  base_url: https://open.bigmodel.cn/api/paas/v4
+  model: glm-4.7-flash
+  timeout: 8
+kimi:
+  api_key: ''
+  base_url: https://integrate.api.nvidia.com/v1
+  model: moonshotai/kimi-k2.5
+  timeout: 15
+log_file: null
+log_level: INFO
+quark:
+  cookie: ''
+  only_video: true
+  referer: https://pan.quark.cn/
+  root_id: '0'
+security:
+  api_key: ''
+  require_api_key: true
+telegram:
+  bot_token: ''
+  chat_id: ''
+  enabled: false
+  events:
+  - task_completed
+  - task_failed
+  proxy: ''
+timeout: 30
+tmdb:
+  api_key: ''
+webdav:
+  enabled: false
+  fallback_enabled: true
+  mount_path: /
+  password: ''
+  read_only: true
+  url: http://localhost:5244/dav
+  username: ''
+wechat:
+  enabled: false
+  provider: serverchan
+  send_key: ''
+zhipu:
+  api_key: ''

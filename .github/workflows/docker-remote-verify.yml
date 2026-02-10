@@ -1,0 +1,266 @@
+name: Docker Remote Verify
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: docker-remote-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-on-remote-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      SERVER_SSH_PORT: ${{ secrets.SERVER_SSH_PORT || '22' }}
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '~/quark_strm' }}
+      SERVICE_PORT: ${{ secrets.SERVICE_PORT || '18000' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate required secrets
+        id: check-secrets
+        run: |
+          echo "Checking required secrets..."
+          
+          if [ -z "${SERVER_HOST:-}" ]; then
+            echo "::error::SERVER_HOST secret is required"
+            exit 1
+          fi
+          
+          if [ -z "${SERVER_USER:-}" ]; then
+            echo "::error::SERVER_USER secret is required"
+            exit 1
+          fi
+          
+          if [ -z "${SERVER_SSH_KEY:-}" ]; then
+            echo "::error::SERVER_SSH_KEY secret is required"
+            exit 1
+          fi
+          
+          echo "All required secrets are present"
+          echo "server_host=${SERVER_HOST}" >> "$GITHUB_OUTPUT"
+          echo "server_user=${SERVER_USER}" >> "$GITHUB_OUTPUT"
+          echo "deploy_dir=${DEPLOY_DIR}" >> "$GITHUB_OUTPUT"
+          echo "service_port=${SERVICE_PORT}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup SSH
+        id: setup-ssh
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # 写入SSH私钥
+          printf '%s\n' "${SERVER_SSH_KEY}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # 添加服务器到known_hosts
+          ssh-keyscan -p "${SERVER_SSH_PORT}" -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || {
+            echo "::warning::Failed to add host to known_hosts, attempting without strict host checking"
+          }
+          
+          # 测试SSH连接
+          echo "Testing SSH connection..."
+          if ! ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -p "${SERVER_SSH_PORT}" "${SERVER_USER}@${SERVER_HOST}" "echo 'SSH connection successful'"; then
+            echo "::error::SSH connection failed"
+            exit 1
+          fi
+          
+          echo "SSH setup completed"
+
+      - name: Sync code to server
+        id: sync-code
+        run: |
+          echo "Syncing code to server..."
+          
+          # 创建部署目录
+          ssh -p "${SERVER_SSH_PORT}" "${SERVER_USER}@${SERVER_HOST}" "mkdir -p ${DEPLOY_DIR}"
+          
+          # 使用rsync同步代码（排除不必要的文件）
+          rsync -avz --delete \
+            -e "ssh -p ${SERVER_SSH_PORT}" \
+            --exclude='.git' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache' \
+            --exclude='node_modules' \
+            --exclude='web/dist' \
+            --exclude='logs/*.log' \
+            ./ "${SERVER_USER}@${SERVER_HOST}:${DEPLOY_DIR}/"
+          
+          echo "Code sync completed"
+
+      - name: Deploy and verify on server
+        id: deploy-verify
+        run: |
+          echo "Starting deployment and verification..."
+          
+          # 在服务器上执行部署脚本
+          ssh -p "${SERVER_SSH_PORT}" "${SERVER_USER}@${SERVER_HOST}" << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            
+            DEPLOY_DIR="${DEPLOY_DIR}"
+            SERVICE_PORT="${SERVICE_PORT}"
+            
+            echo "=== Step 1: Navigate to deploy directory ==="
+            cd "${DEPLOY_DIR}"
+            pwd
+            
+            echo "=== Step 2: Stop existing containers ==="
+            docker compose down --remove-orphans 2>/dev/null || true
+            
+            # 等待端口释放
+            for i in {1..10}; do
+              if ! ss -tlnp | grep -q ":${SERVICE_PORT}"; then
+                echo "Port ${SERVICE_PORT} is free"
+                break
+              fi
+              echo "Waiting for port ${SERVICE_PORT} to be released..."
+              sleep 2
+            done
+            
+            echo "=== Step 3: Build Docker image ==="
+            docker compose build --no-cache
+            
+            echo "=== Step 4: Start services ==="
+            docker compose up -d
+            
+            echo "=== Step 5: Wait for service ready ==="
+            MAX_RETRIES=30
+            RETRY_INTERVAL=2
+            HEALTH_URL="http://127.0.0.1:${SERVICE_PORT}/health"
+            
+            for i in $(seq 1 ${MAX_RETRIES}); do
+              echo "Health check attempt ${i}/${MAX_RETRIES}..."
+              
+              if curl -fsS "${HEALTH_URL}" > /tmp/health_response.json 2>/dev/null; then
+                echo "Health check passed!"
+                cat /tmp/health_response.json
+                break
+              fi
+              
+              if [ $i -eq ${MAX_RETRIES} ]; then
+                echo "::error::Health check failed after ${MAX_RETRIES} attempts"
+                echo "Container status:"
+                docker compose ps
+                echo "Recent logs:"
+                docker compose logs --tail=50
+                exit 1
+              fi
+              
+              sleep ${RETRY_INTERVAL}
+            done
+            
+            echo "=== Step 6: Run verification script ==="
+            if [ -f "scripts/verify_docker.sh" ]; then
+              chmod +x scripts/verify_docker.sh
+              ./scripts/verify_docker.sh
+            else
+              echo "::warning::verify_docker.sh not found, running basic checks..."
+              
+              # 基础检查
+              echo "Checking root endpoint..."
+              curl -fsS "http://127.0.0.1:${SERVICE_PORT}/" > /dev/null || {
+                echo "::error::Root endpoint check failed"
+                exit 1
+              }
+              
+              echo "Checking API endpoints..."
+              curl -fsS "http://127.0.0.1:${SERVICE_PORT}/api/quark/files/0" > /dev/null 2>&1 || {
+                echo "Note: API endpoint requires authentication (expected)"
+              }
+            fi
+            
+            echo "=== Deployment and verification completed successfully ==="
+          REMOTE_SCRIPT
+          
+          echo "Deployment verification passed"
+
+      - name: Capture diagnostics on failure
+        if: failure()
+        run: |
+          echo "Capturing diagnostics..."
+          
+          ssh -p "${SERVER_SSH_PORT}" "${SERVER_USER}@${SERVER_HOST}" << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            
+            DEPLOY_DIR="${DEPLOY_DIR}"
+            cd "${DEPLOY_DIR}"
+            
+            echo "=== Container Status ==="
+            docker compose ps || true
+            
+            echo "=== Container Logs ==="
+            docker compose logs --tail=100 --no-color || true
+            
+            echo "=== System Resources ==="
+            df -h
+            free -h
+            
+            echo "=== Network Status ==="
+            ss -tlnp | grep -E "(18000|8001)" || true
+          REMOTE_SCRIPT
+          
+          echo "Diagnostics captured"
+
+      - name: Cleanup on cancellation
+        if: cancelled()
+        run: |
+          echo "Cleaning up due to cancellation..."
+          
+          ssh -p "${SERVER_SSH_PORT}" "${SERVER_USER}@${SERVER_HOST}" << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            
+            DEPLOY_DIR="${DEPLOY_DIR}"
+            cd "${DEPLOY_DIR}"
+            
+            echo "Stopping containers..."
+            docker compose down --remove-orphans 2>/dev/null || true
+            
+            echo "Cleanup completed"
+          REMOTE_SCRIPT
+
+      - name: Report success
+        if: success()
+        run: |
+          echo "::notice::Docker remote verification completed successfully"
+          echo "Server: ${SERVER_HOST}:${SERVICE_PORT}"
+          
+          # 添加到job summary
+          echo "## Docker Remote Verification ✅" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Server**: ${SERVER_HOST}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Port**: ${SERVICE_PORT}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: Success" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Timestamp**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::error::Docker remote verification failed"
+          
+          # 添加到job summary
+          echo "## Docker Remote Verification ❌" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Server**: ${SERVER_HOST}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: Failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Timestamp**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Troubleshooting" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Check SSH connectivity" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. Verify Docker is installed on server" >> "$GITHUB_STEP_SUMMARY"
+          echo "3. Check server resources (disk/memory)" >> "$GITHUB_STEP_SUMMARY"
+          echo "4. Review container logs in the job output" >> "$GITHUB_STEP_SUMMARY"

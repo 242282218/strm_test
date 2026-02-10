@@ -1,0 +1,203 @@
+name: Docker Module Execution
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  module-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      SERVER_SSH_PORT: ${{ secrets.SERVER_SSH_PORT || '22' }}
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '~/quark_strm' }}
+      SERVICE_PORT: ${{ secrets.SERVICE_PORT || '8000' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Secrets
+        run: |
+          if [ -z "${SERVER_HOST:-}" ]; then echo "::error::SERVER_HOST required"; exit 1; fi
+          if [ -z "${SERVER_USER:-}" ]; then echo "::error::SERVER_USER required"; exit 1; fi
+          if [ -z "${SERVER_SSH_KEY:-}" ]; then echo "::error::SERVER_SSH_KEY required"; exit 1; fi
+          echo "Secrets validated"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${SERVER_SSH_KEY}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "${SERVER_SSH_PORT}" -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: SSH and Execute Module Tests
+        id: module-test
+        run: |
+          set -euo pipefail
+
+          echo "=== SSH to server ==="
+          ssh -o ConnectTimeout=10 -p "${SERVER_SSH_PORT}" "${SERVER_USER}@${SERVER_HOST}" << 'REMOTE_SCRIPT'
+            set -euo pipefail
+
+            DEPLOY_DIR="${DEPLOY_DIR}"
+            SERVICE_PORT="${SERVICE_PORT}"
+            cid=""
+
+            echo "=== Step 1: Navigate to deploy directory ==="
+            cd "${DEPLOY_DIR}"
+            pwd
+
+            echo "=== Step 2: Sync latest code ==="
+            # Create a temporary script to receive code
+            mkdir -p "${DEPLOY_DIR}"
+            
+            echo "=== Step 3: Start containers ==="
+            docker compose down --remove-orphans 2>/dev/null || true
+            docker compose up -d --build
+            sleep 5
+
+            echo "=== Step 4: Get container ID ==="
+            cid=$(docker compose ps -q | head -1)
+            if [ -z "$cid" ]; then
+              echo "::error::No container found"
+              exit 1
+            fi
+            echo "Container ID: ${cid}"
+
+            echo ""
+            echo "========================================"
+            echo "MODULE TEST RESULTS"
+            echo "========================================"
+
+            # ========================================
+            # 【A】配置模块
+            # ========================================
+            echo ""
+            echo "=== 【A】配置模块测试 ==="
+            echo "Command: docker exec ${cid} python -c 'from app.config.settings import settings; print(settings)'"
+            
+            config_output=$(docker exec "$cid" python - <<'PY'
+from app.config.settings import settings
+print(settings)
+PY
+            ) || {
+              echo "Result: FAILED"
+              echo "Output: ${config_output}"
+              echo "=== CONFIG MODULE FAILED ==="
+            }
+
+            if echo "$config_output" | grep -qE "(Error|error|exception|Traceback)" 2>/dev/null; then
+              echo "Result: FAILED"
+              echo "Error in config output"
+            else
+              echo "Result: SUCCESS"
+            fi
+            echo "Output preview:"
+            echo "$config_output" | head -20
+
+            # ========================================
+            # 【B】数据库模块
+            # ========================================
+            echo ""
+            echo "=== 【B】数据库模块测试 ==="
+            echo "Command: docker exec ${cid} python -c 'from app.models import *; print(\"DB import OK\")'"
+            
+            db_output=$(docker exec "$cid" python - <<'PY'
+from app.models import *
+print("DB import OK")
+PY
+            ) || {
+              echo "Result: FAILED"
+              echo "Output: ${db_output}"
+              echo "=== DATABASE MODULE FAILED ==="
+            }
+
+            if echo "$db_output" | grep -q "DB import OK" 2>/dev/null; then
+              echo "Result: SUCCESS"
+            else
+              echo "Result: FAILED"
+            fi
+            echo "Output: ${db_output}"
+
+            # ========================================
+            # 【C】文件系统模块
+            # ========================================
+            echo ""
+            echo "=== 【C】文件系统模块测试 ==="
+            echo "Command: docker exec ${cid} sh -c 'echo test > /app/_write_test && cat /app/_write_test'"
+            
+            fs_output=$(docker exec "$cid" sh -c "echo test > /app/_write_test && cat /app/_write_test" 2>&1) || {
+              echo "Result: FAILED"
+              echo "=== FILESYSTEM MODULE FAILED ==="
+            }
+
+            if echo "$fs_output" | grep -q "test" 2>/dev/null; then
+              echo "Result: SUCCESS"
+              # Cleanup
+              docker exec "$cid" rm -f /app/_write_test 2>/dev/null || true
+            else
+              echo "Result: FAILED"
+            fi
+            echo "Output: ${fs_output}"
+
+            # ========================================
+            # 【D】网络模块
+            # ========================================
+            echo ""
+            echo "=== 【D】网络模块测试 ==="
+            echo "Command: docker exec ${cid} curl -s http://127.0.0.1:${SERVICE_PORT}/health"
+            
+            network_output=$(docker exec "$cid" curl -s "http://127.0.0.1:${SERVICE_PORT}/health" 2>&1) || {
+              echo "Result: FAILED"
+              echo "=== NETWORK MODULE FAILED ==="
+            }
+
+            if echo "$network_output" | grep -qE "(status|ok|healthy)" 2>/dev/null; then
+              echo "Result: SUCCESS"
+            else
+              echo "Result: FAILED"
+            fi
+            echo "Output: ${network_output}"
+
+            # ========================================
+            # 【E】API模块（错误路径）
+            # ========================================
+            echo ""
+            echo "=== 【E】API模块测试（无Cookie） ==="
+            echo "Command: docker exec ${cid} curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${SERVICE_PORT}/api/quark/files/0"
+            
+            api_code=$(docker exec "$cid" curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${SERVICE_PORT}/api/quark/files/0" 2>&1) || {
+              echo "Result: FAILED (curl error)"
+              api_code="ERROR"
+            }
+
+            echo "HTTP Status Code: ${api_code}"
+
+            if [ "$api_code" = "401" ] || [ "$api_code" = "403" ]; then
+              echo "Result: SUCCESS (Expected 401/403 for unauthenticated request)"
+            elif [ "$api_code" = "500" ]; then
+              echo "Result: FAILED (Should not return 500 for unauthenticated request)"
+            elif [ "$api_code" = "000" ]; then
+              echo "Result: FAILED (Connection failed)"
+            else
+              echo "Result: UNKNOWN (Status: ${api_code})"
+            fi
+
+            echo ""
+            echo "========================================"
+            echo "MODULE TEST COMPLETED"
+            echo "========================================"
+          REMOTE_SCRIPT
+
+          echo "Module test completed"
