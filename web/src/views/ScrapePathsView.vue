@@ -137,17 +137,52 @@
         </el-form-item>
         <el-form-item label="刮削模式" prop="scrape_mode">
           <el-select v-model="form.scrape_mode" style="width: 260px">
-            <el-option label="only_scrape" value="only_scrape" />
-            <el-option label="scrape_and_rename" value="scrape_and_rename" />
-            <el-option label="only_rename" value="only_rename" />
+            <el-option value="only_scrape">
+              <div class="option-with-desc">
+                <span class="option-label">仅刮削 (only_scrape)</span>
+                <span class="option-desc">只从TMDB获取元数据，不重命名文件</span>
+              </div>
+            </el-option>
+            <el-option value="scrape_and_rename">
+              <div class="option-with-desc">
+                <span class="option-label">刮削并重命名 (scrape_and_rename)</span>
+                <span class="option-desc">获取元数据并按Emby/Plex标准重命名</span>
+              </div>
+            </el-option>
+            <el-option value="only_rename">
+              <div class="option-with-desc">
+                <span class="option-label">仅重命名 (only_rename)</span>
+                <span class="option-desc">不刮削元数据，仅智能识别并重命名</span>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="整理方式" prop="rename_mode">
           <el-select v-model="form.rename_mode" style="width: 260px">
-            <el-option label="move" value="move" />
-            <el-option label="copy" value="copy" />
-            <el-option label="hardlink" value="hardlink" />
-            <el-option label="softlink" value="softlink" />
+            <el-option value="move">
+              <div class="option-with-desc">
+                <span class="option-label">移动 (move)</span>
+                <span class="option-desc">移动文件到目标目录，源文件消失</span>
+              </div>
+            </el-option>
+            <el-option value="copy">
+              <div class="option-with-desc">
+                <span class="option-label">复制 (copy)</span>
+                <span class="option-desc">复制文件到目标目录，保留源文件</span>
+              </div>
+            </el-option>
+            <el-option value="hardlink">
+              <div class="option-with-desc">
+                <span class="option-label">硬链接 (hardlink)</span>
+                <span class="option-desc">创建硬链接，不占空间，需同磁盘</span>
+              </div>
+            </el-option>
+            <el-option value="softlink">
+              <div class="option-with-desc">
+                <span class="option-label">软链接 (softlink)</span>
+                <span class="option-desc">创建符号链接，可跨磁盘，依赖源路径</span>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="并发线程" prop="max_threads">
@@ -477,6 +512,22 @@ void loadPaths()
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+.option-with-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option-label {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.option-desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>
 
