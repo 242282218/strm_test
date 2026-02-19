@@ -1,4 +1,4 @@
-﻿"""
+"""
 代理API路由
 
 参考: go-emby2openlist internal/service/emby/redirect.go
@@ -11,7 +11,7 @@ from app.services.proxy_service import ProxyService
 from app.services.quark_service import QuarkService
 from app.services.link_resolver import LinkResolver
 from app.services.webdav_fallback import WebDAVFallback
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.services.config_service import get_config_service
 from app.core.logging import get_logger
 from app.core.dependencies import get_quark_cookie, require_api_key

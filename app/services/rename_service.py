@@ -106,7 +106,7 @@ class RenameService:
         if self.tmdb_service:
             return self.tmdb_service
             
-        from app.core.config_manager import ConfigManager
+        from app.services.config_service import ConfigManager
         from app.services.cache_service import get_cache_service
         
         config = ConfigManager()

@@ -8,8 +8,11 @@ STRM 服务模块
 
 from __future__ import annotations
 
-from app.core.database import Database
+from datetime import datetime
+
+from app.core.db import SessionLocal
 from app.core.logging import get_logger
+from app.models.strm_record import ScanRecord
 from app.services.strm_generator import STRMGenerator
 
 logger = get_logger(__name__)
@@ -21,7 +24,6 @@ class StrmService:
     def __init__(
         self,
         cookie: str,
-        database: Database,
         recursive: bool = True,
         base_url: str = "http://localhost:8000",
         strm_url_mode: str = "redirect",
@@ -30,7 +32,6 @@ class StrmService:
         overwrite_existing: bool = False,
     ):
         self.cookie = cookie
-        self.database = database
         self.recursive = recursive
         self.base_url = base_url
         self.strm_url_mode = strm_url_mode
@@ -150,10 +151,7 @@ class StrmService:
                         result["skipped_count"] = 1
 
             # 保存扫描记录（用于 UI 展示/历史），失败不影响主流程
-            try:
-                self.database.save_record(remote_path)
-            except Exception as e:
-                logger.warning(f"Save scan record failed (ignored): {e}")
+            self._save_scan_record(remote_path)
 
             # STRM 生成后触发 Emby 刷新（不影响主流程）
             try:
@@ -172,3 +170,19 @@ class StrmService:
             await self._generator.close()
             self._generator = None
         logger.debug("StrmService closed")
+
+    def _save_scan_record(self, remote_path: str) -> None:
+        db = SessionLocal()
+        try:
+            record = db.get(ScanRecord, remote_path)
+            if record is None:
+                record = ScanRecord(remote_dir=remote_path, last_scan=datetime.utcnow())
+                db.add(record)
+            else:
+                record.last_scan = datetime.utcnow()
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Save scan record failed (ignored): {e}")
+        finally:
+            db.close()

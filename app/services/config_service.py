@@ -7,7 +7,7 @@
 import os
 import threading
 import shutil
-from typing import Optional
+from typing import Any, Dict, Optional
 from app.config.settings import AppConfig
 from app.core.logging import get_logger
 from app.core.security import mask_sensitive_data
@@ -295,15 +295,7 @@ _config_service_instance: Optional[ConfigService] = None
 
 
 def get_config_service(config_path: Optional[str] = None) -> ConfigService:
-    """
-    ????????
-
-    Args:
-        config_path: ?????????? CONFIG_PATH ????? config.yaml
-
-    Returns:
-        ConfigService: ????????
-    """
+    """Return the singleton config service for the requested config path."""
     global _config_service_instance
     resolved_path = config_path or os.getenv("CONFIG_PATH", "config.yaml")
     if _config_service_instance is None:
@@ -317,3 +309,99 @@ def get_config_service(config_path: Optional[str] = None) -> ConfigService:
         ConfigService._instance = None
         _config_service_instance = ConfigService(resolved_path)
     return _config_service_instance
+
+
+def get_config(config_path: Optional[str] = None) -> "ConfigManager":
+    """Compatibility helper used by legacy call sites."""
+    resolved_path = config_path or os.getenv("CONFIG_PATH", "config.yaml")
+    return ConfigManager(resolved_path)
+
+
+def _materialize_config_value(value: Any) -> Any:
+    """Convert pydantic objects to plain python values on demand."""
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if isinstance(value, list):
+        return [
+            item.model_dump() if hasattr(item, "model_dump") else item
+            for item in value
+        ]
+    return value
+
+
+def _get_nested_value(config_obj: Any, key: str, default: Any = None) -> Any:
+    """
+    Resolve dot-path values from dict/list/object trees.
+
+    Supports list indexes such as ``endpoints.0.emby_url``.
+    """
+    if not key:
+        return default
+
+    current: Any = config_obj
+    for part in key.split("."):
+        if isinstance(current, dict):
+            if part not in current:
+                return default
+            current = current[part]
+            continue
+
+        if isinstance(current, (list, tuple)):
+            if not part.isdigit():
+                return default
+            idx = int(part)
+            if idx < 0 or idx >= len(current):
+                return default
+            current = current[idx]
+            continue
+
+        if hasattr(current, part):
+            current = getattr(current, part)
+            continue
+
+        return default
+
+    return _materialize_config_value(current)
+
+
+class ConfigManager:
+    """
+    Backward-compatible facade.
+
+    All reads/writes are delegated to ConfigService so the project keeps a
+    single source of truth for configuration.
+    """
+
+    def __init__(self, config_path: str = "config.yaml"):
+        self.config_path = config_path
+
+    def load_config(self):
+        self.reload()
+
+    def reload(self):
+        get_config_service(self.config_path).reload()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        cfg = get_config_service(self.config_path).get_config()
+        return _get_nested_value(cfg, key, default)
+
+    def get_quark_config(self) -> Dict[str, Any]:
+        return self.get("quark", {})
+
+    def get_quark_cookie(self) -> str:
+        return self.get("quark.cookie", "")
+
+    def get_quark_referer(self) -> str:
+        return self.get("quark.referer", "https://pan.quark.cn/")
+
+    def get_quark_root_id(self) -> str:
+        return self.get("quark.root_id", "0")
+
+    def get_quark_only_video(self) -> bool:
+        return bool(self.get("quark.only_video", True))
+
+    def get_alist_config(self) -> Dict[str, Any]:
+        return self.get("alist", {})
+
+    def get_webdav_config(self) -> Dict[str, Any]:
+        return self.get("webdav", {})

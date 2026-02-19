@@ -328,7 +328,7 @@ def get_link_cache_service(
     cleanup_interval: int = 300
 ) -> "LinkCache":
     """
-    ????????????
+    Return a process-wide singleton LinkCache service.
     """
     global _global_link_cache
     if _global_link_cache is None:

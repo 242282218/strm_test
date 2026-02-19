@@ -41,6 +41,7 @@ import app.models.emby
 import app.models.scrape
 import app.models.cloud_drive
 import app.models.task
+import app.models.strm_record
 from app.api import notification as notification_router
 from app.api import cloud_drive
 import os

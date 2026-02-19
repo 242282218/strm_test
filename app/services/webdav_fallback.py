@@ -5,7 +5,7 @@ WebDAV 兜底服务 (WebDAV Fallback)
 """
 
 from urllib.parse import quote
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)

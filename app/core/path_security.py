@@ -29,7 +29,7 @@ def get_allowed_directories() -> List[str]:
     
     # 尝试从配置读取
     try:
-        from app.core.config_manager import ConfigManager
+        from app.services.config_service import ConfigManager
         config = ConfigManager()
         
         # 从 endpoints 配置读取本地目录

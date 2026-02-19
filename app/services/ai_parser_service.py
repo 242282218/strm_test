@@ -1,11 +1,11 @@
-﻿import aiohttp
+import aiohttp
 import asyncio
 import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional
 
-from app.core.config_manager import ConfigManager
+from app.services.config_service import ConfigManager
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)

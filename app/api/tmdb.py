@@ -17,7 +17,7 @@ from app.services.tmdb_service import (
     TMDBEpisode
 )
 from app.services.cache_service import get_cache_service
-from app.core.config_manager import ConfigManager
+from app.services.config_service import ConfigManager
 from app.core.logging import get_logger
 from app.core.dependencies import require_api_key
 

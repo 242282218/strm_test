@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.core.db import get_db
 from app.core.dependencies import require_api_key
 from app.core.logging import get_logger

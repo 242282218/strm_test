@@ -14,7 +14,7 @@ from app.services.smart_rename_service import get_smart_rename_service, SmartRen
 from app.services.ai_connectivity_service import get_ai_connectivity_service
 from app.services.strm_generator import generate_strm_from_quark
 from app.services.config_service import get_config_service
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.core.logging import get_logger
 from app.core.dependencies import get_quark_cookie, get_only_video_flag, require_api_key
 from app.core.validators import validate_identifier, validate_path, InputValidationError

@@ -10,7 +10,7 @@ import aiohttp
 from typing import Optional, Dict, Any
 from app.services.quark_service import QuarkService
 from app.services.link_cache import get_link_cache_service
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)

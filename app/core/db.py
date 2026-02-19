@@ -18,7 +18,6 @@ engine_kwargs = {
         "timeout": 30,
     },
     "pool_pre_ping": True,
-    "pool_recycle": 3600,
 }
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)

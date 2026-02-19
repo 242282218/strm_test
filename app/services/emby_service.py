@@ -12,7 +12,7 @@ from app.core.db_utils import batch_get_models_by_ids, AsyncBatchProcessor
 from app.models.emby import EmbyLibrary, EmbyMediaItem
 from app.services.emby_api_client import EmbyAPIClient
 from app.services.notification_service import get_notification_service, NotificationType
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.core.logging import get_logger
 from app.utils.strm_url import (
     extract_file_id_from_proxy_url,
@@ -60,9 +60,7 @@ class EmbyService:
         """
         获取Emby有效配置（兼容旧版 endpoints.0.emby_url / emby_api_key）
         """
-        emby_section = self.config.get("emby", None)
-        has_enabled_flag = isinstance(emby_section, dict) and "enabled" in emby_section
-        global_enabled = bool(self.config.get("emby.enabled", False)) if has_enabled_flag else None
+        global_enabled = bool(self.config.get("emby.enabled", False))
         global_url = (self.config.get("emby.url", "") or "").strip()
         global_api_key = (self.config.get("emby.api_key", "") or "").strip()
         global_timeout = int(self.config.get("emby.timeout", self.config.get("timeout", 30)) or 30)
@@ -81,16 +79,19 @@ class EmbyService:
         legacy_url = (self.config.get("endpoints.0.emby_url", "") or "").strip()
         legacy_api_key = (self.config.get("endpoints.0.emby_api_key", "") or "").strip()
 
-        if has_enabled_flag:
-            # 新版：以 emby.enabled 为准
-            enabled = bool(global_enabled and global_url and global_api_key)
-            url = global_url
-            api_key = global_api_key
+        global_ready = bool(global_url and global_api_key)
+        legacy_ready = bool(legacy_url and legacy_api_key)
+
+        # Default to global config. If global credentials are missing, fallback
+        # to legacy endpoints config for backward compatibility.
+        url = global_url
+        api_key = global_api_key
+        if not global_ready and legacy_ready:
+            url = legacy_url
+            api_key = legacy_api_key
+            enabled = True
         else:
-            # 旧版：无 emby.enabled 时，回退 endpoints.0
-            enabled = bool(legacy_url and legacy_api_key)
-            url = legacy_url or global_url
-            api_key = legacy_api_key or global_api_key
+            enabled = bool(global_enabled and global_ready)
 
         return {
             "enabled": enabled,

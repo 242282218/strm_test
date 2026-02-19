@@ -13,6 +13,7 @@
 """
 
 import asyncio
+import os
 import time
 from typing import Any, Optional, Dict
 from app.core.lru_cache import LRUCache as CustomLRUCache
@@ -145,13 +146,19 @@ class CacheService:
                 self._cache = get_redis_cache_service(redis_url or "redis://localhost:6379")
                 logger.info("Redis cache backend initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize Redis cache, falling back to memory: {e}")
+                allow_fallback = os.getenv("CACHE_ALLOW_MEMORY_FALLBACK", "1").lower() in {"1", "true", "yes"}
+                if not allow_fallback:
+                    raise RuntimeError(
+                        f"Redis cache backend initialization failed and fallback is disabled: {e}"
+                    ) from e
+                logger.warning(f"Redis cache initialization failed, fallback to memory backend: {e}")
                 self._cache = MemoryCache(max_size, default_ttl)
+                self.backend = "memory"
         else:
             raise ValueError(f"Unsupported cache backend: {backend}")
         
         self._cleanup_task: Optional[asyncio.Task] = None
-        logger.info(f"CacheService initialized with backend: {backend}")
+        logger.info(f"CacheService initialized with backend: {self.backend}")
     
     async def start(self):
         """启动缓存服务"""

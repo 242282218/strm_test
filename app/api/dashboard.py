@@ -5,30 +5,20 @@
 """
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any, List
-from app.core.database import Database, resolve_db_path
+from app.core.db import SessionLocal
 from app.core.logging import get_logger
+from app.models.strm_record import StrmRecord
 from app.services.task_scheduler import TaskScheduler
 from app.services.link_cache import LinkCache
-from app.core.config_manager import get_config
 from app.services.config_service import get_config_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["仪表盘"])
 
 # 全局实例
-_db: Database = None
 _task_scheduler: TaskScheduler = None
 _link_cache: LinkCache = None
-config = get_config()
 config_service = get_config_service()
-
-
-def get_db() -> Database:
-    """获取数据库实例"""
-    global _db
-    if _db is None:
-        _db = Database(resolve_db_path())
-    return _db
 
 
 async def get_task_scheduler() -> TaskScheduler:
@@ -58,10 +48,8 @@ async def get_dashboard_stats() -> Dict[str, Any]:
         包含各类统计信息的字典
     """
     try:
-        db = get_db()
-
         # 1. STRM文件数量
-        strm_files = db.get_all_strms()
+        strm_files = _list_strm_files()
         strm_count = len(strm_files)
 
         # 2. 任务统计
@@ -104,6 +92,24 @@ async def get_dashboard_stats() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to get dashboard stats: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _list_strm_files() -> List[Dict[str, Any]]:
+    db = SessionLocal()
+    try:
+        rows = db.query(StrmRecord).all()
+        return [
+            {
+                "key": row.key,
+                "name": row.name,
+                "local_dir": row.local_dir,
+                "remote_dir": row.remote_dir,
+                "raw_url": row.raw_url,
+            }
+            for row in rows
+        ]
+    finally:
+        db.close()
 
 
 def calculate_hit_rate(cache_stats: Dict[str, Any]) -> float:
@@ -178,7 +184,7 @@ def get_services_status(task_status: Dict, cache_stats: Dict) -> List[Dict[str, 
         {"name": "API服务", "status": "running"},
         {"name": "任务调度器", "status": "running" if task_status.get("running") else "stopped"},
         {"name": "缓存服务", "status": "running" if cache_stats.get("running") else "stopped"},
-        {"name": "Emby代理", "status": "running" if config.get_quark_cookie() else "stopped"},
+        {"name": "Emby代理", "status": "running" if app_config.quark.cookie else "stopped"},
     ]
     return services
 
@@ -196,7 +202,7 @@ def calculate_file_types(strm_files: List[Dict]) -> Dict[str, int]:
     type_count = {}
 
     for file in strm_files:
-        filename = file.get("filename", "")
+        filename = file.get("name") or file.get("filename", "")
         if "." in filename:
             ext = filename.rsplit(".", 1)[1].lower()
         else:

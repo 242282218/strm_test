@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Literal
 from app.services.quark_service import QuarkService
 from app.models.quark import FileModel
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)

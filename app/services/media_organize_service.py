@@ -9,7 +9,7 @@ from app.services.cloud_drive_service import CloudDriveService
 from app.services.rename_service import get_rename_service, RenameService
 from app.models.task import Task
 from app.core.logging import get_logger
-from app.core.config_manager import ConfigManager
+from app.services.config_service import ConfigManager
 from app.models.quark import FileModel
 
 logger = get_logger(__name__)

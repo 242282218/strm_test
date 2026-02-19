@@ -18,7 +18,6 @@ from app.services.strm_service import StrmService
 from app.services.notification_service import get_notification_service
 from app.services.quark_service import QuarkService
 from app.core.db import SessionLocal
-from app.core.database import resolve_db_path, Database
 from fastapi import BackgroundTasks
 
 # Configure logging
@@ -182,10 +181,8 @@ async def run_test():
             except FileExistsError:
                 pass
             
-        strm_db = Database(resolve_db_path())
         strm_service = StrmService(
             cookie=quark_cookie,
-            database=strm_db,
             recursive=True,
             base_url="http://127.0.0.1:8001",
             strm_url_mode="redirect",
@@ -201,7 +198,6 @@ async def run_test():
             print(f"✅ Generated: {scan_result.get('generated_count')} files.")
         finally:
             await strm_service.close()
-            strm_db.close()
         
         # 6. Verify Playback
         print("\n>>> 6. Verifying Playback...")

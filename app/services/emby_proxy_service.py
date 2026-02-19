@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 from app.services.emby_api_client import EmbyAPIClient
 from app.services.playbackinfo_hook import PlaybackInfoHook
 from app.services.quark_service import QuarkService
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.core.logging import get_logger
 from app.utils.strm_url import (
     extract_file_id_from_proxy_url,

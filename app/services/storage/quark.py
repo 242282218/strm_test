@@ -3,7 +3,7 @@ from datetime import datetime
 from app.services.storage.base import StorageProvider
 from app.schemas.file_manager import FileItem, FileType, StorageType
 from app.services.quark_service import QuarkService
-from app.core.config_manager import ConfigManager
+from app.services.config_service import ConfigManager
 
 class QuarkStorageProvider(StorageProvider):
     """

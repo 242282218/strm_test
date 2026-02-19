@@ -5,7 +5,7 @@
 import os
 import secrets
 from fastapi import Depends, HTTPException, status, Header
-from app.core.config_manager import get_config
+from app.services.config_service import get_config
 from app.services.config_service import get_config_service
 from app.core.logging import get_logger
 

@@ -4,8 +4,6 @@ STRM API路由
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.services.strm_service import StrmService
-from app.core.database import resolve_db_path
-from app.core.database import Database
 from app.core.logging import get_logger
 from app.core.dependencies import get_quark_cookie, require_api_key
 from app.core.validators import validate_path, InputValidationError
@@ -32,15 +30,12 @@ async def scan_directory(
 
     参考: AlistAutoStrm mission.go:31-158
     """
-    database = None
     service = None
     try:
         remote_path = validate_path(remote_path, "remote_path", allow_absolute=True)
         local_path = validate_path(local_path, "local_path", allow_absolute=True)
-        database = Database(resolve_db_path())
         service = StrmService(
             cookie=cookie,
-            database=database,
             recursive=recursive,
             base_url=base_url,
             strm_url_mode=strm_url_mode,
@@ -62,5 +57,3 @@ async def scan_directory(
     finally:
         if service:
             await service.close()
-        if database:
-            database.close()
