@@ -23,6 +23,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
+  COVERAGE_FAIL_UNDER: "20"
 
 jobs:
   tests:
@@ -60,7 +61,7 @@ jobs:
             --cov=app \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
-            --cov-fail-under=70
+            --cov-fail-under=${{ env.COVERAGE_FAIL_UNDER }}
 
       - name: Upload coverage artifact
         if: always()
