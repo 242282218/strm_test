@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from app.config.settings import AppConfig
+import app.core.sdk_config as sdk_config_module
+from app.core.sdk_config import SDKConfig, get_api_keys
+from app.services import config_service as config_service_module
+from app.services.config_service import ConfigService
+
+
+class _FakeConfigService:
+    def __init__(self, config: AppConfig) -> None:
+        self._config = config
+
+    def get_config(self) -> AppConfig:
+        return self._config
+
+
+def test_get_api_keys_prefers_unified_ai_provider_key() -> None:
+    config = AppConfig.model_validate(
+        {
+            "ai": {
+                "providers": [
+                    {
+                        "name": "openai",
+                        "api_key": "unified-openai-key",
+                        "base_url": "https://api.openai.com/v1",
+                        "model": "gpt-4o-mini",
+                        "timeout": 30,
+                    }
+                ]
+            },
+            "zhipu": {"api_key": "legacy-zhipu-key"},
+            "api_keys": {"ai_api_key": "legacy-generic-key", "tmdb_api_key": "tmdb-key"},
+        }
+    )
+
+    with patch("app.core.sdk_config.get_config_service", return_value=_FakeConfigService(config)):
+        api_keys = get_api_keys()
+
+    assert api_keys["ai_api_key"] == "unified-openai-key"
+    assert api_keys["tmdb_api_key"] == "tmdb-key"
+
+
+def test_config_service_does_not_write_default_config_when_file_is_missing(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    ConfigService._instance = None
+    config_service_module._config_service_instance = None
+
+    try:
+        service = ConfigService(str(config_path))
+
+        assert service.get_config() is not None
+        assert not config_path.exists()
+    finally:
+        ConfigService._instance = None
+        config_service_module._config_service_instance = None
+
+
+def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> None:
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setenv("TMDB_API_KEY", "env-tmdb")
+    monkeypatch.setenv("AI_API_KEY", "env-ai")
+    monkeypatch.setenv("QUARK_COOKIE", "cookie-value")
+
+    config = SDKConfig()
+
+    assert config.tmdb_api_key == "env-tmdb"
+    assert config.ai_api_key == "env-ai"
+    assert config.quark_cookie == "cookie-value"
+
+
+def test_create_clients_return_none_when_sdk_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setattr(sdk_config_module, "SDK_AVAILABLE", False)
+
+    config = SDKConfig()
+
+    assert config.is_available() is False
+    assert config.get_quark_config() is None
+    assert config.create_quark_client() is None
+    assert config.create_async_quark_client() is None
+
+
+def test_create_clients_build_instances_when_sdk_available(monkeypatch) -> None:
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            self.values = kwargs
+
+    class FakeSyncClient:
+        def __init__(self, *, config, cookie_string):
+            self.config = config
+            self.cookie_string = cookie_string
+
+    class FakeAsyncClient:
+        def __init__(self, *, config, cookie_string):
+            self.config = config
+            self.cookie_string = cookie_string
+
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {"tmdb_api_key": "k1", "ai_api_key": "k2"})
+    monkeypatch.setattr(sdk_config_module, "SDK_AVAILABLE", True)
+    monkeypatch.setattr(sdk_config_module, "SDKQuarkConfig", FakeConfig)
+    monkeypatch.setattr(sdk_config_module, "QuarkClient", FakeSyncClient)
+    monkeypatch.setattr(sdk_config_module, "AsyncQuarkClient", FakeAsyncClient)
+
+    config = SDKConfig()
+    sync_client = config.create_quark_client(cookie="sync-cookie")
+    async_client = config.create_async_quark_client()
+
+    assert sync_client.cookie_string == "sync-cookie"
+    assert sync_client.config.values["api__timeout"] == 30.0
+    assert async_client.cookie_string == config.quark_cookie
+    assert async_client.config.values["request__max_retries"] == 3
+
+
+def test_create_rename_engine_returns_none_for_missing_sdk_or_engine(monkeypatch) -> None:
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {"tmdb_api_key": "k1", "ai_api_key": "k2"})
+
+    monkeypatch.setattr(sdk_config_module, "SDK_AVAILABLE", False)
+    config = SDKConfig()
+    assert config.create_rename_engine() is None
+
+    monkeypatch.setattr(sdk_config_module, "SDK_AVAILABLE", True)
+    monkeypatch.setattr(sdk_config_module, "RenameEngine", None)
+    config = SDKConfig()
+    assert config.create_rename_engine() is None
+
+
+def test_create_rename_engine_handles_success_and_failure(monkeypatch) -> None:
+    class FakeRenameEngine:
+        def __init__(self, *, tmdb_api_key, ai_api_key, dry_run):
+            self.tmdb_api_key = tmdb_api_key
+            self.ai_api_key = ai_api_key
+            self.dry_run = dry_run
+
+    def raise_engine_error(**_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {"tmdb_api_key": "tmdb", "ai_api_key": "ai"})
+    monkeypatch.setattr(sdk_config_module, "SDK_AVAILABLE", True)
+    monkeypatch.setattr(sdk_config_module, "RenameEngine", FakeRenameEngine)
+
+    config = SDKConfig()
+    engine = config.create_rename_engine()
+
+    assert engine is not None
+    assert engine.tmdb_api_key == "tmdb"
+    assert engine.ai_api_key == "ai"
+    assert engine.dry_run is True
+
+    monkeypatch.setattr(sdk_config_module, "RenameEngine", raise_engine_error)
+    failed = config.create_rename_engine()
+    assert failed is None
+
+
+def test_get_api_keys_returns_empty_dict_on_exception(monkeypatch) -> None:
+    monkeypatch.setattr(sdk_config_module, "get_config_service", lambda: SimpleNamespace(get_config=lambda: (_ for _ in ()).throw(RuntimeError("x"))))
+    assert get_api_keys() == {}
