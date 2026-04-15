@@ -23,7 +23,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  COVERAGE_FAIL_UNDER: "53"
+  COVERAGE_FAIL_UNDER: "54"
 
 jobs:
   tests:
