@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -36,6 +37,16 @@ def test_root_pytest_workflow_does_not_ignore_test_failures() -> None:
 
     assert "- name: Run Tests" in workflow
     assert "continue-on-error: true" not in workflow.split("- name: Run Tests", 1)[1].split("- name:", 1)[0]
+
+
+def test_root_pytest_workflow_coverage_threshold_not_too_low() -> None:
+    workflow = ROOT_PYTEST_WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "--cov-fail-under=${{ env.COVERAGE_FAIL_UNDER }}" in workflow
+
+    match = re.search(r"COVERAGE_FAIL_UNDER:\s*\"?(?P<value>\d+)\"?", workflow)
+    assert match is not None
+    assert int(match.group("value")) >= 35
 
 
 
