@@ -8,7 +8,6 @@ Uses secrets.compare_digest to prevent timing attacks.
 
 from __future__ import annotations
 
-import os
 import secrets
 from collections.abc import Callable
 from urllib.parse import urlparse
@@ -17,7 +16,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.core.auth_contract import resolve_expected_api_key
+from app.core.auth_contract import resolve_auth_configuration
 from app.core.logging import get_logger
 from app.services.config_service import get_config_service
 
@@ -297,24 +296,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Returns:
             True if authentication is required, False otherwise
         """
-        # Check environment variable first (highest priority)
-        env_require = os.getenv("REQUIRE_API_KEY", "").lower()
-        if env_require in ("true", "1", "yes"):
-            return True
-        if env_require in ("false", "0", "no"):
-            return False
-
-        # Check config file
-        try:
-            cfg = get_config_service().get_config()
-            security = getattr(cfg, "security", None)
-            if security:
-                return bool(security.require_api_key)
-        except Exception as exc:
-            logger.warning(f"Failed to read security config: {exc}")
-
-        # Default: require authentication if API key is configured
-        return self._get_expected_api_key() is not None
+        _expected_api_key, auth_required = resolve_auth_configuration(self._load_security_config)
+        return auth_required
 
     def _get_expected_api_key(self) -> str | None:
         """
@@ -328,18 +311,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Returns:
             The expected API key or None if not configured
         """
-        return resolve_expected_api_key(self._get_config_api_key)
+        expected_api_key, _auth_required = resolve_auth_configuration(self._load_security_config)
+        return expected_api_key
 
-    def _get_config_api_key(self) -> str | None:
-        """Read the configured API key from config service."""
+    def _load_security_config(self) -> tuple[str | None, bool | None]:
+        """Read API key and require flag from config service."""
         try:
             cfg = get_config_service().get_config()
             security = getattr(cfg, "security", None)
-            if security and security.api_key:
-                return security.api_key
+            if security:
+                return security.api_key or None, bool(security.require_api_key)
         except Exception as exc:
             logger.warning(f"Failed to read API key from config: {exc}")
-        return None
+        return None, None
 
     def _extract_token(self, request: Request) -> str | None:
         """

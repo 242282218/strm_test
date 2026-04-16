@@ -1,28 +1,65 @@
+# Smart Media Configuration Example
+# Copy this file to config.yaml and configure as needed
+#
+# IMPORTANT: Sensitive values (API keys, tokens, passwords) should be set via:
+#   1. Environment variables (recommended for production)
+#   2. .env file (for Docker deployments)
+#   3. Encrypted values with "encrypted:" prefix
+#
+# Environment variable format: SMART_MEDIA_<SECTION>_<FIELD>
+# Example: SMART_MEDIA_QUARK_COOKIE, SMART_MEDIA_EMBY_API_KEY
+# See .env.example for complete list
+
 alt_exts:
   - .srt
   - .ass
   - .ssa
 
 api_keys:
+  # Environment: SMART_MEDIA_AI_API_KEY
   ai_api_key: ""
+  # Environment: SMART_MEDIA_TMDB_API_KEY
   tmdb_api_key: ""
 
 colored_log: true
 create_sub_directory: false
 database: quark_strm.db
 
-# Emby 刷新集成（全局配置）
+# Emby integration (global config)
 emby:
   enabled: false
+  # Environment: SMART_MEDIA_EMBY_URL
   url: "http://YOUR_EMBY_HOST:8096"
-  api_key: "YOUR_EMBY_API_KEY"
+  # Environment: SMART_MEDIA_EMBY_PROXY_BASE_URL
+  proxy_base_url: "http://YOUR_SMART_MEDIA_HOST:18097"
+  # Environment: SMART_MEDIA_EMBY_API_KEY
+  api_key: ""
   timeout: 30
   notify_on_complete: true
   refresh:
     on_strm_generate: true
     on_rename: true
-    cron: "" # 例如: */1 * * * * （每分钟）
-    library_ids: [] # 留空则全库刷新
+    cron: "" # Example: */1 * * * * (every minute)
+    library_ids: [] # Empty = refresh all libraries
+
+# Playback routing policy
+playback:
+  # true: direct link first, false: prefer local proxy stream
+  direct_first: true
+  # Case-insensitive substring match against client/device/user-agent classification
+  force_proxy_clients: []
+  # fnmatch-style upstream host patterns, e.g. "*.139.com"
+  force_proxy_hosts: []
+  # Consecutive direct-link preflight failures needed before sticky proxy downgrade activates
+  sticky_downgrade_threshold: 0
+  # Sticky proxy downgrade TTL in seconds
+  sticky_downgrade_ttl_sec: 0
+  # Enable in-memory first segment cache for zero-offset bounded Range probes
+  first_segment_cache_enabled: false
+  # Cached first segment size in MB
+  first_segment_cache_mb: 0
+  # First segment cache TTL in seconds
+  first_segment_cache_ttl_sec: 0
 
 endpoints:
   - base_url: http://localhost:8000
@@ -39,7 +76,7 @@ endpoints:
     username: ""
     password: ""
     token: ""
-    # 旧版兼容字段（建议逐步迁移到 emby.*）
+    # Legacy fields (migrate to emby.*)
     emby_url: ""
     emby_api_key: ""
 
@@ -55,6 +92,7 @@ log_file: logs/quark_strm.log
 log_level: INFO
 
 quark:
+  # Environment: SMART_MEDIA_QUARK_COOKIE
   cookie: ""
   only_video: true
   referer: https://pan.quark.cn/
@@ -62,8 +100,11 @@ quark:
 
 telegram:
   enabled: false
+  # Environment: SMART_MEDIA_TELEGRAM_BOT_TOKEN
   bot_token: ""
+  # Environment: SMART_MEDIA_TELEGRAM_CHAT_ID
   chat_id: ""
+  # Environment: SMART_MEDIA_TELEGRAM_PROXY
   proxy: ""
   events:
     - task_completed
@@ -72,36 +113,44 @@ telegram:
 timeout: 30
 
 tmdb:
+  # Environment: SMART_MEDIA_TMDB_API_KEY
   api_key: ""
 
 webdav:
-  enabled: true
+  enabled: false  # 默认禁用以避免测试时配置校验失败
   mount_path: /dav
-  username: admin
-  password: password
+  # Environment: SMART_MEDIA_WEBDAV_USERNAME
+  username: ""
+  # Environment: SMART_MEDIA_WEBDAV_PASSWORD
+  password: ""
   read_only: true
 
 wechat:
   enabled: false
   provider: serverchan
+  # Environment: SMART_MEDIA_WECHAT_SEND_KEY
   send_key: ""
 
 zhipu:
+  # Environment: SMART_MEDIA_ZHIPU_API_KEY
   api_key: ""
 
 glm:
+  # Environment: SMART_MEDIA_GLM_API_KEY
   api_key: ""
   base_url: "https://open.bigmodel.cn/api/paas/v4"
   model: "glm-4.7-flash"
   timeout: 8
 
 deepseek:
+  # Environment: SMART_MEDIA_DEEPSEEK_API_KEY
   api_key: ""
   base_url: "https://api.deepseek.com/v1"
   model: "deepseek-chat"
   timeout: 20
 
 kimi:
+  # Environment: SMART_MEDIA_KIMI_API_KEY
   api_key: ""
   base_url: "https://integrate.api.nvidia.com/v1"
   model: "moonshotai/kimi-k2.5"
@@ -110,6 +159,7 @@ kimi:
 alist:
   enabled: false
   url: "http://localhost:5244"
+  # Environment: SMART_MEDIA_ALIST_TOKEN
   token: ""
   mount_path: "/"
 
@@ -123,5 +173,8 @@ cors:
     - "*"
 
 security:
+  # Environment: SMART_MEDIA_SECURITY_API_KEY
   api_key: ""
+  # Environment: SMART_MEDIA_JWT_SECRET_KEY
+  jwt_secret_key: ""
   require_api_key: false

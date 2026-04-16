@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.auth_contract import resolve_expected_api_key
 from app.core.config_manager import get_config
 from app.core.db import get_db
+from app.core.env_aliases import QUARK_COOKIE_ENV_PRIORITY, get_env_override
 from app.core.logging import get_logger
 from app.core.service_container import ServiceContainer, get_service_container
 
@@ -233,7 +234,7 @@ async def get_quark_cookie(cookie: str = None) -> str:
     - 测试环境下默认使用占位 cookie，避免因未配置导致 400
     - 生产环境请在 config.yaml 或环境变量中设置真实 cookie
     """
-    cookie = cookie or os.getenv("SMART_MEDIA_QUARK_COOKIE") or config.get_quark_cookie()
+    cookie = cookie or get_env_override(*QUARK_COOKIE_ENV_PRIORITY) or config.get_quark_cookie()
 
     # 测试兜底：如果仍然为空，使用占位 cookie 以通过单元测试
     if not cookie:

@@ -6,10 +6,11 @@
 
 import os
 import threading
-from typing import Dict, Any, Optional
-from pydantic import ValidationError
+from typing import Any
+
+from app.config.settings import AppConfig
 from app.core.logging import get_logger
-from app.config.settings import AppConfig, AListConfig, WebDAVConfig
+
 
 logger = get_logger(__name__)
 
@@ -36,6 +37,7 @@ class ConfigManager:
         self.load_config()
         try:
             from app.services.config_service import get_config_service
+
             get_config_service(config_path).register_change_callback(self.reload)
         except Exception as e:
             logger.warning(f"Failed to register config callback: {e}")
@@ -49,10 +51,11 @@ class ConfigManager:
                 self._config = app_config.model_dump()
                 logger.info(f"Configuration loaded from {self.config_path}")
             else:
-                logger.warning(f"Configuration file not found: {self.config_path}")
-                self._config = {}
+                logger.warning(f"Configuration file not found: {self.config_path}; using environment overrides only")
+                app_config = AppConfig.from_env_overrides()
+                self._config = app_config.model_dump()
         except Exception as e:
-            logger.error(f"Failed to load configuration: {str(e)}")
+            logger.error(f"Failed to load configuration: {e!s}")
             if self._config is None:
                 self._config = {}
 
@@ -67,7 +70,7 @@ class ConfigManager:
         Returns:
             配置值
         """
-        keys = key.split('.')
+        keys = key.split(".")
         value = self._config
 
         for k in keys:
@@ -78,14 +81,14 @@ class ConfigManager:
 
         return value
 
-    def get_quark_config(self) -> Dict[str, Any]:
+    def get_quark_config(self) -> dict[str, Any]:
         """
         获取夸克配置
 
         Returns:
             夸克配置字典
         """
-        return self.get('quark', {})
+        return self.get("quark", {})
 
     def get_quark_cookie(self) -> str:
         """
@@ -94,7 +97,7 @@ class ConfigManager:
         Returns:
             Cookie字符串
         """
-        return self.get('quark.cookie', '')
+        return self.get("quark.cookie", "")
 
     def get_quark_referer(self) -> str:
         """
@@ -103,7 +106,7 @@ class ConfigManager:
         Returns:
             Referer地址
         """
-        return self.get('quark.referer', 'https://pan.quark.cn/')
+        return self.get("quark.referer", "https://pan.quark.cn/")
 
     def get_quark_root_id(self) -> str:
         """
@@ -112,7 +115,7 @@ class ConfigManager:
         Returns:
             根目录ID
         """
-        return self.get('quark.root_id', '0')
+        return self.get("quark.root_id", "0")
 
     def get_quark_only_video(self) -> bool:
         """
@@ -121,15 +124,15 @@ class ConfigManager:
         Returns:
             是否只获取视频文件
         """
-        return self.get('quark.only_video', True)
+        return self.get("quark.only_video", True)
 
-    def get_alist_config(self) -> Dict[str, Any]:
+    def get_alist_config(self) -> dict[str, Any]:
         """获取AList配置"""
-        return self.get('alist', {})
+        return self.get("alist", {})
 
-    def get_webdav_config(self) -> Dict[str, Any]:
+    def get_webdav_config(self) -> dict[str, Any]:
         """获取WebDAV配置"""
-        return self.get('webdav', {})
+        return self.get("webdav", {})
 
     def reload(self):
         """重新加载配置"""
@@ -141,14 +144,15 @@ class ConfigManager:
 config_manager = ConfigManager()
 
 
-_config_manager_instance: Optional[ConfigManager] = None
+_config_manager_instance: ConfigManager | None = None
 
 
-def get_config(config_path: Optional[str] = None) -> ConfigManager:
+def get_config(config_path: str | None = None) -> ConfigManager:
     """
-    ?????????
+    获取配置管理器实例。
+
     Returns:
-        ???????
+        ConfigManager: 配置管理器实例。
     """
     global _config_manager_instance
     resolved_path = config_path or os.getenv("CONFIG_PATH", "config.yaml")

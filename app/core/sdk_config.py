@@ -11,6 +11,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from app.core.env_aliases import (
+    AI_API_KEY_ENV_PRIORITY,
+    QUARK_COOKIE_ENV_PRIORITY,
+    TMDB_API_KEY_ENV_PRIORITY,
+    get_env_override,
+)
 
 # 添加SDK路径 - 优先使用环境变量，其次查找项目相对路径
 SDK_PATH = Path(os.getenv("QUARK_SDK_PATH", str(Path(__file__).resolve().parents[2] / "packages")))
@@ -23,10 +29,6 @@ from app.services.config_service import get_config_service
 
 
 logger = get_logger(__name__)
-
-QUARK_COOKIE_ENV_PRIORITY = ("SMART_MEDIA_QUARK_COOKIE", "QUARK_COOKIE")
-TMDB_API_KEY_ENV_PRIORITY = ("SMART_MEDIA_TMDB_API_KEY", "TMDB_API_KEY")
-AI_API_KEY_ENV_PRIORITY = ("SMART_MEDIA_AI_API_KEY", "AI_API_KEY")
 
 # SDK导入
 SDK_AVAILABLE = False
@@ -51,17 +53,6 @@ except ImportError as e:
 
 if not SDK_AVAILABLE:
     logger.warning("SDK不可用，部分功能将受限")
-
-
-def _get_env_override(*env_names: str) -> str:
-    """Return the first configured env override in priority order."""
-    for env_name in env_names:
-        env_value = os.getenv(env_name)
-        if env_value:
-            return env_value
-    return ""
-
-
 def get_api_keys():
     """
     从配置文件获取API密钥
@@ -99,10 +90,10 @@ class SDKConfig:
         # 从配置文件读取API密钥
         api_keys = get_api_keys()
 
-        self.quark_cookie = _get_env_override(*QUARK_COOKIE_ENV_PRIORITY)
+        self.quark_cookie = get_env_override(*QUARK_COOKIE_ENV_PRIORITY)
         # 优先从配置文件读取，其次环境变量
-        self.tmdb_api_key = api_keys.get("tmdb_api_key") or _get_env_override(*TMDB_API_KEY_ENV_PRIORITY)
-        self.ai_api_key = api_keys.get("ai_api_key") or _get_env_override(*AI_API_KEY_ENV_PRIORITY)
+        self.tmdb_api_key = api_keys.get("tmdb_api_key") or get_env_override(*TMDB_API_KEY_ENV_PRIORITY)
+        self.ai_api_key = api_keys.get("ai_api_key") or get_env_override(*AI_API_KEY_ENV_PRIORITY)
 
         logger.info(f"SDK配置初始化完成，TMDB API密钥: {'已配置' if self.tmdb_api_key else '未配置'}")
         logger.info(f"AI API密钥: {'已配置' if self.ai_api_key else '未配置'}")

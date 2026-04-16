@@ -5,12 +5,13 @@
 """
 
 import os
-import threading
 import shutil
-from typing import Optional
+import threading
+
 from app.config.settings import AppConfig
 from app.core.logging import get_logger
 from app.core.security import mask_sensitive_data
+
 
 logger = get_logger(__name__)
 
@@ -41,13 +42,13 @@ class ConfigService:
             return
 
         self.config_path = config_path
-        self._config: Optional[AppConfig] = None
-        self._last_good_config: Optional[AppConfig] = None
-        self._last_mtime: Optional[float] = None
+        self._config: AppConfig | None = None
+        self._last_good_config: AppConfig | None = None
+        self._last_mtime: float | None = None
         # Reentrant lock avoids deadlock when update flows call nested save operations.
         self._config_lock = threading.RLock()
         self._change_callbacks = []
-        self._watcher_thread: Optional[threading.Thread] = None
+        self._watcher_thread: threading.Thread | None = None
         self._watcher_stop_event = threading.Event()
         self._load_config()
         self._initialized = True
@@ -73,11 +74,10 @@ class ConfigService:
                 self._last_mtime = os.path.getmtime(self.config_path)
                 logger.info(f"Configuration loaded from {self.config_path}")
             else:
-                self._config = AppConfig()
-                self._save_config()
+                self._config = AppConfig.from_env_overrides()
                 self._last_good_config = self._config
-                self._last_mtime = os.path.getmtime(self.config_path)
-                logger.info(f"Created default configuration at {self.config_path}")
+                self._last_mtime = None
+                logger.info(f"Configuration file not found at {self.config_path}; using in-memory defaults")
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
             raise ConfigError(f"Failed to load config: {e}") from e
@@ -104,7 +104,7 @@ class ConfigService:
                 self._config.to_yaml(temp_path)
 
                 # 2. 验证临时文件可读
-                test_config = AppConfig.from_yaml(temp_path)
+                AppConfig.from_yaml(temp_path)
 
                 # 3. 备份原文件
                 if os.path.exists(self.config_path):
@@ -291,18 +291,18 @@ class ConfigService:
 
 
 # 全局配置服务实例
-_config_service_instance: Optional[ConfigService] = None
+_config_service_instance: ConfigService | None = None
 
 
-def get_config_service(config_path: Optional[str] = None) -> ConfigService:
+def get_config_service(config_path: str | None = None) -> ConfigService:
     """
-    ????????
+    获取配置服务实例
 
     Args:
-        config_path: ?????????? CONFIG_PATH ????? config.yaml
+        config_path: 可选配置文件路径，默认读取 CONFIG_PATH 或 config.yaml
 
     Returns:
-        ConfigService: ????????
+        ConfigService: 配置服务实例
     """
     global _config_service_instance
     resolved_path = config_path or os.getenv("CONFIG_PATH", "config.yaml")
