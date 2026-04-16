@@ -6,7 +6,10 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
+import matplotlib
 import pytest
+
+matplotlib.use("Agg", force=True)
 
 from app.services import cache_statistics
 
@@ -314,4 +317,3 @@ def test_global_statistics_and_visualizer_singletons() -> None:
     vis2 = cache_statistics.get_cache_visualizer()
     assert vis1 is vis2
     assert vis1.statistics is stats1
-
