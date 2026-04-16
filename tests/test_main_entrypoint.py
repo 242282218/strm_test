@@ -3,7 +3,10 @@ from __future__ import annotations
 import os
 import runpy
 import sys
+from datetime import datetime
 from unittest.mock import patch
+
+import pytest
 
 
 MODULE_NAME = "app.main"
@@ -52,3 +55,35 @@ def test_main_import_does_not_initialize_app_before_runtime(tmp_path, monkeypatc
     assert module_globals["config_service"] is None
     assert not (tmp_path / "config.yaml").exists()
     assert not (tmp_path / "data").exists()
+
+
+def test_resolve_startup_health_defaults_ok() -> None:
+    module_globals = _run_main_module("app.main_health_default_test")
+    app = module_globals["app"]
+    resolver = module_globals["_resolve_startup_health"]
+
+    app.state.startup_warnings = []
+    app.state.startup_components = {"database": {"status": "ok", "detail": None}}
+
+    status, warnings, components = resolver()
+
+    assert status == "ok"
+    assert warnings == []
+    assert components["database"]["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_returns_degraded_state_when_startup_has_warnings() -> None:
+    module_globals = _run_main_module("app.main_health_degraded_test")
+    app = module_globals["app"]
+    health = module_globals["health"]
+
+    app.state.started_at = datetime.utcnow()
+    app.state.startup_warnings = ["monitoring: monitor exploded"]
+    app.state.startup_components = {"monitoring": {"status": "degraded", "detail": "monitor exploded"}}
+
+    payload = await health()
+
+    assert payload["status"] == "degraded"
+    assert payload["startup_warnings"] == ["monitoring: monitor exploded"]
+    assert payload["startup_components"]["monitoring"]["status"] == "degraded"

@@ -38,8 +38,8 @@ def _patch_lifecycle_dependencies(monkeypatch: pytest.MonkeyPatch, *, fail_on_st
     monkeypatch.setattr(lifecycle, "mount_webdav", lambda app, config: None)
     monkeypatch.setattr(lifecycle, "initialize_database", lambda: None)
     monkeypatch.setattr(lifecycle, "initialize_auth_system", lambda: None)
-    monkeypatch.setattr(lifecycle, "configure_emby_cron", lambda _container: None)
-    monkeypatch.setattr(lifecycle, "initialize_monitoring", lambda: None)
+    monkeypatch.setattr(lifecycle, "configure_emby_cron", lambda _container: (True, None))
+    monkeypatch.setattr(lifecycle, "initialize_monitoring", lambda: (True, None))
 
     async def fake_get_http_pool() -> object:
         return object()
@@ -158,9 +158,11 @@ def test_configure_emby_cron_runs_when_service_available(monkeypatch: pytest.Mon
     fake_module.EmbyService = FakeEmbyService
     monkeypatch.setitem(sys.modules, "app.services.emby_service", fake_module)
 
-    lifecycle.configure_emby_cron(FakeContainer())
+    ok, detail = lifecycle.configure_emby_cron(FakeContainer())
 
     assert service.configure_calls == 1
+    assert ok is True
+    assert detail is None
 
 
 def test_configure_emby_cron_swallows_service_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -175,7 +177,9 @@ def test_configure_emby_cron_swallows_service_errors(monkeypatch: pytest.MonkeyP
     fake_module.EmbyService = FakeEmbyService
     monkeypatch.setitem(sys.modules, "app.services.emby_service", fake_module)
 
-    lifecycle.configure_emby_cron(FakeContainer())
+    ok, detail = lifecycle.configure_emby_cron(FakeContainer())
+    assert ok is False
+    assert "cron setup failed" in detail
 
 
 def test_initialize_monitoring_handles_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,14 +188,86 @@ def test_initialize_monitoring_handles_failure(monkeypatch: pytest.MonkeyPatch) 
     success_module.setup_default_monitoring = lambda: success_calls.update(count=success_calls["count"] + 1)
     monkeypatch.setitem(sys.modules, "app.core.metrics_collector", success_module)
 
-    lifecycle.initialize_monitoring()
+    ok, detail = lifecycle.initialize_monitoring()
+    assert ok is True
+    assert detail is None
     assert success_calls["count"] == 1
 
     failed_module = types.ModuleType("app.core.metrics_collector")
     failed_module.setup_default_monitoring = lambda: (_ for _ in ()).throw(RuntimeError("monitor exploded"))
     monkeypatch.setitem(sys.modules, "app.core.metrics_collector", failed_module)
 
-    lifecycle.initialize_monitoring()
+    ok, detail = lifecycle.initialize_monitoring()
+    assert ok is False
+    assert "monitor exploded" in detail
+
+
+def test_lifespan_records_degraded_optional_components(monkeypatch: pytest.MonkeyPatch) -> None:
+    config_service = DummyConfigService()
+    container = DummyContainer()
+
+    monkeypatch.setattr(lifecycle, "mount_webdav", lambda app, config: None)
+    monkeypatch.setattr(lifecycle, "initialize_database", lambda: None)
+    monkeypatch.setattr(lifecycle, "initialize_auth_system", lambda: None)
+    monkeypatch.setattr(lifecycle, "configure_emby_cron", lambda _container: (False, "cron setup failed"))
+    monkeypatch.setattr(lifecycle, "initialize_monitoring", lambda: (False, "monitor exploded"))
+
+    async def fake_get_http_pool() -> object:
+        return object()
+
+    async def fake_start_service_container() -> DummyContainer:
+        return container
+
+    monkeypatch.setattr(lifecycle, "get_http_pool", fake_get_http_pool)
+    monkeypatch.setattr(lifecycle, "start_service_container", fake_start_service_container)
+
+    app = _build_app(config_service)
+    with TestClient(app):
+        pass
+
+    assert app.state.startup_components["emby_cron"]["status"] == "degraded"
+    assert app.state.startup_components["monitoring"]["status"] == "degraded"
+    assert "emby_cron: cron setup failed" in app.state.startup_warnings
+    assert "monitoring: monitor exploded" in app.state.startup_warnings
+
+
+def test_lifespan_resets_startup_tracking_each_boot(monkeypatch: pytest.MonkeyPatch) -> None:
+    config_service = DummyConfigService()
+    container = DummyContainer()
+    fail_once = {"value": True}
+
+    monkeypatch.setattr(lifecycle, "mount_webdav", lambda app, config: None)
+    monkeypatch.setattr(lifecycle, "initialize_database", lambda: None)
+    monkeypatch.setattr(lifecycle, "initialize_auth_system", lambda: None)
+    monkeypatch.setattr(
+        lifecycle,
+        "configure_emby_cron",
+        lambda _container: (False, "cron setup failed") if fail_once["value"] else (True, None),
+    )
+    monkeypatch.setattr(lifecycle, "initialize_monitoring", lambda: (True, None))
+
+    async def fake_get_http_pool() -> object:
+        return object()
+
+    async def fake_start_service_container() -> DummyContainer:
+        return container
+
+    monkeypatch.setattr(lifecycle, "get_http_pool", fake_get_http_pool)
+    monkeypatch.setattr(lifecycle, "start_service_container", fake_start_service_container)
+
+    app = _build_app(config_service)
+    with TestClient(app):
+        pass
+
+    assert app.state.startup_components["emby_cron"]["status"] == "degraded"
+    assert app.state.startup_warnings == ["emby_cron: cron setup failed"]
+
+    fail_once["value"] = False
+    with TestClient(app):
+        pass
+
+    assert app.state.startup_components["emby_cron"]["status"] == "ok"
+    assert app.state.startup_warnings == []
 
 
 def test_mount_webdav_mounts_once_and_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

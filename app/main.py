@@ -1,360 +1,178 @@
 """
-FastAPI主应用
+FastAPI 主应用入口
 
-参考: MediaHelp main.py
+参考：MediaHelp main.py
 """
 
-from contextlib import asynccontextmanager
-from datetime import datetime
-import time
-from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import ORJSONResponse
-from asgiref.wsgi import WsgiToAsgi
-from app.api import quark, strm, proxy, emby, scrape, tasks, strm_validator, quark_sdk, search, rename, dashboard, tmdb, monitoring, smart_rename, file_manager
-from app.api.v1 import api_router as v1_router
-from app.config.settings import AppConfig
-from app.services.config_service import get_config_service
-from app.core.logging import setup_logging, get_logger
-from app.core.exception_handler import (
-    exception_handler,
-    http_exception_handler,
-    validation_exception_handler,
-    input_validation_exception_handler,
-)
-from app.core.exceptions import AppException, app_exception_handler
-from app.core.constants import REQUEST_ID_HEADER
-from app.core.validators import InputValidationError
-from app.core.dependencies import require_api_key
-from app.services.cache_service import get_cache_service
-from app.services.link_cache import get_link_cache_service
-from app.services.cron_service import get_cron_service
-from app.services.notification_service import get_notification_service
-from app.services.webdav.service import get_webdav_app
-from app.core.db import engine, Base
-# 确保导入模型以便创建表
-import app.models.notification
-import app.models.emby
-import app.models.scrape
-import app.models.cloud_drive
-import app.models.task
-from app.api import notification as notification_router
-from app.api import cloud_drive
 import os
+
+from fastapi import Depends, HTTPException, Request
+
+from app.config.application import create_fastapi_app, register_exception_handlers, register_routers
+from app.config.lifecycle import create_lifespan_context
+from app.config.middleware import (
+    deprecation_warning_middleware,
+    prometheus_middleware,
+    request_id_middleware,
+)
+from app.core.dependencies import require_api_key
+from app.core.logging import get_logger
+from app.core.rate_limiter import setup_rate_limiting
+from app.services.config_service import get_config_service
 
 logger = get_logger(__name__)
 
-config: AppConfig = None
+APP_TITLE = "夸克 STRM 系统"
+APP_DESCRIPTION = "Emby/Jellyfin 可播放的夸克网盘 STRM 系统"
+APP_VERSION = "0.1.0"
+
+# 全局配置实例
+config = None
 config_service = None
 
 
-def init_app():
-    """
-    初始化应用
+def _resolve_startup_health() -> tuple[str, list[str], dict[str, dict[str, str | None]]]:
+    warnings = list(getattr(app.state, "startup_warnings", []))
+    components = getattr(app.state, "startup_components", {})
+    if not isinstance(components, dict):
+        components = {}
 
-    Args:
-        无
+    degraded = False
+    for component in components.values():
+        if isinstance(component, dict) and component.get("status") in {"degraded", "failed"}:
+            degraded = True
+            break
 
-    Returns:
-        无
+    status = "degraded" if warnings or degraded else "ok"
+    return status, warnings, components
 
-    Side Effects:
-        初始化配置服务、日志系统
-    """
+
+def get_config_path() -> str:
+    """获取配置文件路径"""
+    return os.getenv("CONFIG_PATH", "config.yaml")
+
+
+def initialize_app():
+    """初始化应用配置和日志系统"""
     global config, config_service
 
-    config_path = os.getenv("CONFIG_PATH", "config.yaml")
+    if config is not None and config_service is not None:
+        return config_service, config
+
+    config_path = get_config_path()
     config_service = get_config_service(config_path)
     config = config_service.get_config()
 
+    # 设置日志
+    log_format = os.getenv("SMART_MEDIA_LOG_FORMAT", config.log.format)
+    from app.core.logging import setup_logging
     setup_logging(
         log_level=config.log_level,
         log_file=config.log_file,
-        colored=config.colored_log
+        colored=config.colored_log,
+        log_format=log_format,
+        log_config=config.log.model_dump() if hasattr(config, "log") else None,
     )
 
     logger.info(f"Application initialized with config: {config_path}")
 
+    # 记录配置警告
+    config_warnings = config.validate_required_configs()
+    if config_warnings:
+        for warning in config_warnings:
+            logger.warning(f"Configuration warning: {warning}")
 
-def _mount_webdav(app: FastAPI):
-    if config is None or not config.webdav.enabled:
-        return
-
-    if getattr(app.state, "webdav_mounted", False):
-        return
-
-    mount_path = config.webdav.mount_path
-    wsgi_app = get_webdav_app()
-    if wsgi_app is None:
-        logger.error("WebDAV is enabled but app initialization failed. WebDAV mount is skipped.")
-        return
-    app.mount(mount_path, WsgiToAsgi(wsgi_app))
-    app.state.webdav_mounted = True
-    logger.info(f"WebDAV mounted at {mount_path}")
+    # 记录敏感字段状态
+    sensitive_status = config.get_sensitive_fields_status()
+    configured_count = sum(1 for value in sensitive_status.values() if value)
+    total_count = len(sensitive_status)
+    logger.info(f"Sensitive fields configured: {configured_count}/{total_count}")
+    return config_service, config
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    try:
-        init_app()
-        app.state.started_at = datetime.utcnow()
-        _mount_webdav(app)
+# 创建 lifespan 上下文
+lifespan_context = create_lifespan_context(config_service, config, initializer=initialize_app)
 
-        # 启动配置文件监控（热加载）
-        if config_service:
-            config_service.start_watcher()
-        
-        # 初始化数据库表
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created")
-        
-        # 启动缓存服务
-        cache_service = get_cache_service()
-        await cache_service.start()
-        logger.info("Cache service started")
+# 创建 FastAPI 应用
+app = create_fastapi_app(APP_TITLE, APP_DESCRIPTION, APP_VERSION, lifespan_context)
 
-        link_cache = get_link_cache_service()
-        await link_cache.start()
-        logger.info("Link cache started")
-        
-        # 启动定时任务服务
-        cron_service = get_cron_service()
-        await cron_service.start()
-        logger.info("Cron service started")
+# 注册中间件
+from app.config.middleware import register_core_middleware
+register_core_middleware(app, config_service)
+app.middleware("http")(request_id_middleware)
+app.middleware("http")(prometheus_middleware)
+app.middleware("http")(deprecation_warning_middleware)
 
-        # 配置Emby定时刷新（如启用）
-        try:
-            from app.services.emby_service import get_emby_service
-            get_emby_service().configure_cron()
-            logger.info("Emby cron configured")
-        except Exception as e:
-            logger.warning(f"Failed to configure Emby cron: {e}")
-        
-        # 启动通知服务
-        notification_service = get_notification_service()
-        await notification_service.initialize()
-        logger.info("Notification service started")
-        
-        # 初始化监控系统
-        try:
-            from app.core.metrics_collector import setup_default_monitoring
-            setup_default_monitoring()
-            logger.info("Monitoring system initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize monitoring: {e}")
-        
-        logger.info("Application started")
-        yield
-        
-        # 停止服务
-        await cron_service.stop()
-        logger.info("Cron service stopped")
-        
-        await link_cache.stop()
-        logger.info("Link cache stopped")
+# 设置速率限制（默认 100 请求/分钟）
+setup_rate_limiting(app, requests=100, seconds=60, block_duration=300)
 
-        await cache_service.stop()
-        logger.info("Cache service stopped")
+# 注册路由
+register_routers(app)
 
-        if config_service:
-            config_service.stop_watcher()
-        
-        logger.info("Application shutting down")
-    except Exception as e:
-        import traceback
-        logger.error(f"App startup failed: {e}\n{traceback.format_exc()}")
-        raise
-
-
-app = FastAPI(
-    title="夸克STRM系统",
-    description="Emby/Jellyfin可播放的夸克网盘STRM系统",
-    version="0.1.0",
-    default_response_class=ORJSONResponse,
-    lifespan=lifespan
-)
-
-
-@app.middleware("http")
-async def add_request_id(request: Request, call_next):
-    request_id = request.headers.get(REQUEST_ID_HEADER)
-    if not request_id or len(request_id) > 64:
-        import uuid
-        request_id = str(uuid.uuid4())
-    request.state.request_id = request_id
-    start = time.perf_counter()
-    response = await call_next(request)
-    elapsed_ms = int((time.perf_counter() - start) * 1000)
-    response.headers[REQUEST_ID_HEADER] = request_id
-    response.headers["X-Response-Time"] = f"{elapsed_ms}ms"
-
-    access_logger = logger.bind(
-        request_id=request_id,
-        method=request.method,
-        path=request.url.path,
-        status=response.status_code,
-        elapsed_ms=elapsed_ms,
-    )
-    if response.status_code >= 500:
-        access_logger.error(f"{request.method} {request.url.path} -> {response.status_code} ({elapsed_ms}ms)")
-    elif response.status_code >= 400:
-        access_logger.warning(f"{request.method} {request.url.path} -> {response.status_code} ({elapsed_ms}ms)")
-    else:
-        access_logger.info(f"{request.method} {request.url.path} -> {response.status_code} ({elapsed_ms}ms)")
-
-    return response
-
-# CORS 配置 - 默认只允许本地开发环境
-cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
-cors_allow_credentials_env = os.getenv("CORS_ALLOW_CREDENTIALS", "")
-
-config_for_cors = None
-try:
-    config_for_cors = get_config_service(os.getenv("CONFIG_PATH", "config.yaml")).get_config()
-except Exception as exc:
-    logger.warning(f"Failed to load config for CORS: {exc}")
-
-# 默认只允许本地开发环境，生产环境必须显式配置
-_default_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
-if cors_origins_env:
-    allow_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
-elif config_for_cors and getattr(config_for_cors, "cors", None) and config_for_cors.cors.allow_origins:
-    allow_origins = config_for_cors.cors.allow_origins
-    # 如果配置为 *，则使用默认值并发出警告
-    if allow_origins == ["*"]:
-        logger.warning("CORS allow_origins is '*' - using default safe origins instead")
-        allow_origins = _default_origins
-else:
-    # 默认使用安全的本地开发环境配置
-    allow_origins = _default_origins
-    logger.info(f"Using default CORS origins: {allow_origins}")
-
-if cors_allow_credentials_env:
-    allow_credentials = cors_allow_credentials_env.lower() in {"1", "true", "yes"}
-elif config_for_cors and getattr(config_for_cors, "cors", None):
-    allow_credentials = bool(config_for_cors.cors.allow_credentials)
-else:
-    allow_credentials = True  # 默认允许凭证，因为默认来源是安全的
-
-if allow_origins == ["*"] and allow_credentials:
-    logger.warning("CORS allow_origins is '*' - disabling credentials to avoid invalid CORS config")
-    allow_credentials = False
-
-# 限制允许的 HTTP 方法
-_default_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
-if config_for_cors and getattr(config_for_cors, "cors", None) and config_for_cors.cors.allow_methods:
-    allow_methods = config_for_cors.cors.allow_methods
-    if allow_methods == ["*"]:
-        allow_methods = _default_methods
-else:
-    allow_methods = _default_methods
-
-# 限制允许的请求头
-_default_headers = ["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"]
-if config_for_cors and getattr(config_for_cors, "cors", None) and config_for_cors.cors.allow_headers:
-    allow_headers = config_for_cors.cors.allow_headers
-    if allow_headers == ["*"]:
-        allow_headers = _default_headers
-else:
-    allow_headers = _default_headers
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allow_origins,
-    allow_credentials=allow_credentials,
-    allow_methods=allow_methods,
-    allow_headers=allow_headers,
-)
-app.add_middleware(GZipMiddleware, minimum_size=1024)
-
-# 注册全局异常处理器
-app.add_exception_handler(Exception, exception_handler)
-app.add_exception_handler(AppException, app_exception_handler)
-app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(InputValidationError, input_validation_exception_handler)
-
-app.include_router(quark.router)
-app.include_router(strm.router)
-app.include_router(proxy.router)
-app.include_router(emby.router)
-app.include_router(scrape.router, prefix="/api")
-# 设置 prefix 以符合 API 设计
-app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
-app.include_router(cloud_drive.router, prefix="/api/drives", tags=["Cloud Drives"])
-app.include_router(strm_validator.router)
-app.include_router(quark_sdk.router)
-app.include_router(search.router)
-app.include_router(rename.router)
-app.include_router(smart_rename.router)
-app.include_router(dashboard.router)
-app.include_router(file_manager.router, prefix="/api", tags=["FileManager"])
-from app.api import transfer
-app.include_router(transfer.router)
-
-app.include_router(tmdb.router)
-app.include_router(notification_router.router)
-from app.api import system_config
-app.include_router(system_config.router)
-
-# V1 API routes
-app.include_router(v1_router, prefix="/api/v1", tags=["API V1"])
-
-# Monitoring API
-app.include_router(monitoring.router, prefix="/api", tags=["monitoring"])
+# 注册异常处理器
+register_exception_handlers(app)
 
 
 @app.get("/")
-async def root():
-    """根路径"""
-    return {
-        "name": "夸克STRM系统",
-        "version": "0.1.0",
-        "status": "running"
-    }
+async def root(request: Request):
+    """根路径。命中专用 Emby 代理入口时转发到 Emby 首页。"""
+    is_dedicated_proxy_request = False
+    try:
+        from app.api import emby_gateway
+        app_config = emby_gateway.config_service.get_config()
+        is_dedicated_proxy_request = emby_gateway._is_dedicated_proxy_request(request, app_config)
+        if is_dedicated_proxy_request:
+            return await emby_gateway._forward_to_emby(request, app_config, "")
+    except Exception as exc:
+        logger.warning(f"Dedicated Emby gateway root forwarding failed: {exc}")
+        if is_dedicated_proxy_request:
+            raise HTTPException(status_code=502, detail="Failed to proxy Emby home") from exc
+
+    return {"name": "夸克 STRM 系统", "version": "0.1.0", "status": "running"}
 
 
 @app.get("/health")
 async def health():
     """健康检查"""
+    from datetime import datetime
+
     started_at = getattr(app.state, "started_at", None)
     uptime_seconds = None
     if started_at:
         uptime_seconds = int((datetime.utcnow() - started_at).total_seconds())
+
+    health_status, startup_warnings, startup_components = _resolve_startup_health()
+
     return {
-        "status": "ok",
+        "status": health_status,
         "timestamp": datetime.utcnow().isoformat(),
         "uptime_seconds": uptime_seconds,
-        "version": "0.1.0"
+        "version": "0.1.0",
+        "startup_warnings": startup_warnings,
+        "startup_components": startup_components,
     }
 
 
 @app.get("/config")
-async def get_config(_auth: None = Depends(require_api_key)):
+async def get_config_endpoint(_auth: None = Depends(require_api_key)):
     """获取配置（敏感信息脱敏）"""
-    if config is None:
+    active_config = config or getattr(app.state, "config", None)
+    if active_config is None:
         return {"error": "Config not loaded"}
 
     return {
-        "database": config.database,
-        "log_level": config.log_level,
-        "timeout": config.timeout,
-        "exts": config.exts,
-        "alt_exts": config.alt_exts,
-        "endpoints_count": len(config.endpoints)
+        "database": active_config.database,
+        "log_level": active_config.log_level,
+        "timeout": active_config.timeout,
+        "exts": active_config.exts,
+        "alt_exts": active_config.alt_exts,
+        "endpoints_count": len(active_config.endpoints),
     }
 
 
 if __name__ == "__main__":
     import uvicorn
+
     workers = int(os.getenv("WEB_CONCURRENCY", "1"))
-    uvicorn.run(app, host="0.0.0.0", port=8001, workers=workers)
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port, workers=workers)

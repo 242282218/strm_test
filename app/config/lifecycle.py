@@ -19,6 +19,31 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _ensure_startup_tracking_state(app: FastAPI) -> None:
+    if not hasattr(app.state, "startup_components"):
+        app.state.startup_components = {}
+    if not hasattr(app.state, "startup_warnings"):
+        app.state.startup_warnings = []
+
+
+def _reset_startup_tracking_state(app: FastAPI) -> None:
+    app.state.startup_components = {}
+    app.state.startup_warnings = []
+
+
+def _record_startup_component(app: FastAPI, component: str, status: str, detail: str | None = None) -> None:
+    _ensure_startup_tracking_state(app)
+    app.state.startup_components[component] = {"status": status, "detail": detail}
+
+
+def _record_startup_warning(app: FastAPI, component: str, detail: str | None) -> None:
+    _ensure_startup_tracking_state(app)
+    if detail:
+        app.state.startup_warnings.append(f"{component}: {detail}")
+    else:
+        app.state.startup_warnings.append(component)
+
+
 def initialize_database():
     """初始化数据库表"""
     Base.metadata.create_all(bind=get_engine())
@@ -40,7 +65,7 @@ async def start_service_container():
     return container
 
 
-def configure_emby_cron(container):
+def configure_emby_cron(container) -> tuple[bool, str | None]:
     """配置 Emby 定时任务"""
     try:
         from app.services.emby_service import EmbyService
@@ -48,19 +73,23 @@ def configure_emby_cron(container):
         emby_service = container.get(EmbyService)
         emby_service.configure_cron()
         logger.info("Emby cron configured")
+        return True, None
     except Exception as e:
         logger.warning(f"Failed to configure Emby cron: {e}")
+        return False, str(e)
 
 
-def initialize_monitoring():
+def initialize_monitoring() -> tuple[bool, str | None]:
     """初始化监控系统"""
     try:
         from app.core.metrics_collector import setup_default_monitoring
 
         setup_default_monitoring()
         logger.info("Monitoring system initialized")
+        return True, None
     except Exception as e:
         logger.error(f"Failed to initialize monitoring: {e}")
+        return False, str(e)
 
 
 def mount_webdav(app: FastAPI, config):
@@ -107,17 +136,51 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
     watcher_started = False
     try:
         app.state.started_at = datetime.utcnow()
+        _reset_startup_tracking_state(app)
+
         mount_webdav(app, config)
+        webdav_enabled = bool(getattr(getattr(config, "webdav", None), "enabled", False))
+        webdav_mounted = bool(getattr(app.state, "webdav_mounted", False))
+        if not webdav_enabled:
+            _record_startup_component(app, "webdav", "skipped", "webdav disabled")
+        elif webdav_mounted:
+            _record_startup_component(app, "webdav", "ok")
+        else:
+            _record_startup_component(app, "webdav", "degraded", "webdav enabled but mount skipped")
+            _record_startup_warning(app, "webdav", "enabled but mount skipped")
+
         if config_service is not None:
             config_service.start_watcher()
             watcher_started = True
+            _record_startup_component(app, "config_watcher", "ok")
+        else:
+            _record_startup_component(app, "config_watcher", "skipped", "config service unavailable")
+
         initialize_database()
+        _record_startup_component(app, "database", "ok")
         initialize_auth_system()
+        _record_startup_component(app, "auth_system", "ok")
         container = await start_service_container()
-        configure_emby_cron(container)
-        initialize_monitoring()
+        _record_startup_component(app, "service_container", "ok")
+
+        cron_ok, cron_error = configure_emby_cron(container)
+        if cron_ok:
+            _record_startup_component(app, "emby_cron", "ok")
+        else:
+            _record_startup_component(app, "emby_cron", "degraded", cron_error)
+            _record_startup_warning(app, "emby_cron", cron_error)
+
+        monitoring_ok, monitoring_error = initialize_monitoring()
+        if monitoring_ok:
+            _record_startup_component(app, "monitoring", "ok")
+        else:
+            _record_startup_component(app, "monitoring", "degraded", monitoring_error)
+            _record_startup_warning(app, "monitoring", monitoring_error)
+
         await get_http_pool()
+        _record_startup_component(app, "http_pool", "ok")
     except Exception as e:
+        _record_startup_component(app, "startup", "failed", str(e))
         await _cleanup_lifespan_resources(container, config_service, watcher_started)
         logger.error(f"App startup failed: {e}\n{traceback.format_exc()}")
         raise
