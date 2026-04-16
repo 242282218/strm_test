@@ -1,3 +1,8 @@
+# =============================================================================
+# Docker Deploy Test for quark_strm
+# Enhanced with caching, build artifacts, and test reports
+# =============================================================================
+
 name: Docker Deploy Test
 
 on:
@@ -5,21 +10,165 @@ on:
   push:
     branches:
       - "**"
+    paths:
+      - "app/**"
+      - "core/**"
+      - "services/**"
+      - "web/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "requirements.txt"
+      - ".github/workflows/docker-deploy-test.yml"
   pull_request:
     branches:
       - "**"
+    paths:
+      - "app/**"
+      - "core/**"
+      - "services/**"
+      - "web/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "requirements.txt"
+      - ".github/workflows/docker-deploy-test.yml"
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '22'
 
 jobs:
-  docker-deploy-test:
+  # ===========================================================================
+  # Job 1: Pre-build Tests
+  # ===========================================================================
+  pre-build-tests:
+    name: Pre-build Tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Run frontend type check
+        working-directory: web
+        run: npm run type-check
+
+      - name: Run frontend unit tests
+        working-directory: web
+        run: npm run test:run -- --reporter=dot
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov pytest-json-report
+
+      - name: Create runtime directories
+        run: |
+          mkdir -p logs strm
+          touch quark_strm.db
+          cp config.example.yaml config.yaml || true
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=70 \
+            --json-report \
+            --json-report-file=test-report.json \
+            --json-report-indent=2 \
+            -m "not slow"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-report.json
+            coverage.xml
+          if-no-files-found: warn
+
+      - name: Publish test report
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          report_paths: '**/test-report.json'
+          fail_on_failure: false
+          detailed_summary: true
+          include_passed: true
+        continue-on-error: true
+
+  # ===========================================================================
+  # Job 2: Docker Build with Cache
+  # ===========================================================================
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: pre-build-tests
     timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        with:
+          path: web/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Prepare runtime files
         run: |
+          cp .env.example .env
+          {
+            echo "QUARK_STRM_IMAGE=quark-strm:test"
+            echo "SMART_MEDIA_EMBY_PROXY_PORT=18097"
+          } >> .env
           cp config.example.yaml config.yaml
           mkdir -p logs strm
           touch quark_strm.db
@@ -27,34 +176,128 @@ jobs:
       - name: Validate compose file
         run: docker compose config -q
 
-      - name: Build docker image
-        run: docker compose build
+      - name: Build docker image with cache
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: quark-strm:test
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=test
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Save Docker image as artifact
+        run: |
+          docker save quark-strm:test | gzip > quark-strm-image.tar.gz
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: quark-strm-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  # ===========================================================================
+  # Job 3: Docker Deploy Test
+  # ===========================================================================
+  docker-deploy-test:
+    name: Docker Deploy Test
+    runs-on: ubuntu-latest
+    needs: docker-build
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: .
+
+      - name: Load Docker image
+        run: |
+          gunzip -c quark-strm-image.tar.gz | docker load
+
+      - name: Prepare runtime files
+        run: |
+          cp .env.example .env
+          {
+            echo "QUARK_STRM_IMAGE=quark-strm:test"
+            echo "SMART_MEDIA_EMBY_PROXY_PORT=18097"
+          } >> .env
+          cp config.example.yaml config.yaml
+          mkdir -p logs strm
+          touch quark_strm.db
 
       - name: Start services
-        run: docker compose up -d
+        run: docker compose up --pull never -d
 
       - name: Wait for health endpoint
+        id: health-check
         run: |
+          echo "Waiting for health endpoint..."
           for i in $(seq 1 45); do
             if curl -fsS "http://127.0.0.1:8000/health" > /tmp/health.json; then
+              echo "Health check passed!"
               cat /tmp/health.json
+              echo "health_status=healthy" >> $GITHUB_OUTPUT
               exit 0
             fi
             sleep 2
           done
           echo "Health check failed after waiting."
+          echo "health_status=unhealthy" >> $GITHUB_OUTPUT
           docker compose ps
           docker compose logs --no-color
           exit 1
 
       - name: Smoke test root endpoint
-        run: curl -fsS "http://127.0.0.1:8000/"
+        run: |
+          curl -fsS "http://127.0.0.1:8000/" > /tmp/root-response.html
+          echo "Root endpoint response:"
+          head -20 /tmp/root-response.html
+
+      - name: Run API integration tests
+        run: |
+          echo "Running API integration tests..."
+
+          # Test health endpoint
+          curl -fsS "http://127.0.0.1:8000/health" | jq '.' || true
+
+          # Test API docs
+          curl -fsS "http://127.0.0.1:8000/docs" > /dev/null && echo "API docs accessible" || echo "API docs not accessible"
+
+          # Test OpenAPI schema
+          curl -fsS "http://127.0.0.1:8000/openapi.json" | jq '.info' || true
+        continue-on-error: true
 
       - name: Capture runtime diagnostics
         if: always()
         run: |
+          echo "## Docker Diagnostics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Container Status" >> $GITHUB_STEP_SUMMARY
           docker compose ps > compose-ps.txt || true
-          docker compose logs --no-color > compose-logs.txt || true
+          cat compose-ps.txt >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Container Logs (last 100 lines)" >> $GITHUB_STEP_SUMMARY
+          docker compose logs --no-color --tail=100 > compose-logs.txt || true
+          head -100 compose-logs.txt >> $GITHUB_STEP_SUMMARY
 
       - name: Upload docker diagnostics
         if: always()
@@ -64,9 +307,109 @@ jobs:
           path: |
             compose-ps.txt
             compose-logs.txt
-            logs
+            logs/
+            /tmp/health.json
+            /tmp/root-response.html
           if-no-files-found: warn
 
       - name: Stop services
         if: always()
         run: docker compose down -v --remove-orphans || true
+
+  # ===========================================================================
+  # Job 4: Security Scan (Lightweight)
+  # ===========================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: .
+
+      - name: Load Docker image
+        run: |
+          gunzip -c quark-strm-image.tar.gz | docker load
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'quark-strm:test'
+          format: 'table'
+          output: 'trivy-results.txt'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          ignore-unfixed: true
+        continue-on-error: true
+
+      - name: Run Trivy vulnerability scan (SARIF)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'quark-strm:test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy-docker-test'
+        continue-on-error: true
+
+      - name: Upload security scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: |
+            trivy-results.txt
+            trivy-results.sarif
+          if-no-files-found: warn
+
+  # ===========================================================================
+  # Job 5: Test Summary
+  # ===========================================================================
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [pre-build-tests, docker-build, docker-deploy-test, security-scan]
+    if: always()
+
+    steps:
+      - name: Generate test summary
+        run: |
+          echo "## Docker Deploy Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-build Tests | ${{ needs.pre-build-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Deploy Test | ${{ needs.docker-deploy-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- test-results: Unit test results and coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- docker-image: Built Docker image" >> $GITHUB_STEP_SUMMARY
+          echo "- quark-strm-docker-diagnostics: Container logs and diagnostics" >> $GITHUB_STEP_SUMMARY
+          echo "- security-scan-results: Trivy vulnerability scan results" >> $GITHUB_STEP_SUMMARY
+
+      - name: Determine overall status
+        run: |
+          if [[ "${{ needs.pre-build-tests.result }}" == "failure" ]]; then
+            echo "::error::Pre-build tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.docker-deploy-test.result }}" == "failure" ]]; then
+            echo "::error::Docker deploy test failed"
+            exit 1
+          fi
+          echo "Docker deploy test completed successfully"

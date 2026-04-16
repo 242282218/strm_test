@@ -3,7 +3,7 @@ version: '3.8'
 services:
   quark-strm:
     image: ${QUARK_STRM_IMAGE:-ghcr.io/242282218/smart_media/quark-strm:latest}
-    pull_policy: always
+    pull_policy: missing
     container_name: quark-strm
     ports:
       - "8000:8000"
@@ -19,7 +19,7 @@ services:
       - .env
     environment:
       - CONFIG_PATH=/app/config.yaml
-      - SMART_MEDIA_LOG_FORMAT=${LOG_FORMAT:-json}
+      - SMART_MEDIA_LOG_FORMAT=${SMART_MEDIA_LOG_FORMAT:-json}
       - TZ=${TZ:-Asia/Shanghai}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]

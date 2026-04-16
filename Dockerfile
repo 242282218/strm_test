@@ -88,12 +88,6 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY app ./app
-COPY config ./config
-COPY core ./core
-COPY models ./models
-COPY schemas ./schemas
-COPY services ./services
-COPY utils ./utils
 
 # Copy frontend build from frontend-builder
 COPY --from=frontend-builder /build/dist ./web/dist

@@ -16,27 +16,55 @@
 git clone <repository-url>
 cd quark_strm
 
-# 2. 配置环境变量
+# 2. 准备运行时文件
+cp .env.example .env
 cp config.example.yaml config.yaml
-# 编辑 config.yaml 填入必要配置
 
-# 3. 启动服务
+# 3. 编辑 .env / config.yaml 填入必要配置
+# 至少按需设置 SMART_MEDIA_QUARK_COOKIE、SMART_MEDIA_EMBY_URL、
+# SMART_MEDIA_EMBY_API_KEY 等真实凭据
+
+# 4. 启动服务
 docker compose up -d
 
-# 4. 查看日志
+# 5. 查看日志
 docker compose logs -f
 
-# 5. 停止服务
+# 6. 停止服务
 docker compose down
+```
+
+#### 启用监控栈
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+#### 更新镜像
+
+```bash
+docker compose pull
+docker compose up -d
 ```
 
 #### 环境变量
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `APP_ENV` | 运行环境 | `production` |
-| `LOG_LEVEL` | 日志级别 | `INFO` |
-| `DATABASE_URL` | 数据库连接 | `sqlite:///./quark_strm.db` |
+| `QUARK_STRM_IMAGE` | 部署镜像标签 | `ghcr.io/242282218/smart_media/quark-strm:latest` |
+| `SMART_MEDIA_EMBY_PROXY_PORT` | Emby 专用代理暴露端口 | `18097` |
+| `SMART_MEDIA_LOG_FORMAT` | 容器日志格式 | `json` |
+| `SMART_MEDIA_LOG_LEVEL` | 应用日志级别 | `INFO` |
+| `TZ` | 容器时区 | `Asia/Shanghai` |
+
+#### Compose 挂载约定
+
+- `./config.yaml:/app/config.yaml`
+- `./quark_strm.db:/app/quark_strm.db`
+- `./strm:/app/strm`
+- `./logs:/app/logs`
+
+容器内始终通过 `CONFIG_PATH=/app/config.yaml` 读取配置，敏感值优先使用 `.env` 覆盖 `config.yaml`。
 
 ### 源码部署
 
@@ -108,7 +136,7 @@ server {
 | `/health` | 综合健康状态（包含启动告警与组件状态） |
 | `/health/live` | 存活探针 |
 | `/health/ready` | 就绪探针 |
-| `/ready` | 就绪探针别名（推荐用于容器 healthcheck） |
+| `/ready` | 就绪探针别名（Docker healthcheck 使用此端点） |
 | `/metrics` | Prometheus 指标 |
 
 ### Prometheus 配置示例

@@ -21,14 +21,14 @@ ROOT_CI_WORKFLOW_PATH = resolve_workflow_path("ci.yml")
 def test_prebuild_pytest_step_does_not_ignore_failures() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    assert "-m \"not slow\" || true" not in workflow
+    assert '-m "not slow" || true' not in workflow
     assert "- name: Run unit tests" in workflow
 
 
 def test_summary_job_fails_when_prebuild_tests_fail() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    assert 'needs.pre-build-tests.result' in workflow
+    assert "needs.pre-build-tests.result" in workflow
     assert 'if [[ "${{ needs.pre-build-tests.result }}" == "failure" ]]' in workflow
 
 
