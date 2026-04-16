@@ -41,7 +41,7 @@ def test_search_resources_success_passes_fixed_params(client: TestClient, monkey
     }
 
 
-def test_search_resources_maps_error_payload_to_http_500(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_resources_keeps_error_payload_recoverable(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeService:
         @staticmethod
         async def search(**kwargs: Any) -> dict[str, Any]:
@@ -51,8 +51,15 @@ def test_search_resources_maps_error_payload_to_http_500(client: TestClient, mon
 
     response = client.get("/api/search", params={"keyword": "movie"})
 
-    assert response.status_code == 500
-    assert response.json() == {"detail": "search backend failed"}
+    assert response.status_code == 200
+    assert response.json() == {
+        "results": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 20,
+        "has_more": False,
+        "error": "search backend failed",
+    }
 
 
 def test_search_resources_maps_unexpected_exception_to_generic_message(
@@ -85,7 +92,7 @@ def test_search_resources_filtered_success(client: TestClient, monkeypatch: pyte
     assert response.json() == {"items": [{"name": "ok"}], "page": 3}
 
 
-def test_search_resources_filtered_maps_error_payload_to_http_500(
+def test_search_resources_filtered_keeps_error_payload_recoverable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class FakeService:
@@ -97,8 +104,15 @@ def test_search_resources_filtered_maps_error_payload_to_http_500(
 
     response = client.get("/api/search/filtered", params={"keyword": "show"})
 
-    assert response.status_code == 500
-    assert response.json() == {"detail": "filtered failed"}
+    assert response.status_code == 200
+    assert response.json() == {
+        "results": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 20,
+        "has_more": False,
+        "error": "filtered failed",
+    }
 
 
 def test_search_resources_filtered_maps_exception_to_generic_message(

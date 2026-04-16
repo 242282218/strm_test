@@ -75,6 +75,16 @@ def service(monkeypatch: pytest.MonkeyPatch) -> tuple[ss.ResourceSearchService, 
     return ss.ResourceSearchService(), fake_fetcher
 
 
+def test_default_pansou_base_url_uses_https(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PANSOU_API_URL", raising=False)
+    monkeypatch.setattr(ss, "ScoringEngine", _FakeScoringEngine)
+    monkeypatch.setattr(ss, "get_size_fetcher", lambda: _FakeSizeFetcher())
+
+    service = ss.ResourceSearchService()
+
+    assert service._base_url == "https://pansou.xzcccc.eu.org"
+
+
 def test_transform_cloud_type_mapping(service: tuple[ss.ResourceSearchService, _FakeSizeFetcher]) -> None:
     search, _ = service
 

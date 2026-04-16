@@ -5,11 +5,15 @@
 """
 
 import os
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 import httpx
+
 from app.core.logging import get_logger
-from .scoring import ScoringEngine
+
 from .quark_size_fetcher import get_size_fetcher
+from .scoring import ScoringEngine
+
 
 logger = get_logger(__name__)
 
@@ -18,7 +22,7 @@ class ResourceSearchService:
     """资源搜索服务 - 调用pansou HTTP API并应用评分"""
 
     def __init__(self):
-        self._base_url = os.getenv("PANSOU_API_URL", "http://pansou.xzcccc.eu.org")
+        self._base_url = os.getenv("PANSOU_API_URL", "https://pansou.xzcccc.eu.org")
         self._timeout = 30.0
         self._scoring_engine = ScoringEngine()
         self._size_fetcher = get_size_fetcher()
@@ -46,7 +50,7 @@ class ResourceSearchService:
         }
         return type_mapping.get(cloud_type.lower(), cloud_type.lower())
 
-    def _transform_pansou_result(self, pansou_data: Dict[str, Any], keyword: str) -> Dict[str, Any]:
+    def _transform_pansou_result(self, pansou_data: dict[str, Any], keyword: str) -> dict[str, Any]:
         """将pansou返回结果转换为项目格式并计算评分"""
         merged_by_type = pansou_data.get("merged_by_type", {})
         results = []
@@ -68,37 +72,31 @@ class ResourceSearchService:
                             "type": cloud_type,
                             "url": link.get("url", ""),
                             "password": link.get("password", ""),
-                            "title": link.get("note", "")
+                            "title": link.get("note", ""),
                         }
-                    ]
+                    ],
                 }
 
                 # 使用评分引擎计算评分
                 score_detail = self._scoring_engine.score(keyword, result_item)
 
                 # 合并评分到结果
-                result_item.update({
-                    "score": score_detail['score'],
-                    "confidence": score_detail['confidence'],
-                    "quality": score_detail['quality'],
-                    "popularity": score_detail['popularity'],
-                    "freshness": score_detail['freshness'],
-                    "tags": score_detail['tags']
-                })
+                result_item.update(
+                    {
+                        "score": score_detail["score"],
+                        "confidence": score_detail["confidence"],
+                        "quality": score_detail["quality"],
+                        "popularity": score_detail["popularity"],
+                        "freshness": score_detail["freshness"],
+                        "tags": score_detail["tags"],
+                    }
+                )
 
                 results.append(result_item)
 
-        return {
-            "results": results,
-            "total": len(results),
-            "merged_by_type": merged_by_type
-        }
+        return {"results": results, "total": len(results), "merged_by_type": merged_by_type}
 
-    async def _apply_size_filter(
-        self,
-        results: List[Dict[str, Any]],
-        min_size_bytes: int
-    ) -> List[Dict[str, Any]]:
+    async def _apply_size_filter(self, results: list[dict[str, Any]], min_size_bytes: int) -> list[dict[str, Any]]:
         """
         应用大小过滤（仅对评分前20的夸克网盘资源）
 
@@ -121,7 +119,7 @@ class ResourceSearchService:
                     break
 
         # 按评分排序，取前20
-        quark_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        quark_results.sort(key=lambda x: x.get("score", 0), reverse=True)
         top_quark_results = quark_results[:20]
 
         # 收集前20个夸克资源的分享链接
@@ -131,12 +129,14 @@ class ResourceSearchService:
                 if link.get("type") == "quark":
                     share_key = self._size_fetcher.extract_share_key(link.get("url", ""))
                     if share_key:
-                        quark_items.append({
-                            "url": link.get("url", ""),
-                            "password": link.get("password", ""),
-                            "result_id": result.get("id"),
-                            "share_key": share_key
-                        })
+                        quark_items.append(
+                            {
+                                "url": link.get("url", ""),
+                                "password": link.get("password", ""),
+                                "result_id": result.get("id"),
+                                "share_key": share_key,
+                            }
+                        )
 
         # 批量获取夸克分享的大小
         size_map = {}
@@ -190,7 +190,7 @@ class ResourceSearchService:
 
         return filtered_results
 
-    def _sort_results(self, results: List[Dict[str, Any]], sort_by: Optional[str] = None) -> List[Dict[str, Any]]:
+    def _sort_results(self, results: list[dict[str, Any]], sort_by: str | None = None) -> list[dict[str, Any]]:
         """
         排序结果
 
@@ -201,31 +201,30 @@ class ResourceSearchService:
         Returns:
             排序后的结果
         """
-        if not sort_by or sort_by == 'score':
+        if not sort_by or sort_by == "score":
             # 默认按综合评分排序
-            return sorted(results, key=lambda x: x.get('score', 0), reverse=True)
-        elif sort_by == 'confidence':
-            return sorted(results, key=lambda x: x.get('confidence', 0), reverse=True)
-        elif sort_by == 'quality':
-            return sorted(results, key=lambda x: x.get('quality', 0), reverse=True)
-        elif sort_by == 'time':
-            return sorted(results, key=lambda x: x.get('pub_date', ''), reverse=True)
-        elif sort_by == 'size':
-            return sorted(results, key=lambda x: x.get('file_size', 0), reverse=True)
-        else:
-            return results
+            return sorted(results, key=lambda x: x.get("score", 0), reverse=True)
+        if sort_by == "confidence":
+            return sorted(results, key=lambda x: x.get("confidence", 0), reverse=True)
+        if sort_by == "quality":
+            return sorted(results, key=lambda x: x.get("quality", 0), reverse=True)
+        if sort_by == "time":
+            return sorted(results, key=lambda x: x.get("pub_date", ""), reverse=True)
+        if sort_by == "size":
+            return sorted(results, key=lambda x: x.get("file_size", 0), reverse=True)
+        return results
 
     async def search(
         self,
         keyword: str,
-        cloud_types: Optional[List[str]] = None,
-        sources: Optional[List[str]] = None,
+        cloud_types: list[str] | None = None,
+        sources: list[str] | None = None,
         page: int = 1,
         page_size: int = 20,
-        sort_by: Optional[str] = None,
-        sort_order: Optional[str] = None,
-        min_file_size: int = 0
-    ) -> Dict[str, Any]:
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        min_file_size: int = 0,
+    ) -> dict[str, Any]:
         """
         搜索资源 - 调用pansou API并应用评分
 
@@ -262,7 +261,7 @@ class ResourceSearchService:
                 "kw": keyword,
                 "res": "merged_by_type",  # 返回按类型分组的结果
                 "src": "all",  # 搜索所有来源
-                "refresh": True  # 强制刷新缓存，避免返回旧结果
+                "refresh": True,  # 强制刷新缓存，避免返回旧结果
             }
 
             # 添加频道参数（如果指定了sources）
@@ -275,10 +274,7 @@ class ResourceSearchService:
 
             async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as client:
                 # 使用 GET 方式请求（POST 方式有 bug 会忽略 kw 参数）
-                response = await client.get(
-                    self._get_pansou_url("/api/search"),
-                    params=params
-                )
+                response = await client.get(self._get_pansou_url("/api/search"), params=params)
                 response.raise_for_status()
                 pansou_response = response.json()
 
@@ -292,7 +288,7 @@ class ResourceSearchService:
                     "page": page,
                     "page_size": page_size,
                     "has_more": False,
-                    "error": f"pansou: {error_msg}"
+                    "error": f"pansou: {error_msg}",
                 }
 
             # 转换结果并计算评分
@@ -300,10 +296,7 @@ class ResourceSearchService:
             transformed = self._transform_pansou_result(data, keyword)
 
             # 应用大小过滤（仅对夷克网盘）
-            all_results = await self._apply_size_filter(
-                transformed["results"],
-                min_file_size
-            )
+            all_results = await self._apply_size_filter(transformed["results"], min_file_size)
 
             # 排序结果
             all_results = self._sort_results(all_results, sort_by)
@@ -325,10 +318,7 @@ class ResourceSearchService:
                 "page_size": page_size,
                 "has_more": has_more,
                 "merged_by_type": transformed.get("merged_by_type", {}),
-                "filters": {
-                    "cloud_types": cloud_types,
-                    "min_file_size": min_file_size if min_file_size > 0 else None
-                }
+                "filters": {"cloud_types": cloud_types, "min_file_size": min_file_size if min_file_size > 0 else None},
             }
 
         except httpx.ConnectError as e:
@@ -339,32 +329,26 @@ class ResourceSearchService:
                 "page": page,
                 "page_size": page_size,
                 "has_more": False,
-                "error": "pansou服务未启动，请检查PANSOU_API_URL配置"
+                "error": "pansou服务未启动，请检查PANSOU_API_URL配置",
             }
         except Exception as e:
             import traceback
+
             logger.error(f"搜索失败: {e}\n{traceback.format_exc()}")
-            return {
-                "results": [],
-                "total": 0,
-                "page": page,
-                "page_size": page_size,
-                "has_more": False,
-                "error": str(e)
-            }
+            return {"results": [], "total": 0, "page": page, "page_size": page_size, "has_more": False, "error": str(e)}
 
     async def search_with_filters(
         self,
         keyword: str,
         min_score: float = 0.5,
         min_confidence: float = 0.6,
-        cloud_types: Optional[List[str]] = None,
+        cloud_types: list[str] | None = None,
         page: int = 1,
         page_size: int = 20,
-        sort_by: Optional[str] = None,
-        sort_order: Optional[str] = None,
-        min_file_size: int = 0
-    ) -> Dict[str, Any]:
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        min_file_size: int = 0,
+    ) -> dict[str, Any]:
         """
         带过滤条件的搜索
 
@@ -394,7 +378,7 @@ class ResourceSearchService:
             page_size=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
-            min_file_size=min_file_size
+            min_file_size=min_file_size,
         )
 
         if "error" in result:
@@ -402,8 +386,7 @@ class ResourceSearchService:
 
         # 过滤结果
         filtered_results = [
-            r for r in result["results"]
-            if r.get("score", 0) >= min_score and r.get("confidence", 0) >= min_confidence
+            r for r in result["results"] if r.get("score", 0) >= min_score and r.get("confidence", 0) >= min_confidence
         ]
 
         return {
@@ -418,6 +401,6 @@ class ResourceSearchService:
                 "min_confidence": min_confidence,
                 "min_file_size": min_file_size if min_file_size > 0 else None,
                 "cloud_types": cloud_types,
-                "applied": True
-            }
+                "applied": True,
+            },
         }

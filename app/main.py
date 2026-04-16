@@ -136,8 +136,16 @@ app.middleware("http")(request_id_middleware)
 app.middleware("http")(prometheus_middleware)
 app.middleware("http")(deprecation_warning_middleware)
 
-# 设置速率限制（默认 100 请求/分钟）
-setup_rate_limiting(app, requests=100, seconds=60, block_duration=300)
+# 设置速率限制（写操作保持严格，只读页面加载使用更宽桶）
+setup_rate_limiting(
+    app,
+    requests=100,
+    seconds=60,
+    block_duration=300,
+    read_requests=300,
+    read_seconds=60,
+    read_block_duration=60,
+)
 
 # 注册路由
 register_routers(app)

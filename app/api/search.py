@@ -4,19 +4,45 @@
 集成search包的资源搜索功能
 """
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query
-from app.services.search_service import ResourceSearchService
+
 from app.core.logging import get_logger
+from app.services.search_service import ResourceSearchService
+
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/search", tags=["资源搜索"])
+
+
+def _normalize_search_error(result: dict[str, Any], page: int, page_size: int) -> dict[str, Any]:
+    """Keep third-party search failures recoverable for the UI."""
+    if "error" not in result:
+        return result
+
+    normalized: dict[str, Any] = {
+        "results": result.get("results", []),
+        "total": result.get("total", 0),
+        "page": result.get("page", page),
+        "page_size": result.get("page_size", page_size),
+        "has_more": result.get("has_more", False),
+        "error": result["error"],
+    }
+
+    if "merged_by_type" in result:
+        normalized["merged_by_type"] = result["merged_by_type"]
+    if "filters" in result:
+        normalized["filters"] = result["filters"]
+
+    return normalized
 
 
 @router.get("")
 async def search_resources(
     keyword: str = Query(..., description="搜索关键词"),
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=500, description="每页大小")
+    page_size: int = Query(20, ge=1, le=500, description="每页大小"),
 ):
     """
     搜索资源
@@ -40,25 +66,22 @@ async def search_resources(
             page=page,
             page_size=page_size,
             sort_by="score",  # 固定按评分排序
-            sort_order="desc"  # 固定降序
+            sort_order="desc",  # 固定降序
         )
 
-        if "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
-
-        return result
+        return _normalize_search_error(result, page, page_size)
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"搜索失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="搜索失败")
 
 
 @router.get("/filtered")
 async def search_resources_filtered(
     keyword: str = Query(..., description="搜索关键词"),
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=500, description="每页大小")
+    page_size: int = Query(20, ge=1, le=500, description="每页大小"),
 ):
     """
     带过滤条件的资源搜索（已简化）
@@ -81,18 +104,15 @@ async def search_resources_filtered(
             page=page,
             page_size=page_size,
             sort_by="score",  # 固定按评分排序
-            sort_order="desc"  # 固定降序
+            sort_order="desc",  # 固定降序
         )
 
-        if "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
-
-        return result
+        return _normalize_search_error(result, page, page_size)
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"过滤搜索失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="过滤搜索失败")
 
 
 @router.get("/status")
@@ -103,7 +123,5 @@ async def get_search_status():
     返回搜索服务是否可用
     """
     from app.core.sdk_config import sdk_config
-    return {
-        "available": sdk_config.is_available(),
-        "search_service": sdk_config.create_search_service() is not None
-    }
+
+    return {"available": sdk_config.is_available(), "search_service": sdk_config.create_search_service() is not None}

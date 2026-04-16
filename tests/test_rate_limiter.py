@@ -10,9 +10,17 @@ from app.core import rate_limiter
 
 
 class DummyRequest:
-    def __init__(self, headers: dict[str, str] | None = None, client_host: str | None = None) -> None:
+    def __init__(
+        self,
+        headers: dict[str, str] | None = None,
+        client_host: str | None = None,
+        cookies: dict[str, str] | None = None,
+        method: str = "GET",
+    ) -> None:
         self.headers = headers or {}
         self.client = SimpleNamespace(host=client_host) if client_host else None
+        self.cookies = cookies or {}
+        self.method = method
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +62,9 @@ def test_get_client_id_priority_paths() -> None:
     user_id = limiter._get_client_id(DummyRequest(headers={"Authorization": "Bearer token-value"}))
     assert user_id.startswith("user:")
 
+    cookie_user_id = limiter._get_client_id(DummyRequest(cookies={"auth_token": "cookie-token"}))
+    assert cookie_user_id.startswith("user:")
+
     forwarded = limiter._get_client_id(DummyRequest(headers={"X-Forwarded-For": "10.0.0.1, 8.8.8.8"}))
     assert forwarded == "ip:10.0.0.1"
 
@@ -84,6 +95,21 @@ def test_cleanup_and_status_and_reset(monkeypatch: pytest.MonkeyPatch) -> None:
     assert limiter.get_client_status("missing") == {"requests_made": 0, "blocked": False}
     assert limiter.reset_client("active") is True
     assert limiter.reset_client("active") is False
+
+
+@pytest.mark.asyncio
+async def test_read_and_write_requests_use_separate_buckets(monkeypatch: pytest.MonkeyPatch) -> None:
+    limiter = rate_limiter.RateLimiter(default_requests=1, default_seconds=10, default_block_duration=5)
+    config = rate_limiter.RateLimitConfig(requests=1, seconds=10, block_duration=5)
+    read_request = DummyRequest(cookies={"auth_token": "token"}, method="GET")
+    write_request = DummyRequest(cookies={"auth_token": "token"}, method="POST")
+
+    monkeypatch.setattr(limiter, "_cleanup_if_needed", lambda: None)
+    monkeypatch.setattr(rate_limiter.time, "time", lambda: 100.0)
+
+    assert await limiter._check_rate_limit(read_request, config) == (True, 0, None)
+    assert await limiter._check_rate_limit(write_request, config) == (True, 0, None)
+    assert await limiter._check_rate_limit(read_request, config) == (False, 5, "请求频率超限，已被封禁5秒")
 
 
 def test_create_rate_limit_response_contract() -> None:
@@ -142,6 +168,9 @@ def test_get_rate_limiter_singleton_configuration() -> None:
     assert limiter_a.default_config.requests == 9
     assert limiter_a.default_config.seconds == 8
     assert limiter_a.default_config.block_duration == 7
+    assert limiter_a.read_config.requests == 9
+    assert limiter_a.read_config.seconds == 8
+    assert limiter_a.read_config.block_duration == 7
 
 
 def test_setup_rate_limiting_middleware_enforces_and_skips() -> None:
@@ -159,6 +188,10 @@ def test_setup_rate_limiting_middleware_enforces_and_skips() -> None:
     async def limited():
         return {"ok": True}
 
+    @app.get("/api/auth/me")
+    async def auth_me():
+        return {"ok": True}
+
     limiter = rate_limiter.setup_rate_limiting(app, requests=1, seconds=60, block_duration=3)
     assert app.state.rate_limiter is limiter
 
@@ -167,9 +200,49 @@ def test_setup_rate_limiting_middleware_enforces_and_skips() -> None:
     second = client.get("/limited", headers={"X-Real-IP": "9.9.9.9"})
     skipped = client.get("/health", headers={"X-Real-IP": "9.9.9.9"})
     ready_skipped = client.get("/ready", headers={"X-Real-IP": "9.9.9.9"})
+    auth_skipped = client.get("/api/auth/me", headers={"X-Real-IP": "9.9.9.9"})
 
     assert first.status_code == 200
     assert second.status_code == 429
     assert second.headers["Retry-After"] == "3"
     assert skipped.status_code == 200
     assert ready_skipped.status_code == 200
+    assert auth_skipped.status_code == 200
+
+
+def test_setup_rate_limiting_middleware_uses_read_bucket_config() -> None:
+    app = FastAPI()
+
+    @app.get("/read")
+    async def read():
+        return {"ok": True}
+
+    @app.post("/write")
+    async def write():
+        return {"ok": True}
+
+    limiter = rate_limiter.setup_rate_limiting(
+        app,
+        requests=1,
+        seconds=60,
+        block_duration=3,
+        read_requests=2,
+        read_seconds=60,
+        read_block_duration=4,
+    )
+    assert app.state.rate_limiter is limiter
+
+    client = TestClient(app)
+    first_read = client.get("/read", headers={"X-Real-IP": "7.7.7.7"})
+    second_read = client.get("/read", headers={"X-Real-IP": "7.7.7.7"})
+    third_read = client.get("/read", headers={"X-Real-IP": "7.7.7.7"})
+    first_write = client.post("/write", headers={"X-Real-IP": "8.8.8.8"})
+    second_write = client.post("/write", headers={"X-Real-IP": "8.8.8.8"})
+
+    assert first_read.status_code == 200
+    assert second_read.status_code == 200
+    assert third_read.status_code == 429
+    assert third_read.headers["Retry-After"] == "4"
+    assert first_write.status_code == 200
+    assert second_write.status_code == 429
+    assert second_write.headers["Retry-After"] == "3"

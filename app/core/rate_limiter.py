@@ -5,6 +5,7 @@ API 速率限制中间件
 支持按 IP、用户、API 密钥等多维度限流。
 """
 
+import hashlib
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -16,6 +17,20 @@ from fastapi.responses import JSONResponse
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+AUTH_COOKIE_NAME = "auth_token"
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+DEFAULT_SKIP_PATHS = frozenset({
+    "/health",
+    "/health/live",
+    "/health/ready",
+    "/ready",
+    "/metrics",
+    "/docs",
+    "/openapi.json",
+    "/api/auth/status",
+    "/api/auth/me",
+})
 
 
 @dataclass
@@ -59,6 +74,9 @@ class RateLimiter:
         default_requests: int = 100,
         default_seconds: int = 60,
         default_block_duration: int = 300,
+        read_requests: int | None = None,
+        read_seconds: int | None = None,
+        read_block_duration: int | None = None,
     ):
         """
         初始化速率限制器
@@ -72,6 +90,11 @@ class RateLimiter:
             requests=default_requests,
             seconds=default_seconds,
             block_duration=default_block_duration,
+        )
+        self.read_config = RateLimitConfig(
+            requests=read_requests or default_requests,
+            seconds=read_seconds or default_seconds,
+            block_duration=read_block_duration or default_block_duration,
         )
         self._client_states: dict[str, ClientState] = defaultdict(ClientState)
         self._route_configs: dict[str, RateLimitConfig] = {}
@@ -130,7 +153,7 @@ class RateLimiter:
         Returns:
             (是否允许，重试等待秒数，封禁原因)
         """
-        client_id = self._get_client_id(request)
+        client_id = self._get_client_bucket(request)
         now = time.time()
 
         # 清理过期数据
@@ -168,7 +191,7 @@ class RateLimiter:
         """
         获取客户端唯一标识
 
-        优先级：API Key > X-Forwarded-For > X-Real-IP > remote_addr
+        优先级：API Key > Bearer Token > Auth Cookie > X-Forwarded-For > X-Real-IP > remote_addr
         """
         # 检查 API Key
         api_key = request.headers.get("X-API-Key")
@@ -178,8 +201,11 @@ class RateLimiter:
         # 检查认证用户
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            token_hash = hash(auth_header[7:])
-            return f"user:{token_hash}"
+            return f"user:{self._fingerprint_token(auth_header[7:])}"
+
+        auth_cookie = request.cookies.get(AUTH_COOKIE_NAME) if hasattr(request, "cookies") else None
+        if auth_cookie:
+            return f"user:{self._fingerprint_token(auth_cookie)}"
 
         # 检查代理头部
         forwarded_for = request.headers.get("X-Forwarded-For")
@@ -197,6 +223,22 @@ class RateLimiter:
             return f"ip:{client_host.host}"
 
         return "ip:unknown"
+
+    @staticmethod
+    def _fingerprint_token(token: str) -> str:
+        """Avoid storing raw credentials in the limiter state."""
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+
+    def _get_client_bucket(self, request: Request) -> str:
+        """Separate read traffic from mutating requests."""
+        bucket = "read" if request.method.upper() in SAFE_METHODS else "write"
+        return f"{self._get_client_id(request)}:{bucket}"
+
+    def get_request_config(self, request: Request) -> RateLimitConfig:
+        """Use a wider bucket for read-only traffic."""
+        if request.method.upper() in SAFE_METHODS:
+            return self.read_config
+        return self.default_config
 
     def _create_rate_limit_response(self, retry_after: int, reason: str | None) -> Response:
         """创建速率限制响应"""
@@ -230,25 +272,35 @@ class RateLimiter:
 
     def get_client_status(self, client_id: str) -> dict:
         """获取客户端状态"""
-        state = self._client_states.get(client_id)
-        if not state:
+        states = self._get_matching_states(client_id)
+        if not states:
             return {"requests_made": 0, "blocked": False}
 
         now = time.time()
+        active_blocks = [state.blocked_until for state in states if state.blocked_until > now]
         return {
-            "requests_made": len(state.requests),
-            "total_requests": state.total_requests,
-            "blocked": state.blocked_until > now,
-            "blocked_until": state.blocked_until if state.blocked_until > now else None,
-            "blocked_count": state.blocked_count,
+            "requests_made": sum(len(state.requests) for state in states),
+            "total_requests": sum(state.total_requests for state in states),
+            "blocked": bool(active_blocks),
+            "blocked_until": max(active_blocks) if active_blocks else None,
+            "blocked_count": sum(state.blocked_count for state in states),
         }
 
     def reset_client(self, client_id: str) -> bool:
         """重置客户端状态"""
+        matching_keys = self._get_matching_state_keys(client_id)
+        for key in matching_keys:
+            del self._client_states[key]
+        return bool(matching_keys)
+
+    def _get_matching_states(self, client_id: str) -> list[ClientState]:
+        return [self._client_states[key] for key in self._get_matching_state_keys(client_id)]
+
+    def _get_matching_state_keys(self, client_id: str) -> list[str]:
         if client_id in self._client_states:
-            del self._client_states[client_id]
-            return True
-        return False
+            return [client_id]
+        prefix = f"{client_id}:"
+        return [key for key in self._client_states if key.startswith(prefix)]
 
 
 # 全局速率限制器实例
@@ -259,6 +311,9 @@ def get_rate_limiter(
     requests: int = 100,
     seconds: int = 60,
     block_duration: int = 300,
+    read_requests: int | None = None,
+    read_seconds: int | None = None,
+    read_block_duration: int | None = None,
 ) -> RateLimiter:
     """获取或创建全局速率限制器"""
     global _default_limiter
@@ -267,11 +322,22 @@ def get_rate_limiter(
             default_requests=requests,
             default_seconds=seconds,
             default_block_duration=block_duration,
+            read_requests=read_requests,
+            read_seconds=read_seconds,
+            read_block_duration=read_block_duration,
         )
     return _default_limiter
 
 
-def setup_rate_limiting(app: FastAPI, requests: int = 100, seconds: int = 60, block_duration: int = 300):
+def setup_rate_limiting(
+    app: FastAPI,
+    requests: int = 100,
+    seconds: int = 60,
+    block_duration: int = 300,
+    read_requests: int | None = None,
+    read_seconds: int | None = None,
+    read_block_duration: int | None = None,
+):
     """
     为 FastAPI 应用设置速率限制
 
@@ -281,17 +347,22 @@ def setup_rate_limiting(app: FastAPI, requests: int = 100, seconds: int = 60, bl
         seconds: 时间窗口（秒）
         block_duration: 封禁时长（秒）
     """
-    limiter = get_rate_limiter(requests, seconds, block_duration)
+    limiter = get_rate_limiter(
+        requests,
+        seconds,
+        block_duration,
+        read_requests=read_requests,
+        read_seconds=read_seconds,
+        read_block_duration=read_block_duration,
+    )
 
     @app.middleware("http")
     async def rate_limit_middleware(request: Request, call_next):
-        # 跳过健康检查和 metrics 端点
-        if request.url.path in ["/health", "/health/live", "/health/ready", "/ready", "/metrics", "/docs", "/openapi.json"]:
+        # 跳过探针和只读会话探测端点，避免前端会话恢复形成自我限流
+        if request.url.path in DEFAULT_SKIP_PATHS:
             return await call_next(request)
 
-        is_allowed, retry_after, reason = await limiter._check_rate_limit(
-            request, limiter.default_config
-        )
+        is_allowed, retry_after, reason = await limiter._check_rate_limit(request, limiter.get_request_config(request))
 
         if not is_allowed:
             return limiter._create_rate_limit_response(retry_after, reason)
@@ -302,5 +373,9 @@ def setup_rate_limiting(app: FastAPI, requests: int = 100, seconds: int = 60, bl
     # 将 limiter 存储在 app.state 以便访问
     app.state.rate_limiter = limiter
 
-    logger.info(f"Rate limiting enabled: {requests} requests / {seconds} seconds")
+    logger.info(
+        "Rate limiting enabled: "
+        f"write={limiter.default_config.requests}/{limiter.default_config.seconds}s, "
+        f"read={limiter.read_config.requests}/{limiter.read_config.seconds}s"
+    )
     return limiter
