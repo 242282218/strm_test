@@ -65,3 +65,18 @@ async def test_retry_with_policy_uses_registered_policy(monkeypatch: pytest.Monk
 
     assert await flaky_timeout() == "done"
     assert attempts["count"] == 2
+
+
+def test_retry_helpers_delegate_to_named_policies(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    marker = object()
+
+    def fake_retry_with_policy(name: str = "default"):
+        calls.append(name)
+        return marker
+
+    monkeypatch.setattr(retry_module, "retry_with_policy", fake_retry_with_policy)
+
+    assert retry_module.retry_on_transient() is marker
+    assert retry_module.retry_on_tmdb() is marker
+    assert calls == ["default", "tmdb"]

@@ -82,13 +82,3 @@ def retry_on_transient():
 def retry_on_tmdb():
     """Return retry decorator for TMDB HTTP failures."""
     return retry_with_policy("tmdb")
-    return retry(
-        stop=stop_after_attempt(RETRY_MAX_ATTEMPTS),
-        wait=wait_exponential(
-            multiplier=RETRY_MULTIPLIER,
-            min=RETRY_MIN_SECONDS,
-            max=RETRY_MAX_SECONDS,
-        ),
-        retry=retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError, TransientError)),
-        reraise=True,
-    )
