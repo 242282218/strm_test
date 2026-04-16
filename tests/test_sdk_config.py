@@ -3,8 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.config.settings import AppConfig
 import app.core.sdk_config as sdk_config_module
+from app.config.settings import AppConfig
 from app.core.sdk_config import SDKConfig, get_api_keys
 from app.services import config_service as config_service_module
 from app.services.config_service import ConfigService
@@ -61,15 +61,44 @@ def test_config_service_does_not_write_default_config_when_file_is_missing(tmp_p
 
 def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> None:
     monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
-    monkeypatch.setenv("TMDB_API_KEY", "env-tmdb")
-    monkeypatch.setenv("AI_API_KEY", "env-ai")
-    monkeypatch.setenv("QUARK_COOKIE", "cookie-value")
+    monkeypatch.setenv("SMART_MEDIA_TMDB_API_KEY", "env-tmdb")
+    monkeypatch.setenv("SMART_MEDIA_AI_API_KEY", "env-ai")
+    monkeypatch.setenv("SMART_MEDIA_QUARK_COOKIE", "cookie-value")
 
     config = SDKConfig()
 
     assert config.tmdb_api_key == "env-tmdb"
     assert config.ai_api_key == "env-ai"
     assert config.quark_cookie == "cookie-value"
+
+
+def test_sdk_config_keeps_legacy_env_aliases_as_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setenv("TMDB_API_KEY", "legacy-tmdb")
+    monkeypatch.setenv("AI_API_KEY", "legacy-ai")
+    monkeypatch.setenv("QUARK_COOKIE", "legacy-cookie")
+
+    config = SDKConfig()
+
+    assert config.tmdb_api_key == "legacy-tmdb"
+    assert config.ai_api_key == "legacy-ai"
+    assert config.quark_cookie == "legacy-cookie"
+
+
+def test_sdk_config_prefers_canonical_env_over_legacy_aliases(monkeypatch) -> None:
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setenv("SMART_MEDIA_TMDB_API_KEY", "canonical-tmdb")
+    monkeypatch.setenv("TMDB_API_KEY", "legacy-tmdb")
+    monkeypatch.setenv("SMART_MEDIA_AI_API_KEY", "canonical-ai")
+    monkeypatch.setenv("AI_API_KEY", "legacy-ai")
+    monkeypatch.setenv("SMART_MEDIA_QUARK_COOKIE", "canonical-cookie")
+    monkeypatch.setenv("QUARK_COOKIE", "legacy-cookie")
+
+    config = SDKConfig()
+
+    assert config.tmdb_api_key == "canonical-tmdb"
+    assert config.ai_api_key == "canonical-ai"
+    assert config.quark_cookie == "canonical-cookie"
 
 
 def test_create_clients_return_none_when_sdk_unavailable(monkeypatch) -> None:
