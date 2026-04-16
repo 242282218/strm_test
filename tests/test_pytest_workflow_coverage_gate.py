@@ -13,11 +13,11 @@ def resolve_workflow_path(filename: str) -> Path:
     return PROJECT_WORKFLOW_DIR / filename
 
 
-def test_pytest_workflow_coverage_threshold_not_below_62() -> None:
+def test_pytest_workflow_coverage_threshold_not_below_63() -> None:
     workflow = resolve_workflow_path("pytest.yml").read_text(encoding="utf-8")
 
     assert "--cov-fail-under=${{ env.COVERAGE_FAIL_UNDER }}" in workflow
 
     match = re.search(r"COVERAGE_FAIL_UNDER:\s*\"?(?P<value>\d+)\"?", workflow)
     assert match is not None
-    assert int(match.group("value")) >= 62
+    assert int(match.group("value")) >= 63
