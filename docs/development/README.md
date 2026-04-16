@@ -1,3 +1,227 @@
 # 开发文档
 
-本目录包含开发文档。
+## 开发环境搭建
+
+### 前置要求
+
+- Python 3.11+
+- Node.js 22+
+- Docker + Docker Compose (可选)
+- Git
+
+### 后端开发环境
+
+```bash
+# 1. 克隆仓库
+git clone <repository-url>
+cd quark_strm
+
+# 2. 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 3. 安装依赖
+pip install -r requirements.txt
+
+# 4. 配置环境变量
+cp config.example.yaml config.yaml
+# 编辑 config.yaml 填入必要配置
+
+# 5. 启动开发服务器
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 前端开发环境
+
+```bash
+# 1. 进入前端目录
+cd web
+
+# 2. 安装依赖
+npm install
+
+# 3. 启动开发服务器
+npm run dev
+
+# 4. 类型检查
+npm run type-check
+
+# 5. 运行测试
+npm run test
+```
+
+## 代码规范
+
+### Python
+
+- 使用 `ruff` 进行代码 linting
+- 使用 `pyright` 进行类型检查
+- 遵循 PEP 8 风格指南
+- 所有公共 API 必须有类型注解
+- 网络重试统一走 `app.core.retry`，禁止在业务服务中直接引入 `tenacity` 装饰器
+
+```bash
+# 代码检查
+ruff check app/
+pyright app/
+
+# 自动格式化
+ruff format app/
+```
+
+### 重试策略约定
+
+- 默认网络瞬时错误重试：`from app.core.retry import retry_on_transient`
+- 命名策略重试：`from app.core.retry import retry_with_policy`
+  - 当前内置策略：`default`、`tmdb`
+- 新增重试场景时，先在 `app/core/retry.py` 注册策略，再在服务层引用，避免分散实现。
+
+### TypeScript/Vue
+
+- 使用 ESLint v9 进行代码 linting
+- 使用 TypeScript strict 模式
+- Vue 组件使用 `<script setup>` 语法
+- 所有组件和函数必须有类型定义
+
+```bash
+# 代码检查
+npm run lint
+
+# 自动格式化
+npm run format
+```
+
+## 测试
+
+### 运行测试
+
+```bash
+# 后端测试
+pytest tests/ --cov=app --cov-fail-under=70 -v
+
+# 前端测试
+npm run test
+
+# 端到端测试 (待实现)
+npm run test:e2e
+```
+
+### 编写测试
+
+- 单元测试放在 `tests/unit/`
+- 集成测试放在 `tests/integration/`
+- 测试文件命名：`test_*.py`
+- 使用 `pytest` fixtures 进行依赖注入
+
+## 项目结构
+
+### 后端模块
+
+| 模块 | 说明 |
+|------|------|
+| `app/api/` | API 端点定义 |
+| `app/config/` | 配置管理 |
+| `app/core/` | 核心工具类、中间件、异常处理 |
+| `app/models/` | SQLAlchemy ORM 模型 |
+| `app/services/` | 业务逻辑服务 |
+
+### 前端模块
+
+采用特性模块化结构：
+
+```
+web/src/features/
+├── auth/           # 认证相关
+├── dashboard/      # 仪表板
+├── tasks/          # 任务管理
+├── scrape/         # 刮削服务
+├── emby/           # Emby 集成
+├── quark/          # 夸克网盘
+├── rename/         # 重命名
+└── ...
+```
+
+每个特性模块包含：
+- `views/` - 视图组件
+- `components/` - 可复用组件
+- `stores/` - Pinia 状态管理
+- `api/` - API 调用
+- `types/` - TypeScript 类型定义
+
+## Git 工作流
+
+### 分支策略
+
+- `main` - 主分支，可部署状态
+- `develop` - 开发分支
+- `feature/*` - 功能分支
+- `fix/*` - 修复分支
+- `release/*` - 发布分支
+
+### 提交规范
+
+遵循 Conventional Commits：
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Type 类型**:
+- `feat`: 新功能
+- `fix`: Bug 修复
+- `docs`: 文档变更
+- `style`: 代码格式
+- `refactor`: 重构
+- `test`: 测试相关
+- `ci`: CI/CD 相关
+- `chore`: 构建/工具链
+
+**示例**:
+```
+feat(emby): 添加媒体库自动刷新功能
+
+- 实现 Emby 库刷新 API
+- 添加定时刷新配置
+- 新增刷新历史记录
+
+Closes #123
+```
+
+## 调试技巧
+
+### 后端调试
+
+```python
+# 启用详细日志
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.debug("调试信息")
+```
+
+### 前端调试
+
+```typescript
+// 使用 Vue DevTools
+// 在浏览器安装 Vue.js devtools 插件
+
+// 控制台日志
+console.log('组件状态:', state)
+```
+
+## 待办事项
+
+- [ ] 添加更多代码示例
+- [ ] 补充调试指南
+- [ ] 添加常见问题 FAQ
+- [ ] 补充性能优化指南
+
+## 参考链接
+
+- [架构文档](../architecture/README.md)
+- [API 文档](../api/README.md)
+- [运维文档](../operations/README.md)
