@@ -7,6 +7,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
+from fastapi.responses import ORJSONResponse
 
 
 MODULE_NAME = "app.main"
@@ -87,3 +88,52 @@ async def test_health_endpoint_returns_degraded_state_when_startup_has_warnings(
     assert payload["status"] == "degraded"
     assert payload["startup_warnings"] == ["monitoring: monitor exploded"]
     assert payload["startup_components"]["monitoring"]["status"] == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_ready_probe_returns_503_when_required_components_missing() -> None:
+    module_globals = _run_main_module("app.main_ready_missing_components_test")
+    app = module_globals["app"]
+    ready_probe = module_globals["ready_probe"]
+
+    app.state.ready = False
+    app.state.startup_components = {}
+
+    payload = await ready_probe()
+
+    assert isinstance(payload, ORJSONResponse)
+    assert payload.status_code == 503
+    assert b"startup_incomplete" in payload.body
+
+
+@pytest.mark.asyncio
+async def test_ready_probe_returns_ready_when_required_components_ok() -> None:
+    module_globals = _run_main_module("app.main_ready_ok_test")
+    app = module_globals["app"]
+    ready_probe = module_globals["ready_probe"]
+
+    app.state.ready = True
+    app.state.startup_components = {
+        "database": {"status": "ok", "detail": None},
+        "auth_system": {"status": "ok", "detail": None},
+        "service_container": {"status": "ok", "detail": None},
+        "http_pool": {"status": "ok", "detail": None},
+    }
+
+    payload = await ready_probe()
+
+    assert payload["status"] == "ready"
+    assert payload["readiness_problems"] == []
+
+
+@pytest.mark.asyncio
+async def test_live_probe_returns_alive_status() -> None:
+    module_globals = _run_main_module("app.main_live_probe_test")
+    app = module_globals["app"]
+    live_probe = module_globals["live_probe"]
+    app.state.started_at = datetime.utcnow()
+
+    payload = await live_probe()
+
+    assert payload["status"] == "alive"
+    assert payload["uptime_seconds"] is not None

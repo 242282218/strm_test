@@ -34,6 +34,14 @@ def create_test_app() -> FastAPI:
     async def health():
         return {"status": "ok"}
 
+    @app.get("/ready")
+    async def ready():
+        return {"status": "ready"}
+
+    @app.get("/health/ready")
+    async def health_ready():
+        return {"status": "ready"}
+
     @app.get("/api/protected")
     async def protected():
         return {"message": "protected"}
@@ -89,6 +97,18 @@ class TestPublicPathNoAuthRequired:
             response = client.get("/health")
             assert response.status_code == 200
             assert response.json() == {"status": "ok"}
+
+    def test_ready_paths_no_auth_required(self):
+        """Readiness probe paths should be accessible without authentication."""
+        app = create_test_app()
+        app.add_middleware(AuthMiddleware)
+
+        with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "test-key"}):
+            client = TestClient(app)
+            ready = client.get("/ready")
+            health_ready = client.get("/health/ready")
+            assert ready.status_code == 200
+            assert health_ready.status_code == 200
 
     def test_docs_path_no_auth_required(self):
         """API docs path should be accessible without authentication."""

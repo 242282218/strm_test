@@ -7,6 +7,7 @@ FastAPI 主应用入口
 import os
 
 from fastapi import Depends, HTTPException, Request
+from fastapi.responses import ORJSONResponse
 
 from app.config.application import create_fastapi_app, register_exception_handlers, register_routers
 from app.config.lifecycle import create_lifespan_context
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
 APP_TITLE = "夸克 STRM 系统"
 APP_DESCRIPTION = "Emby/Jellyfin 可播放的夸克网盘 STRM 系统"
 APP_VERSION = "0.1.0"
+REQUIRED_READY_COMPONENTS = ("database", "auth_system", "service_container", "http_pool")
 
 # 全局配置实例
 config = None
@@ -45,6 +47,37 @@ def _resolve_startup_health() -> tuple[str, list[str], dict[str, dict[str, str |
 
     status = "degraded" if warnings or degraded else "ok"
     return status, warnings, components
+
+
+def _resolve_readiness() -> tuple[bool, list[str], dict[str, dict[str, str | None]]]:
+    components = getattr(app.state, "startup_components", {})
+    if not isinstance(components, dict):
+        components = {}
+
+    problems: list[str] = []
+    if not bool(getattr(app.state, "ready", False)):
+        problems.append("startup_incomplete")
+
+    for name in REQUIRED_READY_COMPONENTS:
+        component = components.get(name)
+        if not isinstance(component, dict):
+            problems.append(f"{name}: missing")
+            continue
+        if component.get("status") != "ok":
+            detail = component.get("detail")
+            problems.append(f"{name}: {component.get('status')} ({detail})" if detail else f"{name}: {component.get('status')}")
+
+    return len(problems) == 0, problems, components
+
+
+def _resolve_probe_time() -> tuple[str, int | None]:
+    from datetime import datetime
+
+    started_at = getattr(app.state, "started_at", None)
+    uptime_seconds = None
+    if started_at:
+        uptime_seconds = int((datetime.utcnow() - started_at).total_seconds())
+    return datetime.utcnow().isoformat(), uptime_seconds
 
 
 def get_config_path() -> str:
@@ -134,23 +167,51 @@ async def root(request: Request):
 @app.get("/health")
 async def health():
     """健康检查"""
-    from datetime import datetime
-
-    started_at = getattr(app.state, "started_at", None)
-    uptime_seconds = None
-    if started_at:
-        uptime_seconds = int((datetime.utcnow() - started_at).total_seconds())
-
+    timestamp, uptime_seconds = _resolve_probe_time()
     health_status, startup_warnings, startup_components = _resolve_startup_health()
+    is_ready, readiness_problems, _ = _resolve_readiness()
 
     return {
         "status": health_status,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": timestamp,
         "uptime_seconds": uptime_seconds,
         "version": "0.1.0",
+        "ready": is_ready,
+        "readiness_problems": readiness_problems,
         "startup_warnings": startup_warnings,
         "startup_components": startup_components,
     }
+
+
+@app.get("/health/live")
+async def live_probe():
+    """存活探针"""
+    timestamp, uptime_seconds = _resolve_probe_time()
+    return {
+        "status": "alive",
+        "timestamp": timestamp,
+        "uptime_seconds": uptime_seconds,
+        "version": APP_VERSION,
+    }
+
+
+@app.get("/ready")
+@app.get("/health/ready")
+async def ready_probe():
+    """就绪探针"""
+    timestamp, uptime_seconds = _resolve_probe_time()
+    is_ready, readiness_problems, startup_components = _resolve_readiness()
+    payload = {
+        "status": "ready" if is_ready else "not_ready",
+        "timestamp": timestamp,
+        "uptime_seconds": uptime_seconds,
+        "version": APP_VERSION,
+        "readiness_problems": readiness_problems,
+        "startup_components": startup_components,
+    }
+    if is_ready:
+        return payload
+    return ORJSONResponse(status_code=503, content=payload)
 
 
 @app.get("/config")

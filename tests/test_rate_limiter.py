@@ -151,6 +151,10 @@ def test_setup_rate_limiting_middleware_enforces_and_skips() -> None:
     async def health():
         return {"ok": True}
 
+    @app.get("/ready")
+    async def ready():
+        return {"ok": True}
+
     @app.get("/limited")
     async def limited():
         return {"ok": True}
@@ -162,8 +166,10 @@ def test_setup_rate_limiting_middleware_enforces_and_skips() -> None:
     first = client.get("/limited", headers={"X-Real-IP": "9.9.9.9"})
     second = client.get("/limited", headers={"X-Real-IP": "9.9.9.9"})
     skipped = client.get("/health", headers={"X-Real-IP": "9.9.9.9"})
+    ready_skipped = client.get("/ready", headers={"X-Real-IP": "9.9.9.9"})
 
     assert first.status_code == 200
     assert second.status_code == 429
     assert second.headers["Retry-After"] == "3"
     assert skipped.status_code == 200
+    assert ready_skipped.status_code == 200

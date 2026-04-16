@@ -20,7 +20,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 自检：
 
 ```bash
-curl.exe -sS http://127.0.0.1:8000/health
+curl.exe -sS http://127.0.0.1:8000/ready
 ```
 
 ## 2. 生成 STRM（两种模式）
@@ -76,4 +76,3 @@ curl.exe -I "$u"
 
 - Emby 不在同一台机器：`.strm` 里的 `base_url` 不能是 `localhost`
 - Windows 防火墙：确保 Emby 能访问到运行后端的 `8000` 端口
-

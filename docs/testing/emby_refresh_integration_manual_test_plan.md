@@ -81,13 +81,13 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 1) 使用 `curl.exe`（Windows 自带）
 
 ```powershell
-curl.exe -sS http://127.0.0.1:8000/health
+curl.exe -sS http://127.0.0.1:8000/ready
 ```
 
 2) 使用 `Invoke-RestMethod`（更适合 JSON）
 
 ```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8000/health -Method GET -TimeoutSec 10
+Invoke-RestMethod -Uri http://127.0.0.1:8000/ready -Method GET -TimeoutSec 10
 ```
 
 此外，如遇 `localhost` 超时，建议统一改用 `127.0.0.1` 进行测试，避免本机 DNS/IPv6 解析差异导致的干扰。
@@ -296,7 +296,7 @@ curl -X POST "%API_BASE%/api/emby/config" ^
 
 ## 5. 回归测试清单（建议快速过一遍）
 
-- `GET %API_BASE%/health` 返回 `status=ok`
+- `GET %API_BASE%/ready` 返回 `status=ready`
 - 已有 Emby Playback Hook 路由仍可访问（如你有使用）：`/api/emby/items/{id}/PlaybackInfo` 等
 - STRM 生成与智能重命名不因 Emby 不可用而报错（只记录 warning）
 

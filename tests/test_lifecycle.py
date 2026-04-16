@@ -76,10 +76,12 @@ def test_lifespan_releases_resources_and_avoids_deprecation_warning(monkeypatch:
             response = client.get("/ping")
             assert response.status_code == 200
             assert response.json() == {"ok": True}
+            assert app.state.ready is True
 
     assert config_service.start_calls == 1
     assert config_service.stop_calls == 1
     assert container.stop_calls == 1
+    assert app.state.ready is False
     assert not any("async generator function lifespans are deprecated" in str(item.message) for item in captured)
 
 
@@ -94,6 +96,7 @@ def test_lifespan_stops_watcher_when_startup_fails(monkeypatch: pytest.MonkeyPat
 
     assert config_service.start_calls == 1
     assert config_service.stop_calls == 1
+    assert getattr(app.state, "ready", False) is False
 
 
 def test_initialize_database_uses_resolved_engine(monkeypatch: pytest.MonkeyPatch) -> None:

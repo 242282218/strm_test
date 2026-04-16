@@ -135,6 +135,7 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
     container = None
     watcher_started = False
     try:
+        app.state.ready = False
         app.state.started_at = datetime.utcnow()
         _reset_startup_tracking_state(app)
 
@@ -179,7 +180,9 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
 
         await get_http_pool()
         _record_startup_component(app, "http_pool", "ok")
+        app.state.ready = True
     except Exception as e:
+        app.state.ready = False
         _record_startup_component(app, "startup", "failed", str(e))
         await _cleanup_lifespan_resources(container, config_service, watcher_started)
         logger.error(f"App startup failed: {e}\n{traceback.format_exc()}")
@@ -189,6 +192,7 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        app.state.ready = False
         await _cleanup_lifespan_resources(container, config_service, watcher_started)
         logger.info("Application shutting down")
 

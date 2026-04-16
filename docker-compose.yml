@@ -2,15 +2,80 @@ version: '3.8'
 
 services:
   quark-strm:
-    build: .
+    image: ${QUARK_STRM_IMAGE:-ghcr.io/242282218/smart_media/quark-strm:latest}
+    pull_policy: always
     container_name: quark-strm
     ports:
       - "8000:8000"
+      - "${SMART_MEDIA_EMBY_PROXY_PORT:-18097}:8000"
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./quark_strm.db:/app/quark_strm.db
       - ./strm:/app/strm
       - ./logs:/app/logs
+    # Load environment variables from .env file
+    # Priority: .env file > config.yaml values
+    env_file:
+      - .env
     environment:
       - CONFIG_PATH=/app/config.yaml
+      - SMART_MEDIA_LOG_FORMAT=${LOG_FORMAT:-json}
+      - TZ=${TZ:-Asia/Shanghai}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
+    networks:
+      - monitoring
+
+  # Prometheus 监控服务（可选）
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - monitoring
+    profiles:
+      - monitoring
+
+  # Grafana 可视化服务（可选）
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    networks:
+      - monitoring
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
