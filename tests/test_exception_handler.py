@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib
 import json
+import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +20,7 @@ from app.core.exception_handler import (
 )
 from app.core.exceptions import AppException, ExternalServiceException
 from app.core.validators import InputValidationError
+import app.core.exception_handler as exception_handler_module
 
 
 def _request(request_id: str | None = "rid-123") -> SimpleNamespace:
@@ -29,6 +32,14 @@ def _request(request_id: str | None = "rid-123") -> SimpleNamespace:
 
 def _response_json(response) -> dict:
     return json.loads(response.body.decode("utf-8"))
+
+
+def test_exception_handler_reload_does_not_emit_legacy_422_deprecation() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        importlib.reload(exception_handler_module)
+
+    assert not any("HTTP_422_UNPROCESSABLE_ENTITY" in str(warning.message) for warning in caught)
 
 
 @pytest.mark.asyncio

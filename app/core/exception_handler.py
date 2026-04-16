@@ -25,7 +25,8 @@ logger = get_logger(__name__)
 
 
 # ==================== 状态码映射 ====================
-HTTP_422 = status.HTTP_422_UNPROCESSABLE_CONTENT
+# Why: FastAPI/Starlette expose different 422 names across versions.
+HTTP_422 = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 _STATUS_MESSAGE = {
     status.HTTP_400_BAD_REQUEST: "请求参数错误",
