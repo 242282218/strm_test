@@ -42,6 +42,9 @@ LEGACY_API_PREFIXES = [
 
 def load_config_for_cors(config_service) -> dict | None:
     """加载配置用于 CORS 设置"""
+    if config_service is None:
+        return None
+
     try:
         return config_service.get_config()
     except Exception as exc:
