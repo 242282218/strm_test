@@ -402,6 +402,24 @@ class TestDependencyInjection:
         assert response.status_code == 200
         assert response.json() == {"ok": True}
 
+    def test_require_api_key_accepts_canonical_security_env_alias(self):
+        app = FastAPI()
+
+        @app.get("/protected")
+        async def protected(_auth: None = Depends(require_api_key)):
+            return {"ok": True}
+
+        with patch.dict(
+            "os.environ",
+            {"REQUIRE_API_KEY": "true", "SMART_MEDIA_SECURITY_API_KEY": "security-header-key"},
+            clear=True,
+        ):
+            client = TestClient(app)
+            response = client.get("/protected", headers={"X-API-Key": "security-header-key"})
+
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
+
     def test_get_admin_user_accepts_auth_cookie_jwt(self):
         app = FastAPI()
         fake_db = object()

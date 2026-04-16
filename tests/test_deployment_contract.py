@@ -76,6 +76,7 @@ def test_operations_doc_matches_bootstrap_contract() -> None:
     assert "docker compose pull" in document
     assert "`/ready`" in document
     assert "CONFIG_PATH=/app/config.yaml" in document
+    assert "SMART_MEDIA_SECURITY_API_KEY" in document
 
 
 def test_docker_workflows_deploy_the_intended_image() -> None:

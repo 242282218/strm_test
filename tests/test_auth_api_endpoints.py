@@ -272,6 +272,42 @@ def test_api_key_login_exchanges_key_for_session_token() -> None:
     assert api_key not in response.headers["set-cookie"]
 
 
+def test_api_key_login_accepts_canonical_security_env_alias() -> None:
+    app = create_auth_app()
+    client = TestClient(app)
+
+    with patch.dict(os.environ, {"SMART_MEDIA_SECURITY_API_KEY": "canonical-env-key"}, clear=True):
+        with patch("app.api.auth.SessionLocal", return_value=MagicMock()):
+            response = client.post(
+                "/api/auth/login",
+                json={"api_key": "canonical-env-key"},
+            )
+
+    assert response.status_code == 200
+    assert response.json()["access_token"]
+
+
+def test_api_key_login_prefers_canonical_security_env_over_legacy_aliases() -> None:
+    app = create_auth_app()
+    client = TestClient(app)
+
+    with patch.dict(
+        os.environ,
+        {
+            "SMART_MEDIA_SECURITY_API_KEY": "canonical-env-key",
+            "SMART_MEDIA_API_KEY": "legacy-smart-key",
+            "API_KEY": "legacy-key",
+        },
+        clear=True,
+    ):
+        with patch("app.api.auth.SessionLocal", return_value=MagicMock()):
+            canonical = client.post("/api/auth/login", json={"api_key": "canonical-env-key"})
+            legacy = client.post("/api/auth/login", json={"api_key": "legacy-smart-key"})
+
+    assert canonical.status_code == 200
+    assert legacy.status_code == 403
+
+
 def test_login_returns_distinct_refresh_token() -> None:
     app = create_auth_app()
     client = TestClient(app)

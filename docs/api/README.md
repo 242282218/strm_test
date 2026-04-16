@@ -38,10 +38,19 @@ X-API-Key: <api-key>
 Authorization: Bearer <api-key>
 ```
 
-API key 的推荐配置入口为：
+API key 的 canonical 配置入口为：
 
 - `config.yaml` -> `security.api_key`
 - 环境变量 `SMART_MEDIA_SECURITY_API_KEY`
+
+兼容历史部署时，仍接受以下别名：
+
+- 环境变量 `SMART_MEDIA_API_KEY`
+- 环境变量 `API_KEY`
+
+当多个入口同时存在时，优先级为：
+
+`SMART_MEDIA_SECURITY_API_KEY` > `SMART_MEDIA_API_KEY` > `API_KEY` > `config.yaml`
 
 ### 获取 Token / 登录
 

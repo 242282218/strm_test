@@ -17,6 +17,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.auth_contract import resolve_expected_api_key
 from app.core.logging import get_logger
 from app.services.config_service import get_config_service
 
@@ -117,7 +118,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     Configuration:
     - Environment variable REQUIRE_API_KEY: Enable/disable authentication
-    - Environment variable SMART_MEDIA_API_KEY or API_KEY: API key value
+    - Environment variable SMART_MEDIA_SECURITY_API_KEY: canonical API key value
+    - Environment variable SMART_MEDIA_API_KEY / API_KEY: legacy compatible aliases
     - Config file security.api_key and security.require_api_key
     """
 
@@ -319,19 +321,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Get the expected API key from configuration.
 
         Priority:
-        1. SMART_MEDIA_API_KEY environment variable
-        2. API_KEY environment variable
+        1. SMART_MEDIA_SECURITY_API_KEY environment variable
+        2. SMART_MEDIA_API_KEY / API_KEY legacy environment aliases
         3. Config file security.api_key
 
         Returns:
             The expected API key or None if not configured
         """
-        # Check environment variables first (highest priority)
-        env_key = os.getenv("SMART_MEDIA_API_KEY") or os.getenv("API_KEY")
-        if env_key:
-            return env_key
+        return resolve_expected_api_key(self._get_config_api_key)
 
-        # Check config file
+    def _get_config_api_key(self) -> str | None:
+        """Read the configured API key from config service."""
         try:
             cfg = get_config_service().get_config()
             security = getattr(cfg, "security", None)
@@ -339,7 +339,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 return security.api_key
         except Exception as exc:
             logger.warning(f"Failed to read API key from config: {exc}")
-
         return None
 
     def _extract_token(self, request: Request) -> str | None:

@@ -21,8 +21,8 @@ cp .env.example .env
 cp config.example.yaml config.yaml
 
 # 3. 编辑 .env / config.yaml 填入必要配置
-# 至少按需设置 SMART_MEDIA_QUARK_COOKIE、SMART_MEDIA_EMBY_URL、
-# SMART_MEDIA_EMBY_API_KEY 等真实凭据
+# 至少按需设置 SMART_MEDIA_QUARK_COOKIE、SMART_MEDIA_SECURITY_API_KEY、
+# SMART_MEDIA_EMBY_URL、SMART_MEDIA_EMBY_API_KEY 等真实凭据
 
 # 4. 启动服务
 docker compose up -d
@@ -52,6 +52,7 @@ docker compose up -d
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | `QUARK_STRM_IMAGE` | 部署镜像标签 | `ghcr.io/242282218/smart_media/quark-strm:latest` |
+| `SMART_MEDIA_SECURITY_API_KEY` | 受保护接口的 canonical API Key | `` |
 | `SMART_MEDIA_EMBY_PROXY_PORT` | Emby 专用代理暴露端口 | `18097` |
 | `SMART_MEDIA_LOG_FORMAT` | 容器日志格式 | `json` |
 | `SMART_MEDIA_LOG_LEVEL` | 应用日志级别 | `INFO` |
@@ -64,7 +65,7 @@ docker compose up -d
 - `./strm:/app/strm`
 - `./logs:/app/logs`
 
-容器内始终通过 `CONFIG_PATH=/app/config.yaml` 读取配置，敏感值优先使用 `.env` 覆盖 `config.yaml`。
+容器内始终通过 `CONFIG_PATH=/app/config.yaml` 读取配置，敏感值优先使用 `.env` 覆盖 `config.yaml`。认证密钥推荐使用 `SMART_MEDIA_SECURITY_API_KEY`；历史别名 `SMART_MEDIA_API_KEY` 与 `API_KEY` 仅保留兼容。
 
 ### 源码部署
 

@@ -11,7 +11,10 @@ def test_api_docs_describe_dual_auth_contract() -> None:
     assert "Authorization: Bearer <jwt-token>" in document
     assert "Authorization: Bearer <api-key>" in document
     assert "SMART_MEDIA_SECURITY_API_KEY" in document
+    assert "SMART_MEDIA_API_KEY" in document
+    assert "`API_KEY`" in document
     assert "security.api_key" in document
+    assert "SMART_MEDIA_SECURITY_API_KEY` > `SMART_MEDIA_API_KEY` > `API_KEY` > `config.yaml" in document
 
 
 def test_api_docs_list_public_probes_and_monitoring_paths() -> None:

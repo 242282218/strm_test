@@ -12,9 +12,10 @@ Tests cover:
 
 from __future__ import annotations
 
+import inspect
 import os
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -314,6 +315,41 @@ class TestValidApiKeyGrantsAccess:
             )
             assert response.status_code == 200
 
+    def test_smart_media_security_api_key_env_var_works(self):
+        """SMART_MEDIA_SECURITY_API_KEY should work as the canonical env override."""
+        app = create_test_app()
+        app.add_middleware(AuthMiddleware)
+
+        with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "SMART_MEDIA_SECURITY_API_KEY": "security-key-987"}, clear=True):
+            client = TestClient(app)
+            response = client.get(
+                "/api/protected",
+                headers={"X-API-Key": "security-key-987"}
+            )
+            assert response.status_code == 200
+
+    def test_canonical_security_api_key_env_overrides_legacy_aliases(self):
+        """Canonical security env should win when legacy aliases are also configured."""
+        app = create_test_app()
+        app.add_middleware(AuthMiddleware)
+
+        with patch.dict(
+            os.environ,
+            {
+                "REQUIRE_API_KEY": "true",
+                "SMART_MEDIA_SECURITY_API_KEY": "canonical-key",
+                "SMART_MEDIA_API_KEY": "legacy-smart-key",
+                "API_KEY": "legacy-key",
+            },
+            clear=True,
+        ):
+            client = TestClient(app)
+            canonical = client.get("/api/protected", headers={"X-API-Key": "canonical-key"})
+            legacy = client.get("/api/protected", headers={"X-API-Key": "legacy-smart-key"})
+
+            assert canonical.status_code == 200
+            assert legacy.status_code == 403
+
 
 class TestInvalidApiKeyDenied:
     """Test that invalid API key is denied access."""
@@ -410,8 +446,6 @@ class TestTimingAttackPrevention:
         """Verify that secrets.compare_digest is used for key comparison."""
         # This test verifies the implementation uses secrets.compare_digest
         # by checking the code structure
-        import inspect
-        from app.core.auth_middleware import AuthMiddleware
 
         # The actual comparison is in dispatch method
         dispatch_source = inspect.getsource(AuthMiddleware.dispatch)
