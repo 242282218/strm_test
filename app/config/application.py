@@ -5,7 +5,6 @@
 """
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import ORJSONResponse
 
 from app.config.lifecycle import create_lifespan_context
 from app.core.logging import get_logger
@@ -31,7 +30,6 @@ def create_fastapi_app(title: str, description: str, version: str, lifespan_cont
         title=title,
         description=description,
         version=version,
-        default_response_class=ORJSONResponse,
         lifespan=lifespan_context,
     )
 

@@ -7,7 +7,7 @@ FastAPI 主应用入口
 import os
 
 from fastapi import Depends, HTTPException, Request
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse
 
 from app.config.application import create_fastapi_app, register_exception_handlers, register_routers
 from app.config.lifecycle import create_lifespan_context
@@ -211,7 +211,7 @@ async def ready_probe():
     }
     if is_ready:
         return payload
-    return ORJSONResponse(status_code=503, content=payload)
+    return JSONResponse(status_code=503, content=payload)
 
 
 @app.get("/config")

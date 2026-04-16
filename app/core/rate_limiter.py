@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse
 
 from app.core.logging import get_logger
 
@@ -200,7 +200,7 @@ class RateLimiter:
 
     def _create_rate_limit_response(self, retry_after: int, reason: str | None) -> Response:
         """创建速率限制响应"""
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=429,
             content={
                 "error": "Too Many Requests",

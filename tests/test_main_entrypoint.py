@@ -7,7 +7,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse
 
 
 MODULE_NAME = "app.main"
@@ -101,7 +101,7 @@ async def test_ready_probe_returns_503_when_required_components_missing() -> Non
 
     payload = await ready_probe()
 
-    assert isinstance(payload, ORJSONResponse)
+    assert isinstance(payload, JSONResponse)
     assert payload.status_code == 503
     assert b"startup_incomplete" in payload.body
 

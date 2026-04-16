@@ -1,17 +1,31 @@
 """
-异常处理中间件
+统一异常处理中间件
+
+提供所有异常的统一处理:
+- AppException: 应用异常
+- HTTPException: HTTP异常
+- RequestValidationError: 请求验证异常
+- InputValidationError: 输入校验异常
+- Exception: 兜底异常
 """
 
-from fastapi import Request, status, HTTPException
+from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+from app.core.constants import REQUEST_ID_HEADER
+from app.core.exceptions import AppException, ExternalServiceException
 from app.core.logging import get_logger
 from app.core.response import ErrorResponse
 from app.core.security import redact_sensitive
-from app.core.constants import REQUEST_ID_HEADER
 from app.core.validators import InputValidationError
 
+
 logger = get_logger(__name__)
+
+
+# ==================== 状态码映射 ====================
+HTTP_422 = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 _STATUS_MESSAGE = {
     status.HTTP_400_BAD_REQUEST: "请求参数错误",
@@ -19,7 +33,7 @@ _STATUS_MESSAGE = {
     status.HTTP_403_FORBIDDEN: "禁止访问",
     status.HTTP_404_NOT_FOUND: "资源不存在",
     status.HTTP_409_CONFLICT: "请求冲突",
-    status.HTTP_422_UNPROCESSABLE_ENTITY: "参数校验失败",
+    HTTP_422: "参数校验失败",
 }
 
 _STATUS_CODE = {
@@ -28,16 +42,21 @@ _STATUS_CODE = {
     status.HTTP_403_FORBIDDEN: "ERR_FORBIDDEN",
     status.HTTP_404_NOT_FOUND: "ERR_NOT_FOUND",
     status.HTTP_409_CONFLICT: "ERR_CONFLICT",
-    status.HTTP_422_UNPROCESSABLE_ENTITY: "ERR_VALIDATION",
+    HTTP_422: "ERR_VALIDATION",
     status.HTTP_500_INTERNAL_SERVER_ERROR: "ERR_INTERNAL",
 }
 
 
+# ==================== 辅助函数 ====================
+
+
 def _get_request_id(request: Request) -> str | None:
+    """获取请求ID"""
     return getattr(request.state, "request_id", None)
 
 
 def _sanitize_validation_errors(errors):
+    """清理验证错误信息"""
     sanitized = []
     for err in errors:
         sanitized.append(
@@ -50,24 +69,48 @@ def _sanitize_validation_errors(errors):
     return sanitized
 
 
-async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """全局异常处理"""
-    request_id = _get_request_id(request)
-    logger.exception(f"Unhandled exception: {exc} | request_id={request_id}")
+# ==================== 异常处理器 ====================
 
-    error_response = ErrorResponse(
-        code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message="服务器内部错误",
-        error_code=_STATUS_CODE[status.HTTP_500_INTERNAL_SERVER_ERROR],
-        request_id=request_id,
-    )
+
+async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
+    """
+    统一应用异常处理器
+
+    处理所有 AppException 及其子类
+    """
+    request_id = _get_request_id(request)
+    http_status = exc.status_code
+
+    # 根据错误级别记录日志
+    if http_status >= 500:
+        logger.error(
+            f"AppException: {exc.code.name} | {exc.message} | request_id={request_id} | detail={exc.detail}",
+            exc_info=exc.cause,
+        )
+    elif http_status >= 400:
+        logger.warning(f"AppException: {exc.code.name} | {exc.message} | request_id={request_id}")
+
+    # 构建响应
+    content = exc.to_dict()
+    content["request_id"] = request_id
+
+    # 外部服务异常添加建议
+    if isinstance(exc, ExternalServiceException):
+        content["suggestions"] = ["检查网络连接", "确认服务配置正确", "稍后重试"]
+
+    headers = {}
+    if exc.retry_after:
+        headers["Retry-After"] = str(exc.retry_after)
 
     response = JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=error_response.model_dump(),
+        status_code=http_status,
+        content=content,
+        headers=headers if headers else None,
     )
+
     if request_id:
         response.headers[REQUEST_ID_HEADER] = request_id
+
     return response
 
 
@@ -110,15 +153,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     errors = _sanitize_validation_errors(exc.errors())
 
     error_response = ErrorResponse(
-        code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        message=_STATUS_MESSAGE[status.HTTP_422_UNPROCESSABLE_ENTITY],
-        error_code=_STATUS_CODE[status.HTTP_422_UNPROCESSABLE_ENTITY],
+        code=HTTP_422,
+        message=_STATUS_MESSAGE[HTTP_422],
+        error_code=_STATUS_CODE[HTTP_422],
         request_id=request_id,
         errors=errors,
     )
 
     response = JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=HTTP_422,
         content=error_response.model_dump(),
     )
     if request_id:
@@ -146,3 +189,29 @@ async def input_validation_exception_handler(request: Request, exc: InputValidat
     if request_id:
         response.headers[REQUEST_ID_HEADER] = request_id
     return response
+
+
+async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """全局异常处理（兜底）"""
+    request_id = _get_request_id(request)
+    logger.exception(f"Unhandled exception: {exc} | request_id={request_id}")
+
+    error_response = ErrorResponse(
+        code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        message="服务器内部错误",
+        error_code=_STATUS_CODE[status.HTTP_500_INTERNAL_SERVER_ERROR],
+        request_id=request_id,
+    )
+
+    response = JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=error_response.model_dump(),
+    )
+    if request_id:
+        response.headers[REQUEST_ID_HEADER] = request_id
+    return response
+
+
+# ==================== 向后兼容别名 ====================
+# 保留旧的处理器名称
+external_exception_handler = app_exception_handler
