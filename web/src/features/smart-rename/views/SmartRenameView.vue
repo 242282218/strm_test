@@ -232,7 +232,9 @@ import {
   previewSmartRename,
   type AlgorithmInfo,
   type NamingStandardInfo,
+  type SmartRenameAlgorithm,
   type SmartRenameExecuteResponse,
+  type SmartRenameNamingStandard,
 } from '../api/smartRename'
 import {
   RECENT_PATH_KEY,
@@ -245,6 +247,7 @@ import {
   statusType,
   type ViewRenameItem,
 } from '../smart-rename-view-model'
+import { getErrorMessage } from '@/utils/error-message'
 
 defineOptions({
   name: 'SmartRenameView',
@@ -252,8 +255,8 @@ defineOptions({
 
 const algorithms = ref<AlgorithmInfo[]>([])
 const namingStandards = ref<NamingStandardInfo[]>([])
-const selectedAlgorithm = ref('ai_enhanced')
-const selectedStandard = ref('emby')
+const selectedAlgorithm = ref<SmartRenameAlgorithm>('ai_enhanced')
+const selectedStandard = ref<SmartRenameNamingStandard>('emby')
 const recursive = ref(true)
 
 const localPath = ref('')
@@ -304,11 +307,6 @@ const actionHint = computed(() => {
   return `已勾选 ${selectedRows.value.length} 项，可直接执行重命名。`
 })
 
-function extractErrorMessage(error: unknown, fallback: string): string {
-  const err = error as any
-  return err?.response?.data?.detail || err?.message || fallback
-}
-
 function loadRecentPaths() {
   recentPaths.value = parseRecentPaths(localStorage.getItem(RECENT_PATH_KEY))
 }
@@ -353,7 +351,7 @@ async function loadBootstrap() {
       selectedStandard.value = standards[0].standard
     }
   } catch (error) {
-    ElMessage.error(extractErrorMessage(error, '初始化配置加载失败'))
+    ElMessage.error(getErrorMessage(error, '初始化配置加载失败'))
   }
 }
 
@@ -368,8 +366,8 @@ async function runPreview(): Promise<boolean> {
   try {
     const response = await previewSmartRename({
       target_path: targetPath,
-      algorithm: selectedAlgorithm.value as any,
-      naming_standard: selectedStandard.value as any,
+      algorithm: selectedAlgorithm.value,
+      naming_standard: selectedStandard.value,
       recursive: recursive.value,
     })
 
@@ -382,7 +380,7 @@ async function runPreview(): Promise<boolean> {
     ElMessage.success(`预览完成：共 ${response.total_items} 项`)
     return true
   } catch (error) {
-    ElMessage.error(extractErrorMessage(error, '预览失败'))
+    ElMessage.error(getErrorMessage(error, '预览失败'))
     return false
   } finally {
     previewing.value = false
@@ -475,7 +473,7 @@ async function executeSelected() {
     })
     ElMessage.success('执行完成')
   } catch (error) {
-    ElMessage.error(extractErrorMessage(error, '执行失败'))
+    ElMessage.error(getErrorMessage(error, '执行失败'))
   } finally {
     executing.value = false
   }

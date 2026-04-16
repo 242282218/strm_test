@@ -4,76 +4,10 @@
  */
 
 import { ElMessage } from 'element-plus'
+import { getErrorMessage } from './error-message'
 
-/**
- * API 错误响应结构
- */
-export interface ApiErrorResponse {
-  detail?: string
-  message?: string
-  code?: string
-}
-
-/**
- * Axios 错误结构
- */
-export interface AxiosError {
-  response?: {
-    data?: ApiErrorResponse
-    status?: number
-    statusText?: string
-  }
-  message?: string
-  code?: string
-}
-
-/**
- * 检查值是否为 Axios 错误
- */
-export function isAxiosError(error: unknown): error is AxiosError {
-  if (!error || typeof error !== 'object') return false
-  const e = error as Record<string, unknown>
-  return 'response' in e || 'message' in e
-}
-
-/**
- * 从错误中提取用户友好的消息
- */
-export function getErrorMessage(error: unknown, defaultMessage: string = '操作失败'): string {
-  // 如果是 Axios 错误
-  if (isAxiosError(error)) {
-    // 优先使用服务器返回的错误详情
-    const serverDetail = error.response?.data?.detail
-    if (serverDetail) return serverDetail
-
-    // 其次使用服务器返回的消息
-    const serverMessage = error.response?.data?.message
-    if (serverMessage) return serverMessage
-
-    // 使用 HTTP 状态信息
-    if (error.response?.status) {
-      const status = error.response.status
-      const statusText = error.response.statusText || ''
-      return `请求失败 (${status}${statusText ? ': ' + statusText : ''})`
-    }
-
-    // 使用错误消息
-    if (error.message) return error.message
-  }
-
-  // 如果是普通 Error
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  // 如果是字符串
-  if (typeof error === 'string') {
-    return error
-  }
-
-  // 返回默认消息
-  return defaultMessage
-}
+export { getErrorMessage, isAxiosError } from './error-message'
+export type { ApiErrorResponse, AxiosError } from './error-message'
 
 /**
  * 显示错误消息

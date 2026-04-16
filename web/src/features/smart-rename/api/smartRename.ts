@@ -33,6 +33,9 @@ export interface SmartRenamePreviewRequest {
   naming_config?: NamingConfig
 }
 
+export type SmartRenameAlgorithm = NonNullable<SmartRenamePreviewRequest['algorithm']>
+export type SmartRenameNamingStandard = NonNullable<SmartRenamePreviewRequest['naming_standard']>
+
 export interface SmartRenameItem {
   original_path: string
   original_name: string
@@ -81,7 +84,7 @@ export interface SmartRenameExecuteResponse {
 }
 
 export interface AlgorithmInfo {
-  algorithm: string
+  algorithm: SmartRenameAlgorithm
   name: string
   description: string
   features: string[]
@@ -89,7 +92,7 @@ export interface AlgorithmInfo {
 }
 
 export interface NamingStandardInfo {
-  standard: string
+  standard: SmartRenameNamingStandard
   name: string
   description: string
   movie_example: string
@@ -111,6 +114,33 @@ export interface SmartRenameStatus {
   ai_available: boolean
   algorithms: string[]
   naming_standards: string[]
+}
+
+export interface SmartRenameBatchSummary {
+  id: number
+  batch_id: string
+  target_path: string
+  media_type: string
+  total_items: number
+  success_items: number
+  failed_items: number
+  status: string
+  created_at: string
+  completed_at?: string | null
+}
+
+export interface SmartRenameBatchItem {
+  id: number
+  original_path: string
+  original_name: string
+  new_path?: string | null
+  new_name?: string | null
+  status: string
+  tmdb_id?: number | null
+  confidence?: number | null
+  error_message?: string | null
+  created_at: string
+  executed_at?: string | null
 }
 
 export interface AIConnectivityProviderResult {
@@ -202,7 +232,7 @@ export const testSmartRenameAIConnectivity = (
 export const getRenameBatches = (
   skip: number = 0,
   limit: number = 20
-): Promise<any[]> => {
+): Promise<SmartRenameBatchSummary[]> => {
   return api.get('/smart-rename/batches', { params: { skip, limit } })
 }
 
@@ -214,7 +244,7 @@ export const getBatchItems = (
   status?: string,
   skip: number = 0,
   limit: number = 50
-): Promise<any[]> => {
+): Promise<SmartRenameBatchItem[]> => {
   return api.get(`/smart-rename/batches/${batchId}/items`, {
     params: { status, skip, limit }
   })

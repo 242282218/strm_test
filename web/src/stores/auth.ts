@@ -1,66 +1,105 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+import api from '@/api/index'
+import { getErrorMessage } from '@/utils/error-message'
+
+// 用户状态 - 需要在拦截器外部定义
+const user = ref<User | null>(null)
+
 interface User {
   id: number
   username: string
   email?: string
+  role: string
+  is_active: boolean
+  created_at?: string
+  last_login?: string
+}
+
+interface LoginResponse {
+  access_token: string
+  refresh_token: string
+  token_type: string
+  expires_in: number
+  user: User
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  // State
-  const token = ref<string | null>(localStorage.getItem('token'))
-  const user = ref<User | null>(null)
+  // State - Token 现在存储在 HttpOnly Cookie 中，无需在前端存储
   const loading = ref(false)
 
   // Getters
-  const isAuthenticated = computed(() => !!token.value)
+  const isAuthenticated = computed(() => !!user.value)
 
   // Actions
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string): Promise<boolean> => {
     loading.value = true
     try {
-      // 这里应该调用实际的登录API
-      // const response = await axios.post('/api/auth/login', { username, password })
-      // token.value = response.data.token
-      
-      // 临时模拟登录
-      if (username === 'admin' && password === 'admin') {
-        token.value = 'mock_token_' + Date.now()
-        localStorage.setItem('token', token.value)
-        return true
-      }
-      return false
+      const data = await api.post<LoginResponse>('/auth/login', {
+        username,
+        password,
+      })
+
+      // Token 已通过 HttpOnly Cookie 设置，无需手动存储
+      user.value = data.user
+
+      return true
     } catch (error) {
       console.error('Login failed:', error)
-      return false
+      throw new Error(getErrorMessage(error, '登录失败，请检查网络连接'))
     } finally {
       loading.value = false
     }
   }
 
-  const logout = () => {
-    token.value = null
-    user.value = null
-    localStorage.removeItem('token')
+  const logout = async () => {
+    try {
+      // 调用后端登出接口清除 Cookie
+      await api.post('/auth/logout')
+    } catch (error) {
+      console.error('Logout API call failed:', error)
+    } finally {
+      // 清除用户状态
+      user.value = null
+    }
   }
 
-  const checkAuth = () => {
-    const storedToken = localStorage.getItem('token')
-    if (storedToken) {
-      token.value = storedToken
+  const checkAuth = async (): Promise<boolean> => {
+    try {
+      // 验证 Token 是否有效（通过 Cookie 自动发送）
+      const currentUser = await api.get<User>('/auth/me')
+      user.value = currentUser
       return true
+    } catch {
+      // Token 无效，清除状态
+      user.value = null
+      return false
     }
-    return false
+  }
+
+  const changePassword = async (
+    oldPassword: string,
+    newPassword: string
+  ): Promise<boolean> => {
+    try {
+      await api.post('/auth/change-password', {
+        old_password: oldPassword,
+        new_password: newPassword,
+      })
+      return true
+    } catch (error) {
+      throw new Error(getErrorMessage(error, '修改密码失败'))
+    }
   }
 
   return {
-    token,
     user,
     loading,
     isAuthenticated,
     login,
     logout,
-    checkAuth
+    checkAuth,
+    changePassword,
   }
 })
