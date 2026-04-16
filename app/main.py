@@ -147,13 +147,6 @@ setup_rate_limiting(
     read_block_duration=60,
 )
 
-# 注册路由
-register_routers(app)
-
-# 注册异常处理器
-register_exception_handlers(app)
-
-
 @app.get("/")
 async def root(request: Request):
     """根路径。命中专用 Emby 代理入口时转发到 Emby 首页。"""
@@ -237,6 +230,11 @@ async def get_config_endpoint(_auth: None = Depends(require_api_key)):
         "alt_exts": active_config.alt_exts,
         "endpoints_count": len(active_config.endpoints),
     }
+
+
+# Why: catch-all gateway routes must not shadow top-level probes used by deploys and Playwright.
+register_routers(app)
+register_exception_handlers(app)
 
 
 if __name__ == "__main__":

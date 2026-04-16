@@ -7,6 +7,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
+from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse
 
 
@@ -137,3 +138,21 @@ async def test_live_probe_returns_alive_status() -> None:
 
     assert payload["status"] == "alive"
     assert payload["uptime_seconds"] is not None
+
+
+def test_probe_routes_are_reachable_before_catch_all_routes() -> None:
+    module_globals = _run_main_module("app.main_probe_route_contract_test")
+    app = module_globals["app"]
+
+    with TestClient(app) as client:
+        health = client.get("/health")
+        live = client.get("/health/live")
+        ready = client.get("/ready")
+        health_ready = client.get("/health/ready")
+
+    assert health.status_code == 200
+    assert live.status_code == 200
+    assert ready.status_code in {200, 503}
+    assert health_ready.status_code in {200, 503}
+    assert ready.json()["status"] in {"ready", "not_ready"}
+    assert health_ready.json()["status"] in {"ready", "not_ready"}

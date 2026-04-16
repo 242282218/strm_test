@@ -102,8 +102,12 @@ pytest tests/ --cov=app --cov-fail-under=70 -v
 # 前端测试
 npm run test
 
-# 端到端测试 (待实现)
+# 端到端测试
+cd web
 npm run test:e2e
+
+# 需要隔离端口时
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 VITE_API_PROXY_TARGET=http://127.0.0.1:18000 npm run test:e2e
 ```
 
 ### 编写测试

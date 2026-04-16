@@ -38,12 +38,10 @@ async function initAdminIfNeeded(request: APIRequestContext, authStatus: AuthSta
 /**
  * 全局登录 setup：登录一次并保存 storageState，后续所有测试复用。
  *
- * 前置条件：
- *   1. 后端已启动（uvicorn app.main:app --port 8000）
- *   2. 前端已启动（npm run dev，端口 3000）
- *   3. 管理员账号已创建（首次启动自动创建 admin/admin）
+ * 默认情况下，`npm run test:e2e` 会通过 Playwright `webServer`
+ * 自动拉起或复用前后端，再执行下面的登录初始化逻辑。
  *
- * 如果你的 admin 密码不是 admin，请通过环境变量覆盖：
+ * 如果你的 admin 密码不是 admin，或你要跑自定义端口，请通过环境变量覆盖：
  *   E2E_USERNAME=admin E2E_PASSWORD=yourpass npx playwright test
  */
 setup('authenticate', async ({ page, request }) => {

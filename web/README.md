@@ -26,17 +26,17 @@ npm run preview
 
 ## E2E 运行约定
 
-- Playwright 默认访问 `http://127.0.0.1:3000`，可用 `PLAYWRIGHT_BASE_URL` 覆盖。
+- `npm run test:e2e` 会默认先检查并自动拉起后端 `uvicorn app.main:app` 与前端 `npm run dev`；本地若同端口已有服务则直接复用，CI 则总是拉起新进程。
+- Playwright 默认访问 `http://127.0.0.1:3000`，可用 `PLAYWRIGHT_BASE_URL` 覆盖；前端 dev server 会跟随这个地址启动。
+- Vite dev proxy 默认转发到 `http://127.0.0.1:8000`，可用 `VITE_API_PROXY_TARGET` 或 `PLAYWRIGHT_API_TARGET` 覆盖；后端 `uvicorn` 会跟随该目标地址启动。
 - Playwright 本地默认使用 `2` 个 worker 且关闭 `fullyParallel`，避免压穿后端限流；可用 `PLAYWRIGHT_WORKERS` 和 `PLAYWRIGHT_FULLY_PARALLEL=true` 覆盖。
-- Vite dev proxy 默认转发到 `http://127.0.0.1:8000`，可用 `VITE_API_PROXY_TARGET` 覆盖。
-- 如果后端启用了认证且还没初始化管理员，`web/e2e/global-setup.ts` 会尝试调用 `/api/auth/init-admin`，此时后端需要带上 `ADMIN_PASSWORD` 启动。
+- 如果后端启用了认证且还没初始化管理员，`web/e2e/global-setup.ts` 会尝试调用 `/api/auth/init-admin`。自动启动后端时默认注入 `ADMIN_PASSWORD=admin`，也可显式覆盖。
 
 示例：
 
 ```sh
-ADMIN_PASSWORD=admin python -m uvicorn app.main:app --host 127.0.0.1 --port 18000
-VITE_API_PROXY_TARGET=http://127.0.0.1:18000 npm run dev
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e
+npm run test:e2e
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 VITE_API_PROXY_TARGET=http://127.0.0.1:18000 ADMIN_PASSWORD=admin npm run test:e2e
 ```
 
 ## 当前结构
@@ -159,4 +159,4 @@ npm run build-only
 ## 备注
 
 - `ui` 相关打包产物仍然是当前体积大头，后续若继续优化，优先看 Element Plus 样式和共享 UI chunk。
-- 文档最后同步日期：`2026-03-16`
+- 文档最后同步日期：`2026-04-16`
