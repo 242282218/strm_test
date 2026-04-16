@@ -98,6 +98,23 @@ vi.mock('element-plus', async () => {
   }
 })
 
+type PreviewRow = {
+  original_path: string
+  new_name: string
+}
+
+type SmartRenameViewVm = {
+  localPath: string
+  previewRows: PreviewRow[]
+  editingItem: PreviewRow
+  runPreview: () => Promise<void>
+  openEditDialog: (row: PreviewRow) => void
+  saveEdit: () => void
+  executeSelected: () => Promise<void>
+}
+
+const asSmartRenameViewVm = (vm: unknown): SmartRenameViewVm => vm as SmartRenameViewVm
+
 describe('SmartRenameView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -194,9 +211,10 @@ describe('SmartRenameView', () => {
 
     await flushPromises()
 
-    ;(wrapper.vm as any).localPath = 'D:/Media'
+    const vm = asSmartRenameViewVm(wrapper.vm)
+    vm.localPath = 'D:/Media'
     await nextTick()
-    await (wrapper.vm as any).runPreview()
+    await vm.runPreview()
     await flushPromises()
 
     expect(smartRenameApiMocks.previewSmartRenameMock).toHaveBeenCalledWith(
@@ -222,20 +240,21 @@ describe('SmartRenameView', () => {
 
     await flushPromises()
 
-    ;(wrapper.vm as any).localPath = 'D:/Media'
+    const vm = asSmartRenameViewVm(wrapper.vm)
+    vm.localPath = 'D:/Media'
     await nextTick()
-    await (wrapper.vm as any).runPreview()
+    await vm.runPreview()
     await flushPromises()
 
-    const row = (wrapper.vm as any).previewRows[0]
+    const row = vm.previewRows[0]
     expect(row).toBeTruthy()
 
-    ;(wrapper.vm as any).openEditDialog(row)
-    ;(wrapper.vm as any).editingItem.new_name = 'Movie - Edited (2024).mkv'
-    ;(wrapper.vm as any).saveEdit()
+    vm.openEditDialog(row)
+    vm.editingItem.new_name = 'Movie - Edited (2024).mkv'
+    vm.saveEdit()
     await flushPromises()
 
-    await (wrapper.vm as any).executeSelected()
+    await vm.executeSelected()
     await flushPromises()
 
     expect(smartRenameApiMocks.executeSmartRenameMock).toHaveBeenCalledWith({
