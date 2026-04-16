@@ -23,6 +23,35 @@ interface RuntimeConfig {
   pythonCommand: string
 }
 
+type CommandEnv = Record<string, string>
+
+interface SharedWebServerConfig {
+  command: string
+  cwd: string
+  name: string
+  reuseExistingServer: boolean
+  stderr: 'pipe'
+  stdout: 'pipe'
+  timeout: number
+  url: string
+}
+
+interface BackendWebServerConfig extends SharedWebServerConfig {
+  env: CommandEnv & {
+    ADMIN_PASSWORD: string
+  }
+  name: 'Backend'
+}
+
+interface FrontendWebServerConfig extends SharedWebServerConfig {
+  env: CommandEnv & {
+    VITE_API_PROXY_TARGET: string
+  }
+  name: 'Frontend'
+}
+
+type PlaywrightWebServers = [BackendWebServerConfig, FrontendWebServerConfig]
+
 function parseServerTarget(rawTarget: string): ServerTarget {
   const target = new URL(rawTarget)
   const fallbackPort = target.protocol === 'https:' ? 443 : 80
@@ -64,13 +93,24 @@ export function resolvePlaywrightRuntimeConfig(env: NodeJS.ProcessEnv = process.
   }
 }
 
-export function createPlaywrightWebServers(runtime: RuntimeConfig, env: NodeJS.ProcessEnv = process.env) {
+function toCommandEnv(env: NodeJS.ProcessEnv): CommandEnv {
+  return Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
+}
+
+export function createPlaywrightWebServers(
+  runtime: RuntimeConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): PlaywrightWebServers {
+  const commandEnv = toCommandEnv(env)
+
   return [
     {
       command: `${runtime.pythonCommand} -m uvicorn app.main:app --host ${runtime.backend.host} --port ${runtime.backend.port}`,
       cwd: repoRoot,
       env: {
-        ...env,
+        ...commandEnv,
         ADMIN_PASSWORD: env.ADMIN_PASSWORD?.trim() || 'admin',
       },
       name: 'Backend',
@@ -84,7 +124,7 @@ export function createPlaywrightWebServers(runtime: RuntimeConfig, env: NodeJS.P
       command: `npm run dev -- --host ${runtime.frontend.host} --port ${runtime.frontend.port}`,
       cwd: configDir,
       env: {
-        ...env,
+        ...commandEnv,
         VITE_API_PROXY_TARGET: runtime.apiTarget,
       },
       name: 'Frontend',
