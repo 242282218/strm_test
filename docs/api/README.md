@@ -16,13 +16,34 @@ quark_strm 提供 RESTful API 接口，所有接口返回统一的 JSON 响应�
 
 ### 认证方式
 
-使用 JWT Token 进行认证：
+当前系统支持两类认证凭证：
 
-```
-Authorization: Bearer <token>
+1. JWT / Session Token
+
+```http
+Authorization: Bearer <jwt-token>
 ```
 
-### 获取 Token
+浏览器登录后，服务端也会通过 HttpOnly Cookie 自动携带 `auth_token`。
+
+2. API Key
+
+```http
+X-API-Key: <api-key>
+```
+
+兼容只支持 `Authorization` 头的客户端时，也可使用：
+
+```http
+Authorization: Bearer <api-key>
+```
+
+API key 的推荐配置入口为：
+
+- `config.yaml` -> `security.api_key`
+- 环境变量 `SMART_MEDIA_SECURITY_API_KEY`
+
+### 获取 Token / 登录
 
 ```http
 POST /api/auth/login
@@ -31,6 +52,17 @@ Content-Type: application/json
 {
   "username": "admin",
   "password": "password123"
+}
+```
+
+也支持直接提交 API key 换取 JWT/HttpOnly Cookie：
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "api_key": "your-api-key"
 }
 ```
 
@@ -80,13 +112,28 @@ Content-Type: application/json
 
 ## API 端点
 
+### 公共探针与指标
+
+| 方法 | 端点 | 说明 | 认证 |
+|------|------|------|------|
+| GET | `/health` | 综合健康状态（含启动告警与 readiness 摘要） | ❌ |
+| GET | `/health/live` | 存活探针 | ❌ |
+| GET | `/ready` | 就绪探针别名 | ❌ |
+| GET | `/health/ready` | 就绪探针 | ❌ |
+| GET | `/metrics` | Prometheus 指标抓取端点 | ❌ |
+| GET | `/metrics/health` | Prometheus 指标服务健康状态 | ❌ |
+
 ### 认证模块 (`/api/auth`)
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
 | POST | `/login` | 用户登录 | ❌ |
-| POST | `/logout` | 用户登出 | ✅ |
-| POST | `/refresh` | 刷新 Token | ✅ |
+| GET | `/verify` | 校验 Cookie / JWT / API Key 是否有效 | ❌ |
+| GET | `/status` | 返回当前是否启用认证及是否已初始化管理员 | ❌ |
+| POST | `/init-admin` | 本地首次引导创建管理员账户 | ❌ |
+| POST | `/refresh` | 使用 refresh token 刷新访问令牌 | ❌ |
+| POST | `/logout` | 清理登录 Cookie | ❌ |
+| POST | `/change-password` | 修改当前用户密码 | ✅ |
 | GET | `/me` | 获取当前用户 | ✅ |
 
 ### 夸克网盘 (`/api/quark`)
@@ -147,9 +194,11 @@ Content-Type: application/json
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/health` | 健康检查 | ❌ |
-| GET | `/metrics` | Prometheus 指标 | ❌ |
-| GET | `/dashboard` | 监控仪表盘数据 | ✅ |
+| GET | `/api/monitor/health` | 监控子系统健康摘要 | ❌ |
+| GET | `/api/monitor/system/status` | 系统状态摘要 | ❌ |
+| GET | `/api/monitor/metrics` | 聚合业务指标快照 | ✅ |
+| GET | `/api/monitor/http-pool/health` | HTTP 连接池健康状态 | ❌ |
+| GET | `/api/monitor/db-pool/health` | 数据库连接池健康状态 | ❌ |
 
 ### 通知服务 (`/api/notification`)
 
