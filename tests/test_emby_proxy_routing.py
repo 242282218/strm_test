@@ -802,6 +802,38 @@ def test_get_playback_info_when_non_web_headers_present_then_keeps_request_as_no
     assert _FakeEmbyProxyService.last_proxy_playback_info_call["is_web_client"] is False
 
 
+def test_get_item_when_user_id_legacy_token_and_emby_url_fallback_use_emby_contract_then_proxies_item_request():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.proxy_items_request = AsyncMock(
+            return_value={"item_id": "item123", "user_id": "user123", "source": "proxy"}
+        )
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/items/item123",
+            params={"UserId": "user123"},
+            headers={"X-MediaBrowser-Token": "legacy-emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"item_id": "item123", "user_id": "user123", "source": "proxy"}
+    assert mock_emby_proxy_service_cls.call_args.kwargs["emby_base_url"] == "http://emby.example:8096"
+    assert mock_emby_proxy_service_cls.call_args.kwargs["api_key"] == "legacy-emby-api-key"
+    mock_emby_proxy_service.proxy_items_request.assert_awaited_once_with(item_id="item123", user_id="user123")
+
+
 def test_stream_video_when_media_source_id_is_not_file_id_then_resolves_item_media_source_and_returns_stream_response():
     client = _build_emby_client()
     app_config = SimpleNamespace(

@@ -861,18 +861,25 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
     """获取 Emby 项目信息"""
     try:
         item_id = validate_identifier(item_id, "item_id")
+        user_id = _resolve_requested_user_id(request, user_id)
         if user_id:
             user_id = validate_identifier(user_id, "user_id")
 
-        api_key = request.headers.get("X-Emby-Token") or request.query_params.get("api_key")
+        api_key = (
+            request.headers.get("X-Emby-Token")
+            or request.headers.get("X-MediaBrowser-Token")
+            or request.query_params.get("api_key")
+        )
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 
         app_config = config_service.get_config()
-        emby_base_url = request.headers.get(
-            "X-Emby-Server-Url",
-            app_config.endpoints[0].emby_url if app_config.endpoints else "http://localhost:8096",
-        )
+        configured_emby_url = ""
+        if getattr(app_config, "endpoints", None):
+            configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
+        if not configured_emby_url:
+            configured_emby_url = (getattr(getattr(app_config, "emby", None), "url", "") or "").strip()
+        emby_base_url = request.headers.get("X-Emby-Server-Url") or configured_emby_url or "http://localhost:8096"
         validate_http_url(emby_base_url, "emby_base_url")
 
         cookie = config.get_quark_cookie()
