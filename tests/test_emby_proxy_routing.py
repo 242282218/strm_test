@@ -654,6 +654,62 @@ def test_stream_video_when_media_source_id_is_not_file_id_then_resolves_item_med
     mock_proxy_stream.assert_awaited_once()
 
 
+def test_get_master_playlist_when_media_source_id_is_not_file_id_then_resolves_item_media_source_and_returns_proxy_transcoding_playlist():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(return_value="file123")
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/videos/item123/master.m3u8",
+            params={"MediaSourceId": "media_source_1", "api_key": "emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"].startswith("application/vnd.apple.mpegurl")
+    assert "/api/proxy/transcoding/file123" in response.text
+    mock_emby_proxy_service.resolve_media_source_file_id.assert_awaited_once_with(
+        item_id="item123", media_source_id="media_source_1"
+    )
+
+
+def test_get_master_playlist_when_internal_error_then_does_not_leak_error_detail():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(side_effect=RuntimeError("internal secret path"))
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/videos/item123/master.m3u8",
+            params={"MediaSourceId": "media_source_1", "api_key": "emby-api-key"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Failed to get master playlist"}
+
+
 def test_redirect_route_when_direct_and_transcoding_not_playable_then_falls_back_to_stream_proxy():
     client = _build_proxy_client()
 

@@ -9,12 +9,11 @@ Emby API 路由
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -35,12 +34,73 @@ from app.services.config_service import get_config_service
 from app.services.emby_proxy_service import EmbyProxyService
 from app.services.emby_service import get_emby_service
 from app.services.proxy_service import ProxyService
+from app.api.proxy import proxy_stream_by_file_id
+
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/emby", tags=["Emby服务"])
 
 config = get_config()
 config_service = get_config_service()
+
+
+_WEB_CLIENT_HINTS = (
+    "emby web",
+    "jellyfin web",
+    "web",
+    "chrome",
+    "edge",
+    "firefox",
+    "safari",
+    "browser",
+)
+
+
+def _is_web_client_request(client_name: str | None, device_name: str | None, user_agent: str | None) -> bool:
+    candidates = [client_name or "", device_name or "", user_agent or ""]
+    normalized = " ".join(value.strip().lower() for value in candidates if value and value.strip())
+    if not normalized:
+        return False
+    return any(hint in normalized for hint in _WEB_CLIENT_HINTS)
+
+
+def _resolve_requested_media_source_id(request: Request, media_source_id: str | None) -> str | None:
+    return media_source_id or request.query_params.get("MediaSourceId") or request.query_params.get("media_source_id")
+
+
+async def _resolve_media_source_file_id_for_request(
+    request: Request,
+    *,
+    item_id: str,
+    media_source_id: str,
+    cookie: str,
+) -> str:
+    app_config = config_service.get_config()
+    configured_emby_url = ""
+    if getattr(app_config, "endpoints", None):
+        configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
+    if not configured_emby_url:
+        configured_emby_url = (getattr(getattr(app_config, "emby", None), "url", "") or "").strip()
+    emby_base_url = request.headers.get("X-Emby-Server-Url") or configured_emby_url or "http://localhost:8096"
+    validate_http_url(emby_base_url, "emby_base_url")
+
+    configured_proxy_base_url = (getattr(getattr(app_config, "emby", None), "proxy_base_url", "") or "").strip()
+    proxy_base_url = request.headers.get("X-Proxy-Server-Url") or configured_proxy_base_url
+    if not proxy_base_url:
+        proxy_base_url = f"http://{request.headers.get('host', 'localhost:8000')}"
+    validate_http_url(proxy_base_url, "proxy_base_url")
+
+    api_key = request.headers.get("X-Emby-Token") or request.query_params.get("api_key") or getattr(
+        getattr(app_config, "emby", None), "api_key", ""
+    )
+
+    async with EmbyProxyService(
+        emby_base_url=emby_base_url,
+        api_key=api_key,
+        cookie=cookie,
+        proxy_base_url=proxy_base_url,
+    ) as emby_proxy_service:
+        return await emby_proxy_service.resolve_media_source_file_id(item_id=item_id, media_source_id=media_source_id)
 
 
 class EmbyConfigUpdate(BaseModel):
@@ -50,14 +110,15 @@ class EmbyConfigUpdate(BaseModel):
 
     enabled: bool = False
     url: str = Field("", max_length=2048)
+    proxy_base_url: str = Field("", max_length=2048)
     api_key: str = Field("", max_length=2048)
     timeout: int = Field(30, ge=1, le=300)
     notify_on_complete: bool = True
 
     on_strm_generate: bool = True
     on_rename: bool = True
-    cron: Optional[str] = None
-    library_ids: List[str] = Field(default_factory=list)
+    cron: str | None = None
+    library_ids: list[str] = Field(default_factory=list)
     episode_aggregate_window_seconds: int = Field(10, ge=1, le=300)
     delete_execute_enabled: bool = False
 
@@ -69,9 +130,17 @@ class EmbyConfigUpdate(BaseModel):
             validate_http_url(v, "emby.url")
         return v
 
+    @field_validator("proxy_base_url")
+    @classmethod
+    def validate_proxy_base_url(cls, v: str) -> str:
+        v = (v or "").strip()
+        if v:
+            validate_http_url(v, "emby.proxy_base_url")
+        return v
+
     @field_validator("cron")
     @classmethod
-    def validate_cron(cls, v: Optional[str]) -> Optional[str]:
+    def validate_cron(cls, v: str | None) -> str | None:
         if v is None:
             return None
         cron = v.strip()
@@ -97,15 +166,15 @@ class EmbyConfigUpdate(BaseModel):
 class EmbyTestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    url: Optional[str] = None
-    api_key: Optional[str] = None
-    timeout: Optional[int] = Field(5, ge=1, le=300)
+    url: str | None = None
+    api_key: str | None = None
+    timeout: int | None = Field(5, ge=1, le=300)
 
 
 class EmbyRefreshRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    library_ids: Optional[List[str]] = None
+    library_ids: list[str] | None = None
 
 
 class EmbyEventLogDto(BaseModel):
@@ -114,17 +183,17 @@ class EmbyEventLogDto(BaseModel):
     id: int
     event_id: str
     event_type: str
-    item_id: Optional[str]
-    item_name: Optional[str]
-    item_type: Optional[str]
+    item_id: str | None
+    item_name: str | None
+    item_type: str | None
     aggregated_count: int
-    payload: Optional[Dict[str, Any]]
+    payload: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
 
 
 class EmbyEventListResponse(BaseModel):
-    items: List[EmbyEventLogDto]
+    items: list[EmbyEventLogDto]
     total: int
 
 
@@ -132,45 +201,41 @@ class EmbyDeletePlanRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: str = Field(default="manual", max_length=50)
-    event_ids: List[str] = Field(default_factory=list)
-    item_ids: List[str] = Field(default_factory=list)
-    reason: Optional[str] = Field(default=None, max_length=500)
+    event_ids: list[str] = Field(default_factory=list)
+    item_ids: list[str] = Field(default_factory=list)
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class EmbyDeleteExecuteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     plan_id: str = Field(..., max_length=64)
-    executed_by: Optional[str] = Field(default=None, max_length=100)
+    executed_by: str | None = Field(default=None, max_length=100)
 
 
 class EmbyWebhookEvent(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     event: str = Field(alias="Event")
-    item: Dict[str, Any] = Field(default_factory=dict, alias="Item")
-    server: Optional[Dict[str, Any]] = Field(default=None, alias="Server")
-    user: Optional[Dict[str, Any]] = Field(default=None, alias="User")
+    item: dict[str, Any] = Field(default_factory=dict, alias="Item")
+    server: dict[str, Any] | None = Field(default=None, alias="Server")
+    user: dict[str, Any] | None = Field(default=None, alias="User")
 
 
-def _normalize_item_type(item: Dict[str, Any]) -> str:
+def _normalize_item_type(item: dict[str, Any]) -> str:
     value = str(item.get("Type") or item.get("ItemType") or "").strip()
     return value or "Unknown"
 
 
-def _episode_aggregate_key(event_type: str, item: Dict[str, Any]) -> str:
+def _episode_aggregate_key(event_type: str, item: dict[str, Any]) -> str:
     series_key = (
-        item.get("SeriesId")
-        or item.get("SeriesName")
-        or item.get("ParentId")
-        or item.get("Album")
-        or "unknown-series"
+        item.get("SeriesId") or item.get("SeriesName") or item.get("ParentId") or item.get("Album") or "unknown-series"
     )
     season = item.get("ParentIndexNumber") or item.get("SeasonNumber") or "all"
     return f"episode:{event_type}:{series_key}:S{season}"
 
 
-def _episode_aggregate_name(item: Dict[str, Any]) -> str:
+def _episode_aggregate_name(item: dict[str, Any]) -> str:
     series_name = item.get("SeriesName") or item.get("Series") or item.get("Name") or "Episode"
     season = item.get("ParentIndexNumber") or item.get("SeasonNumber")
     if season is None:
@@ -178,7 +243,7 @@ def _episode_aggregate_name(item: Dict[str, Any]) -> str:
     return f"{series_name} - Season {season}"
 
 
-def _extract_event_latency_seconds(payload: Dict[str, Any]) -> Optional[float]:
+def _extract_event_latency_seconds(payload: dict[str, Any]) -> float | None:
     candidates = [
         payload.get("Date"),
         payload.get("Timestamp"),
@@ -189,8 +254,8 @@ def _extract_event_latency_seconds(payload: Dict[str, Any]) -> Optional[float]:
         if raw is None:
             continue
         if isinstance(raw, (int, float)):
-            event_ts = datetime.fromtimestamp(float(raw), tz=timezone.utc)
-            return max(0.0, (datetime.now(timezone.utc) - event_ts).total_seconds())
+            event_ts = datetime.fromtimestamp(float(raw), tz=UTC)
+            return max(0.0, (datetime.now(UTC) - event_ts).total_seconds())
         if isinstance(raw, str):
             text = raw.strip()
             if not text:
@@ -199,8 +264,8 @@ def _extract_event_latency_seconds(payload: Dict[str, Any]) -> Optional[float]:
                 normalized = text.replace("Z", "+00:00")
                 event_dt = datetime.fromisoformat(normalized)
                 if event_dt.tzinfo is None:
-                    event_dt = event_dt.replace(tzinfo=timezone.utc)
-                return max(0.0, (datetime.now(timezone.utc) - event_dt.astimezone(timezone.utc)).total_seconds())
+                    event_dt = event_dt.replace(tzinfo=UTC)
+                return max(0.0, (datetime.now(UTC) - event_dt.astimezone(UTC)).total_seconds())
             except Exception:
                 continue
     return None
@@ -210,8 +275,8 @@ def _log_webhook_event(
     db: Session,
     *,
     event_type: str,
-    item: Dict[str, Any],
-    payload: Dict[str, Any],
+    item: dict[str, Any],
+    payload: dict[str, Any],
     aggregate_window_seconds: int,
 ) -> tuple[EmbyEventLog, bool]:
     item_type = _normalize_item_type(item)
@@ -233,7 +298,7 @@ def _log_webhook_event(
             .first()
         )
         if existing:
-            merged_payload: Dict[str, Any] = {}
+            merged_payload: dict[str, Any] = {}
             if isinstance(existing.payload, dict):
                 merged_payload.update(existing.payload)
             merged_payload["latest"] = payload
@@ -289,10 +354,10 @@ def _log_webhook_event(
 def _build_delete_plan_items(
     db: Session,
     *,
-    event_ids: List[str],
-    item_ids: List[str],
-) -> List[Dict[str, Any]]:
-    candidates: Dict[str, Dict[str, Any]] = {}
+    event_ids: list[str],
+    item_ids: list[str],
+) -> list[dict[str, Any]]:
+    candidates: dict[str, dict[str, Any]] = {}
 
     if event_ids:
         logs = db.query(EmbyEventLog).filter(EmbyEventLog.event_id.in_(event_ids)).all()
@@ -301,7 +366,9 @@ def _build_delete_plan_items(
             if isinstance(log.payload, dict):
                 if isinstance(log.payload.get("Item"), dict):
                     payload_item = log.payload.get("Item")  # type: ignore[assignment]
-                elif isinstance(log.payload.get("latest"), dict) and isinstance(log.payload["latest"].get("Item"), dict):
+                elif isinstance(log.payload.get("latest"), dict) and isinstance(
+                    log.payload["latest"].get("Item"), dict
+                ):
                     payload_item = log.payload["latest"]["Item"]  # type: ignore[assignment]
 
             emby_item_id = str(payload_item.get("Id") or log.item_id or "")
@@ -324,12 +391,12 @@ def _build_delete_plan_items(
                 "item_type": None,
             }
 
-    plan_items: List[Dict[str, Any]] = []
+    plan_items: list[dict[str, Any]] = []
     for emby_item_id in sorted(candidates.keys()):
         info = candidates[emby_item_id]
         media = db.query(EmbyMediaItem).filter(EmbyMediaItem.emby_id == emby_item_id).first()
 
-        item_type = str((info.get("item_type") or (media.type if media else "") or "Unknown"))
+        item_type = str(info.get("item_type") or (media.type if media else "") or "Unknown")
         risk = "high" if item_type.lower() in {"series", "season", "movie"} else "medium"
         can_execute = bool(media and media.pickcode)
         reason = None
@@ -360,8 +427,8 @@ def _build_delete_plan_items(
 async def get_playback_info(
     item_id: str,
     request: Request,
-    user_id: Optional[str] = None,
-    media_source_id: Optional[str] = None,
+    user_id: str | None = None,
+    media_source_id: str | None = None,
 ):
     """获取 PlaybackInfo（Hook 版本）"""
     try:
@@ -376,21 +443,28 @@ async def get_playback_info(
             raise HTTPException(status_code=401, detail="Missing API key")
 
         app_config = config_service.get_config()
-        emby_base_url = request.headers.get(
-            "X-Emby-Server-Url",
-            app_config.endpoints[0].emby_url if app_config.endpoints else "http://localhost:8096",
-        )
+        configured_emby_url = ""
+        if getattr(app_config, "endpoints", None):
+            configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
+        if not configured_emby_url:
+            configured_emby_url = (getattr(getattr(app_config, "emby", None), "url", "") or "").strip()
+        emby_base_url = request.headers.get("X-Emby-Server-Url") or configured_emby_url or "http://localhost:8096"
         validate_http_url(emby_base_url, "emby_base_url")
 
-        proxy_base_url = request.headers.get(
-            "X-Proxy-Server-Url",
-            f"http://{request.headers.get('host', 'localhost:8000')}",
-        )
+        configured_proxy_base_url = (getattr(app_config.emby, "proxy_base_url", "") or "").strip()
+        proxy_base_url = request.headers.get("X-Proxy-Server-Url") or configured_proxy_base_url
+        if not proxy_base_url:
+            proxy_base_url = f"http://{request.headers.get('host', 'localhost:8000')}"
         validate_http_url(proxy_base_url, "proxy_base_url")
 
         cookie = config.get_quark_cookie()
         if not cookie:
             raise HTTPException(status_code=400, detail="Cookie not configured")
+
+        client_name = request.headers.get("X-Emby-Client")
+        device_name = request.headers.get("X-Emby-Device-Name")
+        user_agent = request.headers.get("User-Agent")
+        is_web_client = _is_web_client_request(client_name, device_name, user_agent)
 
         async with EmbyProxyService(
             emby_base_url=emby_base_url,
@@ -402,6 +476,9 @@ async def get_playback_info(
                 item_id=item_id,
                 user_id=user_id or "",
                 media_source_id=media_source_id,
+                is_web_client=is_web_client,
+                client_name=client_name,
+                device_name=device_name,
             )
     except HTTPException:
         raise
@@ -414,7 +491,7 @@ async def get_playback_info(
 
 @router.post("/test-connection")
 async def test_connection(
-    body: Optional[EmbyTestRequest] = None,
+    body: EmbyTestRequest | None = None,
     _auth: None = Depends(require_api_key),
 ):
     """
@@ -423,7 +500,7 @@ async def test_connection(
     - 传参：只做临时测试，不落库
     """
     service = get_emby_service()
-    kwargs: Dict[str, Any] = {"timeout": 5}
+    kwargs: dict[str, Any] = {"timeout": 5}
     if body:
         if body.url:
             kwargs["url"] = body.url
@@ -447,7 +524,7 @@ async def get_libraries():
 @router.post("/refresh")
 async def refresh_libraries(
     background_tasks: BackgroundTasks,
-    body: Optional[EmbyRefreshRequest] = None,
+    body: EmbyRefreshRequest | None = None,
     _auth: None = Depends(require_api_key),
 ):
     """手动触发刷新（后台执行）"""
@@ -479,6 +556,7 @@ async def get_status(probe: bool = False, probe_timeout: int = 5):
         "configuration": {
             "enabled": bool(app_config.emby.enabled),
             "url": app_config.emby.url,
+            "proxy_base_url": app_config.emby.proxy_base_url,
             "api_key": ("***" + app_config.emby.api_key[-4:]) if app_config.emby.api_key else "",
             "timeout": app_config.emby.timeout,
             "notify_on_complete": app_config.emby.notify_on_complete,
@@ -512,6 +590,7 @@ async def update_emby_config(
 
     # 允许前端不回填 api_key：空字符串表示保持原值
     next_url = (body.url or "").strip() or (app_config.emby.url or "")
+    next_proxy_base_url = (body.proxy_base_url or "").strip() or (app_config.emby.proxy_base_url or "")
     next_api_key = (body.api_key or "").strip() or (app_config.emby.api_key or "")
 
     if body.enabled and not next_url:
@@ -522,6 +601,7 @@ async def update_emby_config(
     config_dict["emby"] = {
         "enabled": bool(body.enabled),
         "url": next_url,
+        "proxy_base_url": next_proxy_base_url,
         "api_key": next_api_key,
         "timeout": int(body.timeout or 30),
         "notify_on_complete": bool(body.notify_on_complete),
@@ -550,9 +630,9 @@ async def update_emby_config(
 
 @router.get("/events", response_model=EmbyEventListResponse)
 async def list_emby_events(
-    event_type: Optional[str] = Query(default=None),
-    item_type: Optional[str] = Query(default=None),
-    keyword: Optional[str] = Query(default=None),
+    event_type: str | None = Query(default=None),
+    item_type: str | None = Query(default=None),
+    keyword: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -664,7 +744,7 @@ async def execute_delete_plan(
             "idempotent": True,
         }
 
-    items: List[Dict[str, Any]] = plan.plan_items if isinstance(plan.plan_items, list) else []
+    items: list[dict[str, Any]] = plan.plan_items if isinstance(plan.plan_items, list) else []
     executed_count = 0
     skipped_count = 0
 
@@ -715,7 +795,7 @@ async def execute_delete_plan(
 
 
 @router.get("/items/{item_id}")
-async def get_item(item_id: str, request: Request, user_id: Optional[str] = None):
+async def get_item(item_id: str, request: Request, user_id: str | None = None):
     """获取 Emby 项目信息"""
     try:
         item_id = validate_identifier(item_id, "item_id")
@@ -748,18 +828,19 @@ async def get_item(item_id: str, request: Request, user_id: Optional[str] = None
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get("/videos/{item_id}/stream")
+@router.api_route("/videos/{item_id}/stream", methods=["GET", "HEAD"])
 async def stream_video(
     item_id: str,
-    _request: Request,
-    media_source_id: Optional[str] = None,
+    request: Request,
+    media_source_id: str | None = None,
     static: bool = False,
-    filename: Optional[str] = None,
+    filename: str | None = None,
 ):
-    """视频流端点（307 重定向）"""
+    """视频流端点（直接流式返回）"""
     _ = static, filename
     try:
         item_id = validate_identifier(item_id, "item_id")
+        media_source_id = _resolve_requested_media_source_id(request, media_source_id)
         if media_source_id:
             media_source_id = validate_identifier(media_source_id, "media_source_id")
 
@@ -767,32 +848,37 @@ async def stream_video(
         if not cookie:
             raise HTTPException(status_code=400, detail="Cookie not configured")
 
-        file_id = media_source_id
-        if not file_id:
+        if not media_source_id:
             raise HTTPException(status_code=400, detail="Missing media_source_id")
 
-        async with ProxyService(cookie=cookie) as service:
-            redirect_url = await service.redirect_302(file_id)
-            logger.info("307 redirect for item %s to %s...", item_id, redirect_url[:120])
-            return RedirectResponse(url=redirect_url, status_code=307)
+        file_id = await _resolve_media_source_file_id_for_request(
+            request,
+            item_id=item_id,
+            media_source_id=media_source_id,
+            cookie=cookie,
+        )
+
+        logger.info("Direct stream for item %s via local proxy stream %s", item_id, file_id)
+        return await proxy_stream_by_file_id(request=request, file_id=file_id)
     except HTTPException:
         raise
     except InputValidationError:
         raise
     except Exception as exc:
         logger.error("Failed to stream video: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Failed to stream video") from exc
 
 
 @router.get("/videos/{item_id}/master.m3u8")
 async def get_master_playlist(
     item_id: str,
-    _request: Request,
-    media_source_id: Optional[str] = None,
+    request: Request,
+    media_source_id: str | None = None,
 ):
     """获取主播放列表（M3U8）"""
     try:
         item_id = validate_identifier(item_id, "item_id")
+        media_source_id = _resolve_requested_media_source_id(request, media_source_id)
         if media_source_id:
             media_source_id = validate_identifier(media_source_id, "media_source_id")
 
@@ -800,9 +886,15 @@ async def get_master_playlist(
         if not cookie:
             raise HTTPException(status_code=400, detail="Cookie not configured")
 
-        file_id = media_source_id
-        if not file_id:
+        if not media_source_id:
             raise HTTPException(status_code=400, detail="Missing media_source_id")
+
+        file_id = await _resolve_media_source_file_id_for_request(
+            request,
+            item_id=item_id,
+            media_source_id=media_source_id,
+            cookie=cookie,
+        )
 
         playlist = (
             "#EXTM3U\n"
@@ -824,7 +916,7 @@ async def get_master_playlist(
         raise
     except Exception as exc:
         logger.error("Failed to get master playlist: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Failed to get master playlist") from exc
 
 
 @router.post("/webhook")

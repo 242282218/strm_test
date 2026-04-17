@@ -303,6 +303,38 @@ def test_gateway_videos_stream_when_dedicated_proxy_host_then_intercepts_local_s
     mock_stream.assert_awaited_once()
 
 
+def test_gateway_videos_master_playlist_when_dedicated_proxy_host_then_intercepts_local_master_path():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._handle_emby_style_master_playlist",
+            new=AsyncMock(
+                return_value=Response(
+                    content="#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=8000000,RESOLUTION=1920x1080\n/api/proxy/transcoding/file123\n",
+                    media_type="application/vnd.apple.mpegurl",
+                    status_code=200,
+                )
+            ),
+        ) as mock_master,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not forward to upstream emby")),
+        ),
+    ):
+        response = client.get(
+            "/Videos/item123/master.m3u8",
+            params={"MediaSourceId": "media123"},
+            headers={"host": "proxy.example:18097"},
+        )
+
+    assert response.status_code == 200
+    assert "/api/proxy/transcoding/file123" in response.text
+    mock_master.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_gateway_websocket_when_non_dedicated_host_then_closes_before_accept():
     ws = _FakeWebSocketClient("localhost:8000")
