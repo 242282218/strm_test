@@ -8,6 +8,7 @@ Emby API 路由
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -54,6 +55,7 @@ _WEB_CLIENT_HINTS = (
     "safari",
     "browser",
 )
+_EMBY_AUTHORIZATION_HEADER_KV_RE = re.compile(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"')
 
 
 def _is_web_client_request(client_name: str | None, device_name: str | None, user_agent: str | None) -> bool:
@@ -62,6 +64,32 @@ def _is_web_client_request(client_name: str | None, device_name: str | None, use
     if not normalized:
         return False
     return any(hint in normalized for hint in _WEB_CLIENT_HINTS)
+
+
+def _parse_emby_authorization_header(header_value: str | None) -> dict[str, str]:
+    text = str(header_value or "").strip()
+    if not text:
+        return {}
+
+    scheme, _, _ = text.partition(" ")
+    if scheme.lower() not in {"emby", "mediabrowser"}:
+        return {}
+
+    parsed: dict[str, str] = {}
+    for match in _EMBY_AUTHORIZATION_HEADER_KV_RE.finditer(text):
+        key = match.group(1).strip().lower()
+        value = match.group(2).strip()
+        if key and value:
+            parsed[key] = value
+    return parsed
+
+
+def _resolve_emby_authorization_context(request: Request) -> dict[str, str]:
+    context: dict[str, str] = {}
+    for header_name in ("X-Emby-Authorization", "Authorization"):
+        for key, value in _parse_emby_authorization_header(request.headers.get(header_name)).items():
+            context.setdefault(key, value)
+    return context
 
 
 def _resolve_requested_media_source_id(request: Request, media_source_id: str | None) -> str | None:
@@ -129,10 +157,20 @@ def _resolve_requested_emby_base_url(request: Request, app_config) -> str:
     return emby_base_url
 
 
-def _resolve_requested_emby_api_key(request: Request, app_config) -> str:
+def _resolve_requested_client_name(request: Request, auth_context: dict[str, str] | None = None) -> str | None:
+    return request.headers.get("X-Emby-Client") or (auth_context or {}).get("client")
+
+
+def _resolve_requested_device_name(request: Request, auth_context: dict[str, str] | None = None) -> str | None:
+    return request.headers.get("X-Emby-Device-Name") or (auth_context or {}).get("device")
+
+
+def _resolve_requested_emby_api_key(request: Request, app_config, auth_context: dict[str, str] | None = None) -> str:
+    auth_context = auth_context or _resolve_emby_authorization_context(request)
     candidates = (
         request.headers.get("X-Emby-Token"),
         request.headers.get("X-MediaBrowser-Token"),
+        auth_context.get("token"),
         request.query_params.get("api_key"),
         getattr(getattr(app_config, "emby", None), "api_key", ""),
         _resolve_legacy_endpoint_emby_field(app_config, "emby_api_key"),
@@ -178,7 +216,8 @@ async def _resolve_media_source_file_id_for_request(
     app_config = config_service.get_config()
     emby_base_url = _resolve_requested_emby_base_url(request, app_config)
     proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
-    api_key = _resolve_requested_emby_api_key(request, app_config)
+    auth_context = _resolve_emby_authorization_context(request)
+    api_key = _resolve_requested_emby_api_key(request, app_config, auth_context)
 
     async with EmbyProxyService(
         emby_base_url=emby_base_url,
@@ -523,10 +562,15 @@ async def get_playback_info(
     try:
         item_id = validate_identifier(item_id, "item_id")
         playback_request = await _read_playback_request_payload(request)
-        user_id = _resolve_requested_user_id(request, user_id) or _resolve_playback_request_field(
-            playback_request,
-            "UserId",
-            "user_id",
+        auth_context = _resolve_emby_authorization_context(request)
+        user_id = (
+            _resolve_requested_user_id(request, user_id)
+            or _resolve_playback_request_field(
+                playback_request,
+                "UserId",
+                "user_id",
+            )
+            or auth_context.get("userid")
         )
         if user_id:
             user_id = validate_identifier(user_id, "user_id")
@@ -542,7 +586,7 @@ async def get_playback_info(
             media_source_id = validate_identifier(media_source_id, "media_source_id")
 
         app_config = config_service.get_config()
-        api_key = _resolve_requested_emby_api_key(request, app_config)
+        api_key = _resolve_requested_emby_api_key(request, app_config, auth_context)
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 
@@ -552,8 +596,8 @@ async def get_playback_info(
         if not cookie:
             raise HTTPException(status_code=400, detail="Cookie not configured")
 
-        client_name = request.headers.get("X-Emby-Client")
-        device_name = request.headers.get("X-Emby-Device-Name")
+        client_name = _resolve_requested_client_name(request, auth_context)
+        device_name = _resolve_requested_device_name(request, auth_context)
         user_agent = request.headers.get("User-Agent")
         is_web_client = _is_web_client_request(client_name, device_name, user_agent)
 
@@ -897,12 +941,13 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
     """获取 Emby 项目信息"""
     try:
         item_id = validate_identifier(item_id, "item_id")
-        user_id = _resolve_requested_user_id(request, user_id)
+        auth_context = _resolve_emby_authorization_context(request)
+        user_id = _resolve_requested_user_id(request, user_id) or auth_context.get("userid")
         if user_id:
             user_id = validate_identifier(user_id, "user_id")
 
         app_config = config_service.get_config()
-        api_key = _resolve_requested_emby_api_key(request, app_config)
+        api_key = _resolve_requested_emby_api_key(request, app_config, auth_context)
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 

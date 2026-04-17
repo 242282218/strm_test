@@ -779,6 +779,41 @@ def test_get_playback_info_when_user_id_and_legacy_token_use_emby_contract_then_
     assert _FakeEmbyProxyService.last_proxy_playback_info_call["user_id"] == "user123"
 
 
+def test_get_playback_info_when_native_authorization_header_present_then_uses_emby_auth_context():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            headers={
+                "X-Emby-Authorization": (
+                    'MediaBrowser Token="native-emby-api-key", UserId="user123", '
+                    'Client="Emby Web", Device="Chrome on Windows"'
+                ),
+                "User-Agent": "Mozilla/5.0",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == "user123"
+    assert response.json()["client_name"] == "Emby Web"
+    assert response.json()["device_name"] == "Chrome on Windows"
+    assert response.json()["is_web_client"] is True
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["api_key"] == "native-emby-api-key"
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call is not None
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call["user_id"] == "user123"
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call["is_web_client"] is True
+
+
 def test_get_playback_info_when_request_token_missing_then_falls_back_to_configured_emby_api_key():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1042,6 +1077,36 @@ def test_get_item_when_user_id_legacy_token_and_emby_url_fallback_use_emby_contr
     assert response.json() == {"item_id": "item123", "user_id": "user123", "source": "proxy"}
     assert mock_emby_proxy_service_cls.call_args.kwargs["emby_base_url"] == "http://emby.example:8096"
     assert mock_emby_proxy_service_cls.call_args.kwargs["api_key"] == "legacy-emby-api-key"
+    mock_emby_proxy_service.proxy_items_request.assert_awaited_once_with(item_id="item123", user_id="user123")
+
+
+def test_get_item_when_native_authorization_header_present_then_uses_emby_auth_context():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.proxy_items_request = AsyncMock(
+            return_value={"item_id": "item123", "user_id": "user123", "source": "proxy"}
+        )
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/items/item123",
+            headers={"Authorization": 'Emby Token="native-emby-api-key", UserId="user123"'},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"item_id": "item123", "user_id": "user123", "source": "proxy"}
+    assert mock_emby_proxy_service_cls.call_args.kwargs["api_key"] == "native-emby-api-key"
     mock_emby_proxy_service.proxy_items_request.assert_awaited_once_with(item_id="item123", user_id="user123")
 
 

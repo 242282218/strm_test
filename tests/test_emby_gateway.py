@@ -234,6 +234,42 @@ def test_gateway_playbackinfo_when_header_and_query_api_keys_conflict_then_prefe
     assert _FakeEmbyProxyService.last_init["api_key"] == "header-emby-api-key"
 
 
+def test_gateway_playbackinfo_when_native_authorization_header_present_then_uses_emby_auth_context():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/Items/item123/PlaybackInfo",
+            params={"MediaSourceId": "media123"},
+            headers={
+                "host": "proxy.example:18097",
+                "Authorization": (
+                    'Emby Token="native-emby-api-key", UserId="user123", '
+                    'Client="Emby Web", Device="Chrome on Windows"'
+                ),
+                "User-Agent": "Mozilla/5.0",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == "user123"
+    assert data["media_source_id"] == "media123"
+    assert data["client_name"] == "Emby Web"
+    assert data["device_name"] == "Chrome on Windows"
+    assert data["is_web_client"] is True
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["api_key"] == "native-emby-api-key"
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call is not None
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call["user_id"] == "user123"
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call["is_web_client"] is True
+
+
 def test_gateway_playbackinfo_when_proxy_override_header_present_then_prefers_header_proxy_base_url():
     client = _build_client()
     app_config = _mock_config()
