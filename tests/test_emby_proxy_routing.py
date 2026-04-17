@@ -1865,6 +1865,37 @@ def test_redirect_route_when_direct_first_disabled_then_redirects_to_local_proxy
     assert response.headers["location"] == "/api/proxy/stream/file123?source=download"
 
 
+def test_redirect_route_when_native_authorization_header_marks_force_proxy_client_then_redirects_to_local_proxy_stream():
+    client = _build_proxy_client()
+    mock_config = SimpleNamespace(
+        playback=SimpleNamespace(direct_first=True, force_proxy_clients=["infuse"], force_proxy_hosts=[])
+    )
+
+    with (
+        patch("app.api.proxy.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.proxy.QuarkService", _FakeQuarkService),
+        patch("app.services.quark_service.QuarkService", _FakeQuarkService),
+        patch("app.api.proxy.LinkResolver", _FakeLinkResolver),
+        patch("app.api.proxy.WebDAVFallback", _FakeWebDAVFallback),
+        patch("app.services.playback_decision_service.get_config_service") as mock_get_config_service,
+        patch(
+            "app.api.proxy._resolve_redirect_target",
+            new=AsyncMock(return_value=("https://download.example/file123.mp4", None)),
+        ) as mock_resolve_redirect_target,
+    ):
+        mock_get_config_service.return_value.get_config.return_value = mock_config
+        response = client.get(
+            "/api/proxy/redirect/file123",
+            headers={"X-Emby-Authorization": 'MediaBrowser Client="Infuse", Device="Apple TV"'},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/api/proxy/stream/file123?source=download"
+    assert mock_resolve_redirect_target.await_args.kwargs["client_name"] == "Infuse"
+    assert mock_resolve_redirect_target.await_args.kwargs["device_name"] == "Apple TV"
+
+
 def test_redirect_route_when_resolved_redirect_url_invalid_then_falls_back_to_local_proxy_stream():
     client = _build_proxy_client()
 

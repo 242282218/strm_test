@@ -196,7 +196,7 @@ async def _get_forward_client() -> httpx.AsyncClient:
 
 async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Response:
     playback_request = await _read_playback_request_payload(request)
-    auth_context = _resolve_emby_authorization_context(request)
+    auth_context = _resolve_emby_authorization_context(request.headers)
     user_id = (
         request.query_params.get("UserId")
         or request.query_params.get("user_id")
@@ -219,8 +219,8 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
 
     emby_base_url = _resolve_emby_base_url(app_config)
     proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
-    client_name = _resolve_requested_client_name(request, auth_context)
-    device_name = _resolve_requested_device_name(request, auth_context)
+    client_name = _resolve_requested_client_name(request.headers, auth_context)
+    device_name = _resolve_requested_device_name(request.headers, auth_context)
     user_agent = request.headers.get("User-Agent")
     is_web_client = _is_web_client_request(client_name, device_name, user_agent)
 

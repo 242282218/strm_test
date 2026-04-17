@@ -32,6 +32,11 @@ from app.services.playback_decision_service import PlaybackDecisionService
 from app.services.proxy_service import ProxyService
 from app.services.quark_service import QuarkService
 from app.services.webdav_fallback import WebDAVFallback
+from app.utils.emby_request import (
+    resolve_emby_authorization_context,
+    resolve_emby_client_name,
+    resolve_emby_device_name,
+)
 
 
 logger = get_logger(__name__)
@@ -563,6 +568,9 @@ async def redirect_302(
 
     try:
         file_id = validate_identifier(file_id, "file_id")
+        auth_context = resolve_emby_authorization_context(request.headers)
+        client_name = resolve_emby_client_name(request.headers, auth_context)
+        device_name = resolve_emby_device_name(request.headers, auth_context)
 
         service = QuarkService(cookie=cookie)
         resolver = LinkResolver(quark_service=service)
@@ -585,8 +593,8 @@ async def redirect_302(
                 resolver=resolver,
                 service=service,
                 fallback=fallback,
-                client_name=request.headers.get("X-Emby-Client"),
-                device_name=request.headers.get("X-Emby-Device-Name"),
+                client_name=client_name,
+                device_name=device_name,
                 user_agent=request.headers.get("User-Agent"),
             )
         finally:
@@ -595,8 +603,8 @@ async def redirect_302(
         fallback_file_id = resolved_file_id
         if redirect_url:
             decision = playback_decision_service.decide_delivery_mode(
-                client_name=request.headers.get("X-Emby-Client"),
-                device_name=request.headers.get("X-Emby-Device-Name"),
+                client_name=client_name,
+                device_name=device_name,
                 user_agent=request.headers.get("User-Agent"),
                 direct_url=redirect_url,
             )
