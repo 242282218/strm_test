@@ -70,7 +70,7 @@ describe('scrape api canonical routes', () => {
     })
   })
 
-  it('uses canonical v1 record endpoints', async () => {
+  it('uses canonical v1 record endpoints and required confirmation payloads', async () => {
     mockedApi.get.mockResolvedValue({ items: [], total: 0 })
     mockedApi.post.mockResolvedValue({})
 
@@ -85,7 +85,7 @@ describe('scrape api canonical routes', () => {
     })
     expect(mockedApi.get).toHaveBeenNthCalledWith(2, '/v1/scrape/records/record-1')
     expect(mockedApi.post).toHaveBeenNthCalledWith(1, '/v1/scrape/re-scrape', { record_ids: ['record-1'] })
-    expect(mockedApi.post).toHaveBeenNthCalledWith(2, '/v1/scrape/clear-failed', {})
-    expect(mockedApi.post).toHaveBeenNthCalledWith(3, '/v1/scrape/truncate-all', {})
+    expect(mockedApi.post).toHaveBeenNthCalledWith(2, '/v1/scrape/clear-failed', { confirm: true })
+    expect(mockedApi.post).toHaveBeenNthCalledWith(3, '/v1/scrape/truncate-all', { confirm: true })
   })
 })

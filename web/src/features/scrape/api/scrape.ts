@@ -146,11 +146,11 @@ export const scrapeApi = {
   },
 
   clearFailed(): Promise<{ cleared: number }> {
-    return api.post('/v1/scrape/clear-failed', {})
+    return api.post('/v1/scrape/clear-failed', { confirm: true })
   },
 
   truncateAll(): Promise<{ truncated: number }> {
-    return api.post('/v1/scrape/truncate-all', {})
+    return api.post('/v1/scrape/truncate-all', { confirm: true })
   }
 }
 

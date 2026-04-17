@@ -1,7 +1,7 @@
 import { nextTick } from 'vue'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import ScrapeRecordsView from './ScrapeRecordsView.vue'
 
 const scrapeApiMocks = vi.hoisted(() => ({
@@ -80,6 +80,8 @@ describe('ScrapeRecordsView', () => {
       error_message: 'timeout',
       recognition_result: { match: 'Show' }
     })
+    scrapeApiMocks.clearFailed.mockResolvedValue({ cleared: 1 })
+    scrapeApiMocks.truncateAll.mockResolvedValue({ truncated: 2 })
   })
 
   it('renders hero metrics and prioritizes the failed record in the spotlight', async () => {
@@ -120,5 +122,57 @@ describe('ScrapeRecordsView', () => {
     expect(scrapeApiMocks.getRecord).toHaveBeenCalledWith('record-failed')
     expect(wrapper.getComponent({ name: 'ElDrawer' }).props('modelValue')).toBe(true)
     expect(wrapper.text()).toContain('TMDB_TIMEOUT')
+  })
+
+  it('confirms and clears failed records through the scrape api', async () => {
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    const successSpy = vi.spyOn(ElMessage, 'success').mockImplementation(() => undefined as never)
+    const wrapper = mount(ScrapeRecordsView, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          teleport: true
+        }
+      }
+    })
+
+    await flushUi()
+
+    const clearButton = wrapper.findAll('button').find(button => button.text().includes('清理失败'))
+    expect(clearButton).toBeTruthy()
+
+    await clearButton!.trigger('click')
+    await flushUi()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(scrapeApiMocks.clearFailed).toHaveBeenCalledTimes(1)
+    expect(scrapeApiMocks.listRecords).toHaveBeenCalledTimes(2)
+    expect(successSpy).toHaveBeenCalledWith('已清理 1 条失败记录')
+  })
+
+  it('confirms and truncates all records through the scrape api', async () => {
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    const successSpy = vi.spyOn(ElMessage, 'success').mockImplementation(() => undefined as never)
+    const wrapper = mount(ScrapeRecordsView, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          teleport: true
+        }
+      }
+    })
+
+    await flushUi()
+
+    const truncateButton = wrapper.findAll('button').find(button => button.text().includes('清空记录'))
+    expect(truncateButton).toBeTruthy()
+
+    await truncateButton!.trigger('click')
+    await flushUi()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(scrapeApiMocks.truncateAll).toHaveBeenCalledTimes(1)
+    expect(scrapeApiMocks.listRecords).toHaveBeenCalledTimes(2)
+    expect(successSpy).toHaveBeenCalledWith('已清空 2 条记录')
   })
 })
