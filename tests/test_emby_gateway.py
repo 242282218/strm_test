@@ -344,6 +344,33 @@ def test_gateway_videos_stream_when_dedicated_proxy_host_then_intercepts_local_s
     mock_stream.assert_awaited_once()
 
 
+def test_gateway_videos_stream_when_container_suffix_present_then_intercepts_local_stream_path():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._handle_emby_style_stream",
+            new=AsyncMock(return_value=Response(content=b"stream-body", media_type="video/mp4", status_code=206)),
+        ) as mock_stream,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not forward to upstream emby")),
+        ),
+    ):
+        response = client.get(
+            "/Videos/item123/stream.mkv",
+            params={"MediaSourceId": "media123", "Static": "true", "smart_media_proxy": "1"},
+            headers={"host": "proxy.example:18097", "Range": "bytes=0-1"},
+        )
+
+    assert response.status_code == 206
+    assert response.content == b"stream-body"
+    mock_stream.assert_awaited_once()
+    assert mock_stream.await_args.kwargs["filename"] == "mkv"
+
+
 def test_gateway_videos_master_playlist_when_dedicated_proxy_host_then_intercepts_local_master_path():
     client = _build_client()
     app_config = _mock_config()

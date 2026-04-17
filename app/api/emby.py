@@ -897,6 +897,7 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.api_route("/videos/{item_id}/stream.{filename}", methods=["GET", "HEAD"])
 @router.api_route("/videos/{item_id}/stream", methods=["GET", "HEAD"])
 async def stream_video(
     item_id: str,

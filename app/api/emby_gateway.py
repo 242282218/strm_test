@@ -46,7 +46,10 @@ config = get_config()
 config_service = get_config_service()
 
 _PLAYBACKINFO_RE = re.compile(r"^(?:emby/)?Items/(?P<item_id>[^/]+)/PlaybackInfo/?$", re.IGNORECASE)
-_VIDEOS_STREAM_RE = re.compile(r"^(?:emby/)?Videos/(?P<item_id>[^/]+)/stream/?$", re.IGNORECASE)
+_VIDEOS_STREAM_RE = re.compile(
+    r"^(?:emby/)?Videos/(?P<item_id>[^/]+)/stream(?:\.(?P<filename>[^/?]+))?/?$",
+    re.IGNORECASE,
+)
 _VIDEOS_MASTER_RE = re.compile(r"^(?:emby/)?Videos/(?P<item_id>[^/]+)/master\.m3u8/?$", re.IGNORECASE)
 _HOP_BY_HOP_HEADERS = {
     "connection",
@@ -286,10 +289,9 @@ async def _forward_to_emby(request: Request, app_config, path: str) -> Response:
     return response
 
 
-async def _handle_emby_style_stream(request: Request, item_id: str) -> Response:
+async def _handle_emby_style_stream(request: Request, item_id: str, filename: str | None = None) -> Response:
     media_source_id = request.query_params.get("MediaSourceId") or request.query_params.get("media_source_id")
     static = str(request.query_params.get("Static") or request.query_params.get("static") or "").lower() == "true"
-    filename = request.query_params.get("filename")
     return await stream_video(
         item_id=item_id,
         request=request,
@@ -324,7 +326,7 @@ async def _handle_gateway_request(request: Request, path: str) -> Response:
         stream_match = _VIDEOS_STREAM_RE.match(path)
         if stream_match:
             item_id = validate_identifier(stream_match.group("item_id"), "item_id")
-            return await _handle_emby_style_stream(request, item_id)
+            return await _handle_emby_style_stream(request, item_id, filename=stream_match.group("filename"))
 
     if request.method in {"GET", "HEAD"} and _is_local_playback_proxy_request(request):
         master_match = _VIDEOS_MASTER_RE.match(path)
