@@ -257,7 +257,14 @@
                 <h3 class="card-title">缓存统计</h3>
                 <p class="card-description">缓存规模、命中率与过期策略概览。</p>
               </div>
-              <el-button type="primary" text size="small" @click="clearCache">
+              <el-button
+                type="primary"
+                text
+                size="small"
+                class="cache-clear-button"
+                :loading="isClearingCache"
+                @click="clearCache"
+              >
                 清空缓存
               </el-button>
             </div>
@@ -311,7 +318,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts/core'
 import { LineChart, PieChart } from 'echarts/charts'
 import {
@@ -337,7 +344,11 @@ import {
   getIconComponent
 } from '@/components/icons'
 import { useDebounce, useECharts } from '@/composables'
-import { getDashboardStats, getTaskTrends } from '@/features/dashboard/api/dashboard'
+import {
+  clearDashboardCache,
+  getDashboardStats,
+  getTaskTrends
+} from '@/features/dashboard/api/dashboard'
 import { buildTaskLaunchQuery } from '@/features/tasks'
 import type {
   CacheDetail,
@@ -395,6 +406,7 @@ interface StatusBadge {
 
 const router = useRouter()
 const loading = ref(false)
+const isClearingCache = ref(false)
 const timeRange = ref<TimeRange>('week')
 const timeRangeLabel = computed(() => timeRange.value === 'week' ? '7 天' : '30 天')
 
@@ -852,9 +864,30 @@ watch(timeRange, () => {
   debouncedFetchTaskTrends()
 })
 
-const clearCache = () => {
-  ElMessage.success('缓存已清空')
-  cacheStats.value.size = 0
+const clearCache = async () => {
+  if (isClearingCache.value) {
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('确定要清空全部缓存吗？', '确认', {
+      type: 'warning'
+    })
+
+    isClearingCache.value = true
+    await clearDashboardCache()
+    ElMessage.success('缓存已清空')
+    await fetchDashboardData()
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') {
+      return
+    }
+
+    console.error('清空缓存失败:', error)
+    ElMessage.error('清空缓存失败')
+  } finally {
+    isClearingCache.value = false
+  }
 }
 
 const handleResize = () => {

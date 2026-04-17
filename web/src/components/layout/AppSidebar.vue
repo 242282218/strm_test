@@ -92,12 +92,12 @@
         </template>
       </el-menu>
 
-      <div class="sidebar-footer" :class="{ 'is-collapsed': isSidebarCollapsed }">
-        <div class="sidebar-account" :class="{ 'is-collapsed': isSidebarCollapsed }">
-          <UserDropdown :collapsed="isSidebarCollapsed" />
-        </div>
+      <div
+        v-if="!isMobileViewport"
+        class="sidebar-footer"
+        :class="{ 'is-collapsed': isSidebarCollapsed }"
+      >
         <el-button
-          v-if="!isMobileViewport"
           class="collapse-button"
           link
           :icon="isSidebarCollapsed ? Expand : Fold"
@@ -118,7 +118,6 @@ import {
   getIconComponent
 } from '@/components/icons'
 import { useShellNavigation } from '@/features/app-shell/shell-navigation'
-import UserDropdown from './UserDropdown.vue'
 
 defineOptions({
   name: 'AppSidebar'
@@ -511,23 +510,6 @@ watch([isMobileViewport, isMobileDrawerOpen], ([mobile, drawerOpen]) => {
 .sidebar-footer.is-collapsed {
   align-items: center;
   padding-top: 8px;
-}
-
-.sidebar-account {
-  width: 100%;
-  display: flex;
-}
-
-.sidebar-account.is-collapsed {
-  justify-content: center;
-}
-
-.sidebar-account :deep(.user-dropdown) {
-  width: 100%;
-}
-
-.sidebar-account.is-collapsed :deep(.user-dropdown) {
-  width: auto;
 }
 
 .collapse-button {

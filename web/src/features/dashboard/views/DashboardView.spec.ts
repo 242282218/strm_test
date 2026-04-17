@@ -3,12 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import DashboardView from './DashboardView.vue'
 
 const dashboardApiMocks = vi.hoisted(() => ({
   getDashboardStats: vi.fn(),
   getTaskTrends: vi.fn(),
+  clearDashboardCache: vi.fn(),
 }))
 
 const chartMocks = vi.hoisted(() => ({
@@ -105,6 +106,11 @@ describe('DashboardView', () => {
       success: [3, 4],
       failed: [0, 1]
     })
+
+    dashboardApiMocks.clearDashboardCache.mockResolvedValue({
+      status: 'success',
+      message: 'All cache has been cleared'
+    })
   })
 
   it('renders hero signals and latest task spotlight from dashboard data', async () => {
@@ -161,5 +167,39 @@ describe('DashboardView', () => {
     await actionButtons[2]!.trigger('click')
     await flushUi()
     expect(router.currentRoute.value.fullPath).toBe('/scrape-pathes')
+  })
+
+  it('clears cache through the real API contract and refreshes dashboard stats', async () => {
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    const successSpy = vi.spyOn(ElMessage, 'success').mockImplementation(vi.fn())
+    const errorSpy = vi.spyOn(ElMessage, 'error').mockImplementation(vi.fn())
+
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } }
+      ]
+    })
+
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(DashboardView, {
+      global: {
+        plugins: [router, ElementPlus]
+      }
+    })
+
+    await flushUi()
+    expect(dashboardApiMocks.getDashboardStats).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('.cache-clear-button').trigger('click')
+    await flushUi()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(dashboardApiMocks.clearDashboardCache).toHaveBeenCalledTimes(1)
+    expect(dashboardApiMocks.getDashboardStats).toHaveBeenCalledTimes(2)
+    expect(successSpy).toHaveBeenCalledWith('缓存已清空')
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 })

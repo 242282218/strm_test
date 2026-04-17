@@ -139,13 +139,11 @@ describe('AppSidebar', () => {
     expect(wrapper.get('.sidebar-overview-copy').text()).toContain('7 个业务区')
   })
 
-  it('renders footer account entry above the collapse button', () => {
+  it('renders only the collapse control in the desktop footer', () => {
     const wrapper = mountSidebar()
 
-    expect(wrapper.find('.sidebar-account').exists()).toBe(true)
-    expect(wrapper.find('.sidebar-account .user-dropdown-mock').exists()).toBe(true)
-    expect(wrapper.get('.sidebar-account .user-dropdown-mock').attributes('data-collapsed')).toBe('false')
-    expect(wrapper.find('.sidebar-menu .user-dropdown-mock').exists()).toBe(false)
+    expect(wrapper.find('.sidebar-account').exists()).toBe(false)
+    expect(wrapper.find('.user-dropdown-mock').exists()).toBe(false)
     expect(wrapper.find('.sidebar-footer .collapse-button').exists()).toBe(true)
   })
 
@@ -167,17 +165,16 @@ describe('AppSidebar', () => {
     expect(wrapper.get('.sidebar-footer').classes()).toContain('is-collapsed')
   })
 
-  it('passes collapsed state into the footer account entry and hides overview card', async () => {
+  it('hides the overview card and keeps the compact footer state when collapsed', async () => {
     const wrapper = mountSidebar()
 
-    expect(wrapper.get('.sidebar-account .user-dropdown-mock').attributes('data-collapsed')).toBe('false')
     expect(wrapper.get('.sidebar-overview').isVisible()).toBe(true)
 
     await wrapper.get('.sidebar-footer .collapse-button').trigger('click')
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.get('.sidebar-account .user-dropdown-mock').attributes('data-collapsed')).toBe('true')
     expect(wrapper.get('.sidebar-overview').attributes('style')).toContain('display: none')
+    expect(wrapper.get('.sidebar-footer').classes()).toContain('is-collapsed')
   })
 
   it('renders menu with compact density class', () => {
@@ -200,7 +197,7 @@ describe('AppSidebar', () => {
     expect(wrapper.get('.sidebar').classes()).toContain('is-mobile')
     expect(wrapper.get('.sidebar').classes()).not.toContain('is-collapsed')
     expect(wrapper.get('.sidebar-shell').classes()).toContain('is-mobile')
-    expect(wrapper.get('.sidebar-account .user-dropdown-mock').attributes('data-collapsed')).toBe('false')
+    expect(wrapper.find('.sidebar-footer').exists()).toBe(false)
   })
 
   it('opens and closes the mobile drawer through shared shell state', async () => {
