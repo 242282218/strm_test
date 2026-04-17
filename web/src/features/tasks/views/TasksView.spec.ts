@@ -110,6 +110,8 @@ describe('TasksView task launch routing', () => {
     await flushUi()
 
     expect(taskApiMocks.getTasks).toHaveBeenCalledTimes(1)
+    expect(globalThis.WebSocket).toHaveBeenCalled()
+    expect(String((globalThis.WebSocket as unknown as { mock: { calls: Array<[string]> } }).mock.calls[0]?.[0])).toContain('/api/v1/tasks/ws')
     expect(wrapper.get('.create-task-dialog-mock').attributes('data-visible')).toBe('true')
     expect(wrapper.get('.create-task-dialog-mock').attributes('data-task-type')).toBe('file_sync')
     expect(wrapper.text()).toContain('快捷入口已预填')

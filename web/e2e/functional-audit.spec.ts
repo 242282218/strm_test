@@ -3,6 +3,7 @@
  * 不是"看得见"就算通过，而是"点完后没报错、跳转正确、弹窗正常"才算通过。
  */
 import { test, expect, type Page } from '@playwright/test'
+import { getPageRoot, navigateAndWait } from './helpers'
 
 // 收集页面上所有 API 错误和控制台错误
 function setupErrorCollectors(page: Page) {
@@ -31,40 +32,36 @@ function setupErrorCollectors(page: Page) {
 // Dashboard 快捷操作按钮
 // ============================================================
 test.describe('Dashboard 快捷操作按钮', () => {
-  test('生成STRM 按钮跳转到 /proxy-service', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
-    // 等待快捷操作区域渲染
-    const btn = page.getByRole('button', { name: '生成STRM' })
+  test('生成 STRM 按钮跳转到预填的任务中心', async ({ page }) => {
+    await navigateAndWait(page, '/dashboard')
+    const btn = getPageRoot(page, '.dashboard').getByRole('button', { name: '生成 STRM' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    await page.waitForURL('**/proxy-service', { timeout: 5000 })
-    await expect(page).toHaveURL(/proxy-service/)
+    await page.waitForURL('**/tasks?createTask=strm_generation', { timeout: 5000 })
+    await expect(page).toHaveURL(/tasks\?createTask=strm_generation/)
   })
 
-  test('同步文件 按钮触发消息提示', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
-    const btn = page.getByRole('button', { name: '同步文件' })
+  test('同步文件 按钮跳转到预填的任务中心', async ({ page }) => {
+    await navigateAndWait(page, '/dashboard')
+    const btn = getPageRoot(page, '.dashboard').getByRole('button', { name: '同步文件' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    // 应弹出 ElMessage
-    await expect(page.locator('.el-message')).toBeVisible({ timeout: 3000 })
+    await page.waitForURL('**/tasks?createTask=file_sync', { timeout: 5000 })
+    await expect(page).toHaveURL(/tasks\?createTask=file_sync/)
   })
 
-  test('验证文件 按钮触发消息提示', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
-    const btn = page.getByRole('button', { name: '验证文件' })
+  test('刮削目录 按钮跳转到 /scrape-pathes', async ({ page }) => {
+    await navigateAndWait(page, '/dashboard')
+    const btn = getPageRoot(page, '.dashboard').getByRole('button', { name: '刮削目录' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    await expect(page.locator('.el-message')).toBeVisible({ timeout: 3000 })
+    await page.waitForURL('**/scrape-pathes', { timeout: 5000 })
+    await expect(page).toHaveURL(/scrape-pathes/)
   })
 
   test('系统配置 按钮跳转到 /config', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
-    const btn = page.getByRole('button', { name: '系统配置' })
+    await navigateAndWait(page, '/dashboard')
+    const btn = getPageRoot(page, '.dashboard').getByRole('button', { name: '系统配置' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
     await page.waitForURL('**/config', { timeout: 5000 })
@@ -73,9 +70,8 @@ test.describe('Dashboard 快捷操作按钮', () => {
 
   test('刷新数据 按钮不报错', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
-    const btn = page.getByRole('button', { name: '刷新数据' })
+    await navigateAndWait(page, '/dashboard')
+    const btn = getPageRoot(page, '.dashboard').getByRole('button', { name: '刷新数据' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
     await page.waitForTimeout(2000)
@@ -84,9 +80,8 @@ test.describe('Dashboard 快捷操作按钮', () => {
   })
 
   test('查看全部 链接跳转到 /tasks', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
-    const link = page.getByText('查看全部')
+    await navigateAndWait(page, '/dashboard')
+    const link = getPageRoot(page, '.dashboard').getByRole('button', { name: '查看全部' })
     await expect(link).toBeVisible({ timeout: 10_000 })
     await link.click()
     await page.waitForURL('**/tasks', { timeout: 5000 })
@@ -108,9 +103,9 @@ test.describe('Dashboard 快捷操作按钮', () => {
 // ============================================================
 test.describe('Tasks 页面按钮功能', () => {
   test('新建任务弹窗：打开、填写、关闭', async ({ page }) => {
-    await page.goto('/tasks')
-    await page.waitForLoadState('domcontentloaded')
-    await page.getByRole('button', { name: '新建任务' }).click()
+    await navigateAndWait(page, '/tasks')
+    const tasksPage = getPageRoot(page, '.tasks-page')
+    await tasksPage.locator('.hero-actions').getByRole('button', { name: '新建任务' }).click()
     const dialog = page.locator('.el-dialog').first()
     await expect(dialog).toBeVisible({ timeout: 5000 })
     // 弹窗内应有任务类型选择
@@ -130,9 +125,8 @@ test.describe('Tasks 页面按钮功能', () => {
 
   test('刷新按钮不报 500', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/tasks')
-    await page.waitForLoadState('domcontentloaded')
-    const btn = page.getByRole('button', { name: '刷新' })
+    await navigateAndWait(page, '/tasks')
+    const btn = getPageRoot(page, '.tasks-page').getByRole('button', { name: '刷新队列' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
     await page.waitForTimeout(2000)
@@ -142,11 +136,10 @@ test.describe('Tasks 页面按钮功能', () => {
 
   test('状态筛选：选择后表格更新', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/tasks')
-    await page.waitForLoadState('domcontentloaded')
-    const filterCard = page.locator('.filter-card')
-    if (await filterCard.count() > 0) {
-      const statusSelect = filterCard.locator('.el-select').first()
+    await navigateAndWait(page, '/tasks')
+    const filterPanel = getPageRoot(page, '.tasks-page').locator('.filter-panel')
+    if (await filterPanel.count() > 0) {
+      const statusSelect = filterPanel.locator('.el-select').first()
       await statusSelect.click()
       const option = page.locator('.el-select-dropdown__item').first()
       if (await option.count() > 0) {
@@ -159,9 +152,8 @@ test.describe('Tasks 页面按钮功能', () => {
   })
 
   test('重置按钮清空筛选', async ({ page }) => {
-    await page.goto('/tasks')
-    await page.waitForLoadState('domcontentloaded')
-    const resetBtn = page.getByRole('button', { name: '重置' })
+    await navigateAndWait(page, '/tasks')
+    const resetBtn = getPageRoot(page, '.tasks-page').locator('.filter-panel').getByRole('button', { name: '重置' })
     if (await resetBtn.count() > 0) {
       await resetBtn.click()
       await page.waitForTimeout(1000)

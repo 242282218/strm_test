@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import APIRouter
+from fastapi.testclient import TestClient
 
 
 class TestV1RouterAggregation:
@@ -217,3 +218,13 @@ class TestMainRouterRegistration:
         ]
 
         assert len(gateway_root_routes) == 1
+
+    def test_main_app_prefers_canonical_v1_tasks_collection_over_legacy_dynamic_alias(self, monkeypatch: pytest.MonkeyPatch):
+        from app.main import app
+
+        monkeypatch.setenv("REQUIRE_API_KEY", "false")
+        with TestClient(app) as client:
+            response = client.get("/api/v1/tasks", params={"skip": 0, "limit": 1})
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)

@@ -92,7 +92,6 @@ v1_router.include_router(quark.router, tags=["Quark"], include_in_schema=False)
 v1_router.include_router(strm.router, tags=["STRM"], include_in_schema=False)
 v1_router.include_router(proxy.router, tags=["Proxy"], include_in_schema=False)
 v1_router.include_router(emby.router, tags=["Emby"], include_in_schema=False)
-v1_router.include_router(tasks.router, tags=["Tasks"], include_in_schema=False)
 
 # Canonical V1 routes.
 _register_canonical_routes(quark.router, ["Quark"])

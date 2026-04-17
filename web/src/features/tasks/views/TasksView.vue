@@ -568,7 +568,7 @@ const connectWebSocket = () => {
   socketState.value = 'connecting'
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
-  const wsUrl = `${protocol}//${host}/api/tasks/ws`
+  const wsUrl = `${protocol}//${host}/api/v1/tasks/ws`
   ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {

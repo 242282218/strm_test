@@ -1,7 +1,9 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import {
+  expectTableOrEmpty,
   navigateAndWait,
   collectApiErrors,
+  getPageRoot,
   waitForPageReady,
 } from './helpers'
 
@@ -12,18 +14,16 @@ import {
  * 点击前收集 console error，点击后检查是否有新增错误。
  */
 async function safeClickAndVerify(
-  page: Awaited<ReturnType<typeof test['extend']>>['page'],
-  selector: string,
+  page: Page,
+  target: Locator,
 ): Promise<void> {
   const errorsBefore: string[] = []
   page.on('console', (msg) => {
     if (msg.type() === 'error') errorsBefore.push(msg.text())
   })
 
-  const target = typeof selector === 'string'
-    ? page.locator(selector).first()
-    : selector
-  await expect(target, `目标元素 ${selector} 应该可见`).toBeVisible({ timeout: 5000 })
+  await expect(target).toBeVisible({ timeout: 5000 })
+  if (!(await target.isEnabled())) return
   await target.click()
 
   // 短暂等待，确保异步操作完成
@@ -96,11 +96,12 @@ test.describe('仪表盘 /dashboard 按钮功能', () => {
   test('刷新数据按钮可点击且不报错', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/dashboard')
+    const dashboardPage = getPageRoot(page, '.dashboard')
 
-    const refreshBtn = page.getByText('刷新数据')
+    const refreshBtn = dashboardPage.getByRole('button', { name: '刷新数据' })
     if (await refreshBtn.count() > 0) {
       await safeClickAndVerify(page, refreshBtn)
-      await expect(page.locator('.stat-card').first()).toBeVisible({ timeout: 10_000 })
+      await expect(dashboardPage.locator('.hero-signal').first()).toBeVisible({ timeout: 10_000 })
     }
     expect(apiErrors).toHaveLength(0)
   })
@@ -120,9 +121,10 @@ test.describe('仪表盘 /dashboard 按钮功能', () => {
   test('统计卡片区域可见且无 API 错误', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/dashboard')
+    const dashboardPage = getPageRoot(page, '.dashboard')
 
-    await expect(page.getByText('系统概览')).toBeVisible()
-    await expect(page.locator('.stat-card').first()).toBeVisible({ timeout: 10_000 })
+    await expect(dashboardPage.locator('.hero-signal').first()).toBeVisible({ timeout: 10_000 })
+    await expect(dashboardPage.locator('.stat-card').first()).toBeVisible({ timeout: 10_000 })
     expect(apiErrors).toHaveLength(0)
   })
 })
@@ -133,17 +135,20 @@ test.describe('任务管理 /tasks 按钮功能', () => {
   test('页面加载：标题、新建按钮、表格可见', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/tasks')
+    const tasksPage = getPageRoot(page, '.tasks-page')
 
-    await expect(page.getByText('任务编排中心')).toBeVisible()
-    await expect(page.getByText('新建任务')).toBeVisible()
-    await expect(page.locator('.stat-card').first()).toBeVisible({ timeout: 10_000 })
+    await expect(tasksPage.locator('.hero-title')).toBeVisible()
+    await expect(tasksPage.locator('.hero-actions').getByRole('button', { name: '新建任务' })).toBeVisible()
+    await expect(tasksPage.locator('.metric-card').first()).toBeVisible({ timeout: 10_000 })
+    await expectTableOrEmpty(tasksPage.locator('.tasks-panel'))
     expect(apiErrors).toHaveLength(0)
   })
 
   test('新建任务弹窗可打开并关闭', async ({ page }) => {
     await navigateAndWait(page, '/tasks')
+    const tasksPage = getPageRoot(page, '.tasks-page')
 
-    const newTaskBtn = page.getByRole('button', { name: '新建任务' })
+    const newTaskBtn = tasksPage.locator('.hero-actions').getByRole('button', { name: '新建任务' })
     await newTaskBtn.click()
     await expect(page.locator('.el-dialog').first()).toBeVisible({ timeout: 5000 })
 
@@ -157,9 +162,9 @@ test.describe('任务管理 /tasks 按钮功能', () => {
 
   test('状态筛选下拉框可展开并选择', async ({ page }) => {
     await navigateAndWait(page, '/tasks')
-    const filterCard = page.locator('.filter-card')
-    if (await filterCard.count() > 0) {
-      const statusSelect = filterCard.locator('.el-select').first()
+    const filterPanel = getPageRoot(page, '.tasks-page').locator('.filter-panel')
+    if (await filterPanel.count() > 0) {
+      const statusSelect = filterPanel.locator('.el-select').first()
       if (await statusSelect.count() > 0) {
         await statusSelect.click()
         await expect(page.locator('.el-select-dropdown:visible').first()).toBeVisible({ timeout: 5000 })
@@ -171,7 +176,7 @@ test.describe('任务管理 /tasks 按钮功能', () => {
 
   test('分页组件存在时可见且可交互', async ({ page }) => {
     await navigateAndWait(page, '/tasks')
-    const pagination = page.locator('.el-pagination')
+    const pagination = getPageRoot(page, '.tasks-page').locator('.el-pagination')
     if (await pagination.count() > 0) {
       await expect(pagination).toBeVisible()
       // 点击下一页按钮（如果可用）
@@ -190,10 +195,11 @@ test.describe('刮削目录 /scrape-pathes 按钮功能', () => {
   test('页面加载：标题和操作按钮栏可见', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/scrape-pathes')
+    const scrapePathsPage = getPageRoot(page, '.scrape-pathes-page')
 
-    await expect(page.getByRole('heading', { name: '刮削目录' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '新增目录' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '刷新' })).toBeVisible()
+    await expect(scrapePathsPage.locator('.hero-title')).toBeVisible()
+    await expect(page.getByTestId('scrape-create-button')).toBeVisible()
+    await expect(scrapePathsPage.locator('.hero-actions').getByRole('button', { name: '刷新', exact: true })).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 
@@ -213,7 +219,7 @@ test.describe('刮削目录 /scrape-pathes 按钮功能', () => {
 
   test('扫描按钮可点击', async ({ page }) => {
     await navigateAndWait(page, '/scrape-pathes')
-    const scanBtn = page.getByRole('button', { name: /扫描|开始扫描|Scan/ })
+    const scanBtn = getPageRoot(page, '.scrape-pathes-page').getByRole('button', { name: /启动|扫描|开始扫描|Scan/ })
     if (await scanBtn.count() > 0) {
       await safeClickAndVerify(page, scanBtn.first())
     }
@@ -252,10 +258,11 @@ test.describe('刮削记录 /scrape-records 按钮功能', () => {
   test('页面加载：标题和筛选器可见', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/scrape-records')
+    const scrapeRecordsPage = getPageRoot(page, '.scrape-records-page')
 
-    await expect(page.getByRole('heading', { name: '刮削记录' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '刷新' })).toBeVisible()
-    const toolbar = page.locator('.toolbar')
+    await expect(scrapeRecordsPage.locator('.hero-title')).toBeVisible()
+    await expect(page.getByTestId('scrape-records-refresh')).toBeVisible()
+    const toolbar = scrapeRecordsPage.locator('.toolbar')
     if (await toolbar.count() > 0) {
       await expect(toolbar).toBeVisible()
     }
@@ -285,9 +292,9 @@ test.describe('刮削记录 /scrape-records 按钮功能', () => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/scrape-records')
 
-    const refreshBtn = page.getByRole('button', { name: /刷新|Refresh/ })
+    const refreshBtn = page.getByTestId('scrape-records-refresh')
     if (await refreshBtn.count() > 0) {
-      await safeClickAndVerify(page, refreshBtn.first())
+      await safeClickAndVerify(page, refreshBtn)
     }
     expect(apiErrors).toHaveLength(0)
   })
@@ -300,11 +307,8 @@ test.describe('二级分类策略 /settings/category-strategy 按钮功能', () 
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/settings/category-strategy')
 
-    await expect(page.getByText('二级分类策略')).toBeVisible()
-    // 策略列表表格或空状态
-    const table = page.locator('.el-table')
-    const empty = page.locator('.el-empty')
-    await expect(table.or(empty).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('category-strategy-hero')).toBeVisible()
+    await expect(page.getByTestId('category-strategy-preview')).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 
@@ -364,10 +368,10 @@ test.describe('二级分类策略 /settings/category-strategy 按钮功能', () 
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/settings/category-strategy')
 
-    const saveBtn = page.getByRole('button', { name: /保存|Save/ })
+    const saveBtn = page.getByTestId('category-strategy-save-button')
     if (await saveBtn.count() > 0) {
-      await expect(saveBtn.first()).toBeVisible()
-      await safeClickAndVerify(page, saveBtn.first())
+      await expect(saveBtn).toBeVisible()
+      await safeClickAndVerify(page, saveBtn)
     }
     expect(apiErrors).toHaveLength(0)
   })
@@ -380,12 +384,8 @@ test.describe('Emby 监控 /emby-monitor 按钮功能', () => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/emby-monitor')
 
-    await expect(page.getByText('Emby 监控')).toBeVisible()
-    // 监控卡片或状态面板
-    const monitorCard = page.locator('.monitor-card, .status-card, .panel-card')
-    if (await monitorCard.count() > 0) {
-      await expect(monitorCard.first()).toBeVisible({ timeout: 10_000 })
-    }
+    await expect(page.getByTestId('emby-monitor-hero')).toBeVisible()
+    await expect(page.getByTestId('emby-events-panel')).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 
@@ -435,9 +435,10 @@ test.describe('系统配置 /config 按钮功能', () => {
   test('页面加载：标题和配置区域可见', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/config')
+    const main = getPageRoot(page, '.config-page')
 
-    await expect(page.getByText('配置分组')).toBeVisible()
-    await expect(page.getByText('高级配置（JSON）')).toBeVisible()
+    await expect(main.getByRole('heading', { name: '配置分组' })).toBeVisible()
+    await expect(page.getByTestId('config-section-json')).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 
@@ -493,9 +494,10 @@ test.describe('资源搜索 /search 按钮功能', () => {
   test('页面加载：搜索框和搜索按钮可见', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/search')
+    const searchPage = getPageRoot(page, '.search-page')
 
-    await expect(page.getByRole('heading', { name: '资源搜索' })).toBeVisible()
-    await expect(page.locator('input[type="text"]').first()).toBeVisible({ timeout: 10_000 })
+    await expect(searchPage.locator('.hero-title')).toHaveText('资源搜索')
+    await expect(searchPage.locator('input[type="text"]').first()).toBeVisible({ timeout: 10_000 })
     expect(apiErrors).toHaveLength(0)
   })
 
@@ -601,37 +603,31 @@ test.describe('智能重命名 /smart-rename 按钮功能', () => {
   test('页面加载：标题、本地目录与操作按钮可见', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/smart-rename')
+    const smartRenamePage = getPageRoot(page, '.smart-rename-page')
 
-    await expect(page.getByRole('heading', { name: '智能重命名' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: '本地目录' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '生成预览' })).toBeVisible()
+    await expect(smartRenamePage.getByRole('heading', { name: '智能重命名' })).toBeVisible()
+    await expect(smartRenamePage.getByRole('heading', { name: '本地目录' })).toBeVisible()
+    await expect(smartRenamePage.getByRole('button', { name: '生成预览' })).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 
-  test('执行智能重命名按钮可点击', async ({ page }) => {
+  test('执行智能重命名按钮在未输入路径前保持禁用', async ({ page }) => {
     await navigateAndWait(page, '/smart-rename')
-    const executeBtn = page.getByRole('button', { name: /执行|开始|AI 重命名|Smart Rename|生成/ })
-    if (await executeBtn.count() > 0) {
-      await expect(executeBtn.first()).toBeVisible()
-      await safeClickAndVerify(page, executeBtn.first())
-    }
+    const executeBtn = getPageRoot(page, '.smart-rename-page').getByRole('button', { name: '执行重命名' })
+    await expect(executeBtn).toBeVisible()
+    await expect(executeBtn).toBeDisabled()
   })
 
-  test('预览按钮展示 AI 重命名结果', async ({ page }) => {
+  test('预览按钮在未输入路径前保持禁用', async ({ page }) => {
     await navigateAndWait(page, '/smart-rename')
-    const previewBtn = page.getByRole('button', { name: /预览|Preview|AI 预览/ })
-    if (await previewBtn.count() > 0) {
-      await safeClickAndVerify(page, previewBtn.first())
-      const previewArea = page.locator('.preview-result, .ai-preview, .preview-table')
-      if (await previewArea.count() > 0) {
-        await expect(previewArea.first()).toBeVisible({ timeout: 5000 })
-      }
-    }
+    const previewBtn = getPageRoot(page, '.smart-rename-page').getByRole('button', { name: '生成预览' })
+    await expect(previewBtn).toBeVisible()
+    await expect(previewBtn).toBeDisabled()
   })
 
   test('算法与命名标准选择器可交互', async ({ page }) => {
     await navigateAndWait(page, '/smart-rename')
-    const configSelects = page.locator('.config-grid .el-select')
+    const configSelects = getPageRoot(page, '.smart-rename-page').locator('.config-grid .el-select')
     if (await configSelects.count() > 0) {
       await configSelects.first().click()
       await expect(page.locator('.el-select-dropdown')).toBeVisible({ timeout: 5000 })
@@ -647,9 +643,9 @@ test.describe('代理服务 /proxy-service 按钮功能', () => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/proxy-service')
 
-    await expect(page.getByRole('heading', { name: '代理服务' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '刷新' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '清除缓存' })).toBeVisible()
+    await expect(page.getByTestId('proxy-service-hero')).toBeVisible()
+    await expect(page.getByTestId('proxy-cache-panel')).toBeVisible()
+    await expect(page.getByTestId('proxy-clear-cache')).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 
@@ -696,12 +692,8 @@ test.describe('WebDAV 挂载 /webdav 按钮功能', () => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/webdav')
 
-    await expect(page.getByText('WebDAV 挂载')).toBeVisible()
-    // WebDAV 状态信息
-    const statusInfo = page.locator('.mount-status, .connection-status, .status-info')
-    if (await statusInfo.count() > 0) {
-      await expect(statusInfo.first()).toBeVisible({ timeout: 10_000 })
-    }
+    await expect(page.getByTestId('webdav-hero')).toBeVisible()
+    await expect(page.getByTestId('webdav-connection-panel')).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 
@@ -799,10 +791,11 @@ test.describe('通知历史 /notifications/history 按钮功能', () => {
   test('页面加载：历史记录列表可见', async ({ page }) => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/notifications/history')
+    const historyPage = getPageRoot(page, '.notification-history-page')
 
-    await expect(page.getByRole('heading', { name: '通知历史' })).toBeVisible()
-    const timeline = page.locator('.el-timeline')
-    const empty = page.locator('.el-empty')
+    await expect(historyPage.locator('.hero-title')).toBeVisible()
+    const timeline = historyPage.locator('.el-timeline')
+    const empty = historyPage.locator('.empty-state')
     await expect(timeline.or(empty).first()).toBeVisible({ timeout: 10_000 })
     expect(apiErrors).toHaveLength(0)
   })
@@ -851,13 +844,18 @@ test.describe('通知历史 /notifications/history 按钮功能', () => {
 // ===== 全局导航与边界条件 =====
 
 test.describe('全局导航栏与边界条件', () => {
-  test('未登录访问受保护路由应重定向到 /login', async ({ page }) => {
-    // 使用无 storageState 的 context
-    await page.context().clearCookies()
-    await navigateAndWait(page, '/dashboard')
-    // 应被重定向到 login 页面
-    const currentUrl = page.url()
-    expect(currentUrl).toContain('/login')
+  test('未登录访问受保护路由应重定向到 /login', async ({ browser }) => {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    })
+    const isolatedPage = await context.newPage()
+
+    try {
+      await navigateAndWait(isolatedPage, '/dashboard')
+      await expect(isolatedPage).toHaveURL(/\/login/)
+    } finally {
+      await context.close()
+    }
   })
 
   test('侧边栏导航链接均可点击', async ({ page }) => {
