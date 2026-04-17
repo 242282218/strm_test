@@ -1,63 +1,89 @@
 <template>
-  <div class="emby-monitor-page">
-    <div class="page-header">
-      <h2>Emby 监控</h2>
-      <div class="header-actions">
-        <el-switch v-model="autoRefresh" active-text="自动刷新" inactive-text="手动刷新" @change="toggleAutoRefresh" />
-        <el-button :loading="loading.refresh" @click="loadAll">刷新数据</el-button>
-        <el-button type="primary" :loading="loading.triggerRefresh" @click="triggerRefresh">触发刷新</el-button>
-        <el-button type="success" :loading="loading.sync" @click="triggerSync">触发同步</el-button>
-      </div>
-    </div>
+  <div class="workbench-page emby-monitor-page">
+    <section class="workbench-hero page-surface" data-testid="emby-monitor-hero">
+      <div class="workbench-main">
+        <div class="workbench-toolbar">
+          <div class="workbench-copy">
+            <span class="workbench-chip">Emby Watch</span>
+            <h2 class="workbench-title">Emby 监控、事件流与删除计划统一收口</h2>
+            <p class="workbench-description">
+              首屏先给出 Emby 连接、最近刷新和当前过滤范围，再进入事件流与 dry-run 删除计划，方便判断链路是否健康。
+            </p>
+          </div>
 
-    <el-row :gutter="16" class="status-row">
-      <el-col :xs="24" :md="8">
-        <el-card shadow="never">
-          <template #header>连接状态</template>
-          <el-tag :type="status?.enabled ? (status?.connected ? 'success' : 'warning') : 'info'">
-            {{ statusTagText }}
-          </el-tag>
-          <div class="status-line">URL: {{ status?.configuration.url || '-' }}</div>
-          <div class="status-line">聚合窗口: {{ status?.configuration.episode_aggregate_window_seconds || 10 }} 秒</div>
-          <div class="status-line">删除执行: {{ status?.configuration.delete_execute_enabled ? '已开启' : '已关闭' }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :md="8">
-        <el-card shadow="never">
-          <template #header>最近刷新</template>
-          <div v-if="latestRefresh">
-            <div class="status-line">
-              结果:
+          <div class="workbench-actions">
+            <el-switch
+              v-model="autoRefresh"
+              active-text="自动刷新"
+              inactive-text="手动刷新"
+              @change="toggleAutoRefresh"
+            />
+            <el-button :loading="loading.refresh" data-testid="emby-refresh-button" @click="loadAll">刷新数据</el-button>
+            <el-button type="primary" :loading="loading.triggerRefresh" @click="triggerRefresh">触发刷新</el-button>
+            <el-button type="success" :loading="loading.sync" @click="triggerSync">触发同步</el-button>
+          </div>
+        </div>
+
+        <div class="workbench-metrics">
+          <article
+            v-for="metric in heroMetrics"
+            :key="metric.label"
+            class="workbench-metric"
+          >
+            <span class="workbench-metric-label">{{ metric.label }}</span>
+            <strong class="workbench-metric-value">{{ metric.value }}</strong>
+            <p class="workbench-metric-detail">{{ metric.detail }}</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="workbench-side">
+        <article class="workbench-side-card">
+          <div class="workbench-side-head">
+            <div class="workbench-side-heading">
+              <span class="workbench-side-kicker">Latest Refresh</span>
+              <h3 class="workbench-side-title">{{ latestRefresh ? '最近一次刷新' : '暂无刷新记录' }}</h3>
+            </div>
+          </div>
+
+          <template v-if="latestRefresh">
+            <div class="refresh-state">
               <el-tag :type="latestRefresh.success ? 'success' : 'danger'" size="small">
                 {{ latestRefresh.success ? '成功' : '失败' }}
               </el-tag>
+              <span>{{ formatTime(latestRefresh.timestamp) }}</span>
             </div>
-            <div class="status-line">{{ latestRefresh.message }}</div>
-            <div class="status-line">{{ formatTime(latestRefresh.timestamp) }}</div>
-          </div>
-          <el-empty v-else description="暂无刷新记录" :image-size="50" />
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :md="8">
-        <el-card shadow="never">
-          <template #header>事件概览</template>
-          <div class="status-line">当前页事件数: {{ events.length }}</div>
-          <div class="status-line">总事件数: {{ total }}</div>
-          <div class="status-line">
-            过滤条件:
-            {{ filters.event_type || '全部事件' }} / {{ filters.item_type || '全部类型' }}
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+            <p class="workbench-side-copy">{{ latestRefresh.message }}</p>
+          </template>
+          <p v-else class="workbench-side-copy">还没有读取到最近刷新记录，可手动触发一次刷新或等待自动轮询。</p>
+        </article>
 
-    <el-card shadow="never" class="card">
-      <template #header>
-        <div class="card-header">
-          <span>Webhook 事件流</span>
-          <span class="hint">按更新时间倒序</span>
+        <article class="workbench-side-card">
+          <div class="workbench-side-head">
+            <div class="workbench-side-heading">
+              <span class="workbench-side-kicker">Delete Plan</span>
+              <h3 class="workbench-side-title">{{ currentPlan ? '当前 dry-run 计划' : '等待生成删除计划' }}</h3>
+            </div>
+          </div>
+
+          <p class="workbench-side-copy">{{ currentPlanSummary }}</p>
+          <div v-if="currentPlan" class="plan-focus">
+            <span>计划 ID</span>
+            <strong>{{ currentPlan.plan_id }}</strong>
+            <span>可执行 {{ currentPlan.executable_items }} / {{ currentPlan.total_items }}</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="workbench-section page-surface" data-testid="emby-events-panel">
+      <div class="workbench-section-head">
+        <div class="workbench-section-heading">
+          <span class="workbench-section-kicker">Webhook Stream</span>
+          <h3 class="workbench-section-title">Webhook 事件流</h3>
+          <p class="workbench-section-description">按更新时间倒序查看事件，支持类型和关键词过滤。</p>
         </div>
-      </template>
+      </div>
 
       <el-form :inline="true" class="filters">
         <el-form-item label="事件类型">
@@ -121,15 +147,19 @@
           @size-change="loadEvents"
         />
       </div>
-    </el-card>
+    </section>
 
-    <el-card shadow="never" class="card">
-      <template #header>
-        <div class="card-header">
-          <span>删除计划（Dry-run）</span>
+    <section class="workbench-section page-surface" data-testid="emby-delete-plan-panel">
+      <div class="workbench-section-head">
+        <div class="workbench-section-heading">
+          <span class="workbench-section-kicker">Dry Run</span>
+          <h3 class="workbench-section-title">删除计划（Dry-run）</h3>
+          <p class="workbench-section-description">默认只做计划预演；真实执行仍受后端 feature flag 控制。</p>
+        </div>
+        <div class="workbench-section-actions">
           <el-tag type="warning" effect="plain">默认仅预演，不执行真实删除</el-tag>
         </div>
-      </template>
+      </div>
 
       <el-form label-width="140px" class="delete-plan-form">
         <el-form-item label="来源">
@@ -191,7 +221,7 @@
         <el-table-column prop="reason" label="说明" min-width="220" show-overflow-tooltip />
         <el-table-column prop="execution_status" label="执行状态" width="120" />
       </el-table>
-    </el-card>
+    </section>
 
     <el-drawer v-model="payloadDrawer.visible" title="Webhook Payload" size="42%" destroy-on-close>
       <pre class="payload-json">{{ payloadDrawer.content }}</pre>
@@ -204,6 +234,12 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { embyApi, type EmbyRefreshHistoryItem, type EmbyStatus } from '@/api/emby'
 import { embyMonitorApi, type EmbyDeletePlanResponse, type EmbyEventLog } from '@/api/embyMonitor'
+
+type HeroMetric = {
+  label: string
+  value: string
+  detail: string
+}
 
 const status = ref<EmbyStatus | null>(null)
 const refreshHistory = ref<EmbyRefreshHistoryItem[]>([])
@@ -278,6 +314,41 @@ const statusTagText = computed(() => {
 
 const latestRefresh = computed(() => {
   return refreshHistory.value.length > 0 ? refreshHistory.value[0] : null
+})
+
+const heroMetrics = computed<HeroMetric[]>(() => {
+  return [
+    {
+      label: '连接状态',
+      value: statusTagText.value,
+      detail: status.value?.configuration.url ? `URL: ${status.value.configuration.url}` : '尚未读取到 Emby 地址。'
+    },
+    {
+      label: '聚合窗口',
+      value: `${status.value?.configuration.episode_aggregate_window_seconds || 10} 秒`,
+      detail: '用于合并短时间内的重复事件。'
+    },
+    {
+      label: '事件总数',
+      value: `${total.value}`,
+      detail: `当前页 ${events.value.length} 条；过滤条件 ${filters.event_type || '全部事件'} / ${filters.item_type || '全部类型'}`
+    },
+    {
+      label: '自动刷新',
+      value: autoRefresh.value ? '已开启' : '已暂停',
+      detail: autoRefresh.value ? '页面可见时每 10 秒轮询一次。' : '仅在手动点击时刷新。'
+    }
+  ]
+})
+
+const currentPlanSummary = computed(() => {
+  if (!currentPlan.value) {
+    return status.value?.configuration.delete_execute_enabled
+      ? '删除执行能力已开启，但当前还没有生成 dry-run 计划。'
+      : '当前实例默认只允许 dry-run 预演，执行能力未开启。'
+  }
+
+  return `计划包含 ${currentPlan.value.total_items} 项，其中 ${currentPlan.value.executable_items} 项可执行。生成新计划后会覆盖这里的摘要。`
 })
 
 const splitIds = (text: string): string[] => {
@@ -493,55 +564,37 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.emby-monitor-page {
-  padding: 8px;
-}
-
-.page-header {
-  margin-bottom: 16px;
+.refresh-state {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.page-header h2 {
-  margin: 0;
-}
-
-.header-actions {
-  display: flex;
+  align-items: center;
   gap: 10px;
-  align-items: center;
   flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
 }
 
-.status-row {
-  margin-bottom: 16px;
-}
-
-.status-line {
-  margin-top: 8px;
-  color: #606266;
-  font-size: 13px;
-}
-
-.card {
-  margin-bottom: 16px;
-}
-
-.card-header {
+.plan-focus {
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(79, 141, 246, 0.08);
+  border: 1px solid rgba(79, 141, 246, 0.16);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.hint {
-  color: #909399;
-  font-size: 12px;
+.plan-focus span {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.plan-focus strong {
+  font-size: 1rem;
+  font-weight: var(--font-semibold);
 }
 
 .filters {
+  margin-top: 20px;
   margin-bottom: 12px;
 }
 
@@ -552,6 +605,7 @@ onBeforeUnmount(() => {
 }
 
 .delete-plan-form {
+  margin-top: 20px;
   max-width: 920px;
 }
 
