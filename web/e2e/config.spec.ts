@@ -6,8 +6,8 @@ test.describe('系统配置 /config', () => {
     const apiErrors = collectApiErrors(page)
     await navigateAndWait(page, '/config')
 
-    await expect(page.getByText('配置分组')).toBeVisible()
-    await expect(page.getByText('高级配置（JSON）')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '配置分组', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '高级配置（JSON）', exact: true })).toBeVisible()
     expect(apiErrors).toHaveLength(0)
   })
 

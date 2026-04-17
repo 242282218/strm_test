@@ -1,174 +1,267 @@
 <template>
   <div class="config-page">
-    <div class="config-content">
+    <section class="config-hero page-surface">
+      <div class="hero-main">
+        <div class="hero-toolbar">
+          <div class="hero-copy">
+            <span class="hero-chip">Config Workbench</span>
+            <h2 class="hero-title">配置契约、当前分组与敏感字段状态集中收口</h2>
+            <p class="hero-description">
+              先看配置契约和当前工作区，再进入结构化表单或 JSON 编辑，避免系统配置继续停留在多块卡片直排的旧工作流。
+            </p>
+          </div>
+
+          <div class="hero-actions">
+            <el-button :loading="loading || configLoading" :icon="Refresh" @click="reloadConfigWorkbench">
+              重新加载
+            </el-button>
+            <el-button type="primary" :loading="configSaving" @click="saveSystemConfig">
+              保存全部配置
+            </el-button>
+          </div>
+        </div>
+
+        <div class="hero-metrics">
+          <article
+            v-for="metric in heroMetrics"
+            :key="metric.label"
+            class="metric-card"
+            :class="metric.tone"
+          >
+            <div class="metric-head">
+              <span class="metric-label">{{ metric.label }}</span>
+              <div class="metric-icon">
+                <el-icon size="18">
+                  <component :is="metric.icon" />
+                </el-icon>
+              </div>
+            </div>
+            <strong class="metric-value">{{ metric.value }}</strong>
+            <p class="metric-detail">{{ metric.detail }}</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="hero-side">
+        <article class="hero-side-card">
+          <div class="hero-side-head">
+            <div class="hero-side-heading">
+              <span class="section-label">聚焦</span>
+              <h3 class="hero-side-title">{{ selectedGroupLabel || '等待配置元数据' }}</h3>
+            </div>
+            <el-tag :type="showProfileSection ? 'warning' : 'primary'" size="small">
+              {{ showProfileSection ? '个人中心' : '结构化表单' }}
+            </el-tag>
+          </div>
+
+          <p class="spotlight-description">{{ selectedGroupDescription }}</p>
+
+          <div class="group-pill-list">
+            <span
+              v-for="group in schemaGroups.slice(0, 5)"
+              :key="group.key"
+              class="group-pill"
+            >
+              {{ group.label }}
+            </span>
+          </div>
+        </article>
+
+        <article class="hero-side-card">
+          <div class="hero-side-head">
+            <div class="hero-side-heading">
+              <span class="section-label">账号</span>
+              <h3 class="hero-side-title">{{ currentUsername }}</h3>
+            </div>
+            <el-tag type="info" size="small">{{ currentRoleLabel }}</el-tag>
+          </div>
+
+          <p class="spotlight-description">
+            主题切换和密码修改保留在当前工作台，不需要先切到个人中心再完成常用安全动作。
+          </p>
+
+          <div class="account-actions">
+            <div data-testid="profile-theme-switch">
+              <el-switch v-model="isDark" inline-prompt active-text="暗" inactive-text="亮" />
+            </div>
+            <el-button type="primary" plain @click="openProfileChangePasswordDialog">修改密码</el-button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="config-group-panel page-surface">
+      <div class="panel-head">
+        <div class="panel-heading">
+          <span class="section-label">分组</span>
+          <h3 class="panel-title">配置分组</h3>
+          <p class="panel-description">分组切换会同步写回 URL，刷新或分享当前工作区时不会丢失上下文。</p>
+        </div>
+        <el-tag v-if="selectedGroupLabel" type="primary" size="small">当前分组：{{ selectedGroupLabel }}</el-tag>
+      </div>
+
       <el-alert
         type="success"
         :closable="false"
         show-icon
         class="contract-status"
         :title="`配置契约已加载 · 敏感字段 ${configMetadata.sensitive_fields.length} 项`"
-        :description="`已配置 ${getConfiguredSensitiveFieldCount(configMetadata.sensitive_fields_status)} 项敏感字段`"
+        :description="`已配置 ${configuredSensitiveFieldCount} 项敏感字段`"
       />
 
-      <el-card class="config-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span>配置分组</span>
-          </div>
-        </template>
+      <div class="group-skeleton-list">
+        <button
+          v-for="group in schemaGroups"
+          :key="group.key"
+          type="button"
+          class="group-skeleton-tag"
+          :class="{ 'is-active': selectedGroupKey === group.key }"
+          :data-testid="`config-group-${group.key}`"
+          :aria-pressed="selectedGroupKey === group.key"
+          @click="selectedGroupKey = group.key"
+        >
+          <el-tag size="small" :effect="selectedGroupKey === group.key ? 'dark' : 'plain'">
+            {{ group.label }}
+          </el-tag>
+        </button>
+      </div>
+    </section>
 
-        <el-alert
-          v-if="selectedGroupLabel"
-          type="info"
-          :closable="false"
-          show-icon
-          class="group-selection-status"
-          :title="`当前分组：${selectedGroupLabel}`"
-        />
-
-        <div class="group-skeleton-list">
-          <button
-            v-for="group in schemaGroups"
-            :key="group.key"
-            type="button"
-            class="group-skeleton-tag"
-            :class="{ 'is-active': selectedGroupKey === group.key }"
-            :data-testid="`config-group-${group.key}`"
-            @click="selectedGroupKey = group.key"
-          >
-            <el-tag size="small" :effect="selectedGroupKey === group.key ? 'dark' : 'plain'">
-              {{ group.label }}
-            </el-tag>
-          </button>
+    <section
+      v-if="showProfileSection"
+      data-testid="config-section-profile"
+      class="profile-workbench page-surface"
+    >
+      <div class="panel-head">
+        <div class="panel-heading">
+          <span class="section-label">个人中心</span>
+          <h3 class="panel-title">账号与外观设置</h3>
+          <p class="panel-description">管理当前账号、主题偏好和密码修改入口。</p>
         </div>
-      </el-card>
+      </div>
 
-      <el-card v-if="showProfileSection" data-testid="config-section-profile" class="config-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span>个人中心</span>
+      <div class="profile-panel-list">
+        <section class="profile-panel">
+          <span class="profile-panel-label">当前账号</span>
+          <span class="profile-panel-value">{{ currentUsername }}</span>
+          <span class="profile-panel-hint">角色：{{ currentRoleLabel }}</span>
+        </section>
+
+        <section class="profile-panel">
+          <div class="profile-action-row">
+            <div>
+              <span class="profile-panel-label">外观设置</span>
+              <span class="profile-panel-hint">切换深色模式会立即同步到当前浏览器。</span>
+            </div>
+            <div data-testid="profile-theme-switch">
+              <el-switch v-model="isDark" inline-prompt active-text="暗" inactive-text="亮" />
+            </div>
           </div>
-        </template>
+        </section>
 
-        <div class="profile-panel-list">
-          <section class="profile-panel">
-            <span class="profile-panel-label">当前账号</span>
-            <span class="profile-panel-value">{{ currentUsername }}</span>
-            <span class="profile-panel-hint">角色：{{ currentRoleLabel }}</span>
-          </section>
-
-          <section class="profile-panel">
-            <div class="profile-action-row">
-              <div>
-                <span class="profile-panel-label">外观设置</span>
-                <span class="profile-panel-hint">切换深色模式会立即同步到当前浏览器。</span>
-              </div>
-              <div data-testid="profile-theme-switch">
-                <el-switch v-model="isDark" inline-prompt active-text="暗" inactive-text="亮" />
-              </div>
+        <section class="profile-panel">
+          <div class="profile-action-row">
+            <div>
+              <span class="profile-panel-label">安全操作</span>
+              <span class="profile-panel-hint">如需更新登录凭据，可在这里修改当前账号密码。</span>
             </div>
-          </section>
+            <el-button type="primary" @click="openProfileChangePasswordDialog">修改密码</el-button>
+          </div>
+        </section>
+      </div>
+    </section>
 
-          <section class="profile-panel">
-            <div class="profile-action-row">
-              <div>
-                <span class="profile-panel-label">安全操作</span>
-                <span class="profile-panel-hint">如需更新登录凭据，可在这里修改当前账号密码。</span>
-              </div>
-              <el-button type="primary" @click="openProfileChangePasswordDialog">修改密码</el-button>
-            </div>
-          </section>
+    <el-dialog
+      v-model="profileChangePasswordDialogVisible"
+      title="修改密码"
+      width="420px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-width="90px">
+        <el-form-item label="原密码">
+          <el-input v-model="profilePasswordForm.oldPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="新密码">
+          <el-input v-model="profilePasswordForm.newPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input v-model="profilePasswordForm.confirmPassword" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeProfileChangePasswordDialog">取消</el-button>
+          <el-button type="primary" @click="submitProfileChangePassword">确认</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <AsyncConfigGroupSectionRenderer
+      v-if="activeStructuredSectionKey"
+      :section-key="activeStructuredSectionKey"
+      :selected-group-label="selectedGroupLabel"
+      :loading="loading"
+      :saving="saving"
+      :config-loading="configLoading"
+      :providers="providers"
+      :basic-form="basicForm"
+      :quark-form="quarkForm"
+      :security-form="securityForm"
+      :alist-form="alistForm"
+      :tmdb-form="tmdbForm"
+      :log-form="logForm"
+      :cors-form="corsForm"
+      :telegram-form="telegramForm"
+      :wechat-form="wechatForm"
+      :webdav-form="webdavForm"
+      v-model:endpoints-form-json="endpointsFormJson"
+      :add-provider="addProvider"
+      :remove-provider="removeProvider"
+      :save-providers="saveProviders"
+      :load-providers="loadProviders"
+    />
+
+    <section data-testid="config-section-json" class="config-json-panel page-surface">
+      <div class="panel-head">
+        <div class="panel-heading">
+          <span class="section-label">JSON</span>
+          <h3 class="panel-title">高级配置（JSON）</h3>
+          <p class="panel-description">在结构化分组之外，保留完整配置的直接编辑入口。</p>
         </div>
-      </el-card>
+      </div>
 
-      <el-dialog
-        v-model="profileChangePasswordDialogVisible"
-        title="修改密码"
-        width="420px"
-        append-to-body
-        destroy-on-close
-      >
-        <el-form label-width="90px">
-          <el-form-item label="原密码">
-            <el-input v-model="profilePasswordForm.oldPassword" type="password" show-password />
-          </el-form-item>
-          <el-form-item label="新密码">
-            <el-input v-model="profilePasswordForm.newPassword" type="password" show-password />
-          </el-form-item>
-          <el-form-item label="确认密码">
-            <el-input v-model="profilePasswordForm.confirmPassword" type="password" show-password />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <span class="dialog-footer">
-            <el-button @click="closeProfileChangePasswordDialog">取消</el-button>
-            <el-button type="primary" @click="submitProfileChangePassword">确认</el-button>
-          </span>
-        </template>
-      </el-dialog>
-
-      <AsyncConfigGroupSectionRenderer
-        v-if="activeStructuredSectionKey"
-        :section-key="activeStructuredSectionKey"
-        :selected-group-label="selectedGroupLabel"
-        :loading="loading"
-        :saving="saving"
-        :config-loading="configLoading"
-        :providers="providers"
-        :basic-form="basicForm"
-        :quark-form="quarkForm"
-        :security-form="securityForm"
-        :alist-form="alistForm"
-        :tmdb-form="tmdbForm"
-        :log-form="logForm"
-        :cors-form="corsForm"
-        :telegram-form="telegramForm"
-        :wechat-form="wechatForm"
-        :webdav-form="webdavForm"
-        v-model:endpoints-form-json="endpointsFormJson"
-        :add-provider="addProvider"
-        :remove-provider="removeProvider"
-        :save-providers="saveProviders"
-        :load-providers="loadProviders"
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="该区域可编辑全部配置。敏感字段会脱敏显示；保持脱敏值不改动即可保留原密钥。"
+        class="hint"
       />
 
-      <el-card data-testid="config-section-json" class="config-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span>高级配置（JSON）</span>
-          </div>
-        </template>
+      <el-input
+        v-model="rawConfigJson"
+        type="textarea"
+        :rows="18"
+        class="config-json-editor"
+        v-loading="configLoading"
+      />
 
-        <el-alert
-          type="warning"
-          :closable="false"
-          show-icon
-          title="该区域可编辑全部配置。敏感字段会脱敏显示；保持脱敏值不改动即可保留原密钥。"
-          class="hint"
-        />
-
-        <el-input
-          v-model="rawConfigJson"
-          type="textarea"
-          :rows="18"
-          class="config-json-editor"
-          v-loading="configLoading"
-        />
-
-        <div class="form-actions">
-          <el-button @click="formatSystemConfig">格式化 JSON</el-button>
-          <el-button @click="loadSystemConfig" :loading="configLoading">重新加载</el-button>
-          <el-button type="primary" @click="saveSystemConfig" :loading="configSaving">保存全部配置</el-button>
-        </div>
-      </el-card>
-    </div>
+      <div class="form-actions">
+        <el-button @click="formatSystemConfig">格式化 JSON</el-button>
+        <el-button @click="loadSystemConfig" :loading="configLoading">重新加载</el-button>
+        <el-button type="primary" @click="saveSystemConfig" :loading="configSaving">保存全部配置</el-button>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, defineComponent, h, reactive, ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import type { Component } from 'vue'
+import { computed, defineAsyncComponent, defineComponent, h, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Collection, Lock, Refresh, Setting, User } from '@/components/icons'
 import { useTheme } from '@/composables'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -211,6 +304,16 @@ import {
   type WebDAVForm,
 } from '@/features/config/config-view-model'
 
+type MetricTone = 'primary' | 'success' | 'warning' | 'info'
+
+interface HeroMetric {
+  label: string
+  value: string
+  detail: string
+  icon: Component
+  tone: MetricTone
+}
+
 const ConfigSectionLoading = defineComponent({
   name: 'ConfigSectionLoading',
   setup() {
@@ -240,6 +343,7 @@ interface ProviderForm extends AIProviderItem {
 }
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const { isDark } = useTheme()
 
@@ -290,6 +394,56 @@ const configForms: ConfigFormState = {
   basicForm,
   wechatForm,
 }
+
+const configuredSensitiveFieldCount = computed(() => {
+  return getConfiguredSensitiveFieldCount(configMetadata.value.sensitive_fields_status)
+})
+
+const selectedGroupDescription = computed(() => {
+  if (!selectedGroupLabel.value) {
+    return '配置元数据加载完成后，这里会显示当前工作区与对应的编辑方式。'
+  }
+
+  if (showProfileSection.value) {
+    return '当前工作区聚焦账号、外观和密码更新。其余系统参数仍可通过分组或 JSON 工作台编辑。'
+  }
+
+  return `${selectedGroupLabel.value} 当前作为主工作区，结构化表单和 JSON 配置会围绕这组参数保持同步。`
+})
+
+const heroMetrics = computed<HeroMetric[]>(() => {
+  const totalSensitiveFields = configMetadata.value.sensitive_fields.length
+  return [
+    {
+      label: '敏感字段',
+      value: `${configuredSensitiveFieldCount.value} / ${totalSensitiveFields}`,
+      detail: '已配置的敏感字段数量，直接反映当前契约完成度。',
+      icon: Lock,
+      tone: configuredSensitiveFieldCount.value > 0 ? 'success' : 'warning'
+    },
+    {
+      label: '配置分组',
+      value: `${schemaGroups.value.length} 组`,
+      detail: '系统配置分组数量，包含个人中心与结构化工作台。',
+      icon: Collection,
+      tone: 'primary'
+    },
+    {
+      label: '当前工作区',
+      value: selectedGroupLabel.value || '未选择',
+      detail: '当前正在查看的配置分组，会同步写回 URL。',
+      icon: Setting,
+      tone: selectedGroupLabel.value ? 'primary' : 'info'
+    },
+    {
+      label: 'AI 提供商',
+      value: `${providers.value.length} 个`,
+      detail: '已加载的提供商数量，供 AI 配置分组直接复用。',
+      icon: User,
+      tone: providers.value.length > 0 ? 'success' : 'info'
+    }
+  ]
+})
 
 const resolveErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && typeof error.message === 'string' && error.message) {
@@ -419,6 +573,10 @@ const loadSystemConfig = async () => {
   }
 }
 
+const reloadConfigWorkbench = async () => {
+  await Promise.all([loadProviders(), loadSystemConfig(), loadSystemConfigMetadata()])
+}
+
 const parseSystemConfigInput = (): Record<string, unknown> | null => {
   try {
     const parsed = JSON.parse(rawConfigJson.value)
@@ -480,48 +638,272 @@ const saveSystemConfig = async () => {
   }
 }
 
+watch(selectedGroupKey, (nextGroupKey) => {
+  const currentRouteGroup = typeof route.query.group === 'string' ? route.query.group : ''
+  if (nextGroupKey === currentRouteGroup) {
+    return
+  }
+
+  const nextQuery = { ...route.query }
+  if (nextGroupKey) {
+    nextQuery.group = nextGroupKey
+  } else {
+    delete nextQuery.group
+  }
+
+  void router.replace({ query: nextQuery })
+})
+
 onMounted(() => {
-  void Promise.all([loadProviders(), loadSystemConfig(), loadSystemConfigMetadata()])
+  void reloadConfigWorkbench()
 })
 </script>
 
 <style scoped>
 .config-page {
-  padding: 8px 0 0;
-}
-
-.config-content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--page-section-gap);
 }
 
-.config-card {
-  margin-bottom: 0;
+.config-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 420px);
+  gap: var(--space-5);
+  overflow: hidden;
+  padding: 24px;
 }
 
-.card-header {
+.config-hero::before,
+.config-hero::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.config-hero::before {
+  inset: -20% auto auto 56%;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79, 141, 246, 0.18), transparent 72%);
+}
+
+.config-hero::after {
+  inset: auto auto -24% -8%;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(127, 113, 234, 0.14), transparent 70%);
+}
+
+.hero-main,
+.hero-side {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-main {
   display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hero-toolbar,
+.panel-head,
+.hero-side-head {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.hero-copy,
+.panel-heading,
+.hero-side-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.hero-chip {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 7px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(79, 141, 246, 0.14);
+  color: var(--primary-700);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hero-title {
+  margin: 0;
+  max-width: 17ch;
+  font-size: clamp(1.7rem, 1.32rem + 0.9vw, 2.35rem);
+  line-height: 1.06;
+  font-weight: var(--font-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--text-primary);
+}
+
+.hero-description,
+.metric-detail,
+.spotlight-description,
+.panel-description,
+.profile-panel-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card,
+.hero-side-card {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.36);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.metric-card {
+  display: flex;
+  min-height: 150px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px;
+}
+
+.metric-card.primary {
+  --metric-bg: rgba(79, 141, 246, 0.14);
+  --metric-color: var(--primary-700);
+}
+
+.metric-card.success {
+  --metric-bg: rgba(51, 176, 122, 0.14);
+  --metric-color: var(--success-700);
+}
+
+.metric-card.warning {
+  --metric-bg: rgba(231, 168, 61, 0.16);
+  --metric-color: var(--warning-700);
+}
+
+.metric-card.info {
+  --metric-bg: rgba(75, 159, 216, 0.14);
+  --metric-color: var(--info-700);
+}
+
+.metric-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.metric-label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.04em;
+}
+
+.metric-icon {
+  display: flex;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
   align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--metric-bg);
+  color: var(--metric-color);
 }
 
+.metric-value {
+  color: var(--text-primary);
+  font-size: clamp(1.36rem, 1.08rem + 0.62vw, 1.9rem);
+  line-height: 1.05;
+}
+
+.hero-side {
+  display: grid;
+  gap: 12px;
+}
+
+.hero-side-card,
+.config-group-panel,
+.profile-workbench,
+.config-json-panel {
+  padding: 22px;
+}
+
+.hero-side-title,
+.panel-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.02rem;
+  line-height: 1.4;
+  font-weight: var(--font-semibold);
+}
+
+.group-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.group-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(79, 141, 246, 0.1);
+  color: var(--primary-700);
+  font-size: 0.78rem;
+  font-weight: var(--font-medium);
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.contract-status,
 .hint {
-  margin-bottom: var(--space-4);
-}
-
-.contract-status {
   margin-bottom: 0;
-}
-
-.group-selection-status {
-  margin-bottom: var(--space-3);
 }
 
 .group-skeleton-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 18px;
 }
 
 .group-skeleton-tag {
@@ -563,11 +945,6 @@ onMounted(() => {
   color: var(--text-primary);
 }
 
-.profile-panel-hint {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-}
-
 .profile-action-row {
   display: flex;
   align-items: center;
@@ -575,38 +952,9 @@ onMounted(() => {
   gap: var(--space-4);
 }
 
-.provider-section {
-  padding: var(--space-5);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--space-4);
-}
-
-.provider-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-4);
-}
-
-.provider-header h3 {
-  margin: 0;
-}
-
-.provider-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.hint-text {
-  margin-left: 10px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
 .form-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
   margin-top: var(--space-4);
@@ -615,5 +963,52 @@ onMounted(() => {
 .config-json-editor :deep(textarea) {
   font-family: Consolas, "Courier New", monospace;
   line-height: 1.45;
+}
+
+@media (max-width: 1200px) {
+  .config-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 992px) {
+  .hero-toolbar,
+  .panel-head,
+  .hero-side-head,
+  .profile-action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .config-hero,
+  .config-group-panel,
+  .profile-workbench,
+  .config-json-panel,
+  .hero-side-card {
+    padding: 18px;
+  }
+
+  .hero-title {
+    max-width: none;
+    font-size: 1.5rem;
+  }
+
+  .hero-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    justify-content: flex-start;
+  }
 }
 </style>
