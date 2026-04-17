@@ -82,21 +82,15 @@
               </div>
             </div>
             <div class="hero-actions">
-              <el-button type="primary" class="action-btn" @click="syncFiles">
-                <el-icon><Refresh /></el-icon>
-                同步文件
-              </el-button>
-              <el-button type="success" class="action-btn" @click="generateStrm">
-                <el-icon><DocumentAdd /></el-icon>
-                生成 STRM
-              </el-button>
-              <el-button type="warning" class="action-btn" @click="validateFiles">
-                <el-icon><Check /></el-icon>
-                验证文件
-              </el-button>
-              <el-button class="action-btn" @click="openSettings">
-                <el-icon><Setting /></el-icon>
-                系统配置
+              <el-button
+                v-for="action in quickActions"
+                :key="action.label"
+                :type="action.type"
+                class="action-btn"
+                @click="action.onClick"
+              >
+                <el-icon><component :is="action.icon" /></el-icon>
+                {{ action.label }}
               </el-button>
             </div>
           </article>
@@ -330,7 +324,6 @@ import { CanvasRenderer } from 'echarts/renderers'
 
 import {
   ArrowRight,
-  Check,
   CircleCheck,
   CircleClose,
   Clock,
@@ -338,12 +331,14 @@ import {
   Cpu,
   Document,
   DocumentAdd,
+  Film,
   Refresh,
   Setting,
   getIconComponent
 } from '@/components/icons'
 import { useDebounce, useECharts } from '@/composables'
 import { getDashboardStats, getTaskTrends } from '@/features/dashboard/api/dashboard'
+import { buildTaskLaunchQuery } from '@/features/tasks'
 import type {
   CacheDetail,
   DashboardData,
@@ -379,6 +374,13 @@ interface HeroSignal {
   detail: string
   icon: Component
   tone: DashboardTone
+}
+
+interface QuickAction {
+  label: string
+  icon: Component
+  type?: 'primary' | 'success' | 'warning'
+  onClick: () => void
 }
 
 interface TypeHighlight {
@@ -535,6 +537,46 @@ const heroSignals = computed<HeroSignal[]>(() => {
     }
   ]
 })
+
+const quickActions: QuickAction[] = [
+  {
+    label: '同步文件',
+    icon: Refresh,
+    type: 'primary',
+    onClick: () => {
+      void router.push({
+        path: '/tasks',
+        query: buildTaskLaunchQuery('file_sync')
+      })
+    }
+  },
+  {
+    label: '生成 STRM',
+    icon: DocumentAdd,
+    type: 'success',
+    onClick: () => {
+      void router.push({
+        path: '/tasks',
+        query: buildTaskLaunchQuery('strm_generation')
+      })
+    }
+  },
+  {
+    label: '刮削目录',
+    icon: Film,
+    type: 'warning',
+    onClick: () => {
+      void router.push('/scrape-pathes')
+    }
+  },
+  {
+    label: '系统配置',
+    icon: Setting,
+    onClick: () => {
+      void router.push('/config')
+    }
+  }
+]
 
 const getChartTheme = () => ({
   primary: readCssVar('--primary-500', '#4f8df6'),
@@ -813,22 +855,6 @@ watch(timeRange, () => {
 const clearCache = () => {
   ElMessage.success('缓存已清空')
   cacheStats.value.size = 0
-}
-
-const syncFiles = () => {
-  ElMessage.info('开始同步文件...')
-}
-
-const generateStrm = () => {
-  router.push('/proxy-service')
-}
-
-const validateFiles = () => {
-  ElMessage.info('开始验证文件...')
-}
-
-const openSettings = () => {
-  router.push('/config')
 }
 
 const handleResize = () => {

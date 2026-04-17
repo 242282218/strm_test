@@ -1,0 +1,119 @@
+import { nextTick } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createRouter, createWebHistory } from 'vue-router'
+import ElementPlus from 'element-plus'
+import TasksView from './TasksView.vue'
+
+const taskApiMocks = vi.hoisted(() => ({
+  getTasks: vi.fn(),
+  getTask: vi.fn(),
+  cancelTask: vi.fn(),
+  deleteTask: vi.fn(),
+  getTaskStatusLabel: vi.fn((status: string) => status),
+  getTaskStatusType: vi.fn(() => 'info'),
+  getTaskTypeLabel: vi.fn((type: string) => type)
+}))
+
+vi.mock('@/features/tasks/api/tasks', () => taskApiMocks)
+
+vi.mock('@/composables', () => ({
+  useLoading: () => ({
+    loading: { __v_isRef: true, value: false },
+    withLoading: async (fn: () => Promise<void>) => {
+      await fn()
+    }
+  }),
+  useNotification: () => ({
+    success: vi.fn(),
+    error: vi.fn()
+  }),
+  useAsyncNotify: () => ({
+    withConfirm: async (fn: () => Promise<void>) => {
+      await fn()
+    }
+  })
+}))
+
+vi.mock('@/features/tasks/components/CreateTaskDialog.vue', () => ({
+  default: {
+    name: 'CreateTaskDialog',
+    props: {
+      modelValue: {
+        type: Boolean,
+        default: false
+      },
+      initialTaskType: {
+        type: String,
+        default: ''
+      }
+    },
+    emits: ['update:modelValue', 'success'],
+    template: `
+      <div
+        class="create-task-dialog-mock"
+        :data-visible="String(modelValue)"
+        :data-task-type="initialTaskType"
+      />
+    `
+  }
+}))
+
+async function flushUi(): Promise<void> {
+  await Promise.resolve()
+  await nextTick()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  await Promise.resolve()
+  await nextTick()
+}
+
+describe('TasksView task launch routing', () => {
+  const originalWebSocket = globalThis.WebSocket
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    taskApiMocks.getTasks.mockResolvedValue([])
+    globalThis.WebSocket = vi.fn().mockImplementation(() => ({
+      close: vi.fn(),
+      onmessage: null,
+      onclose: null
+    })) as unknown as typeof WebSocket
+  })
+
+  afterEach(() => {
+    globalThis.WebSocket = originalWebSocket
+  })
+
+  it('opens the create dialog with the requested task type and clears the query on close', async () => {
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        {
+          path: '/tasks',
+          name: 'Tasks',
+          component: TasksView
+        }
+      ]
+    })
+
+    await router.push('/tasks?createTask=file_sync')
+    await router.isReady()
+
+    const wrapper = mount(TasksView, {
+      global: {
+        plugins: [router, ElementPlus]
+      }
+    })
+
+    await flushUi()
+
+    expect(taskApiMocks.getTasks).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('.create-task-dialog-mock').attributes('data-visible')).toBe('true')
+    expect(wrapper.get('.create-task-dialog-mock').attributes('data-task-type')).toBe('file_sync')
+
+    wrapper.getComponent({ name: 'CreateTaskDialog' }).vm.$emit('update:modelValue', false)
+    await flushUi()
+
+    expect(router.currentRoute.value.fullPath).toBe('/tasks')
+  })
+})

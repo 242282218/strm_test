@@ -49,4 +49,19 @@ test.describe('仪表盘 /dashboard', () => {
       }
     }
   })
+
+  test('快捷入口会打开预填任务弹窗并在关闭后清理查询参数', async ({ page }) => {
+    await navigateAndWait(page, '/dashboard')
+
+    const syncButton = page.getByRole('button', { name: '同步文件' })
+    if (await syncButton.count() > 0) {
+      await syncButton.click()
+      await expect(page).toHaveURL(/\/tasks\?createTask=file_sync$/)
+      await expect(page.getByText('新建任务')).toBeVisible({ timeout: 10_000 })
+
+      const cancelButton = page.getByRole('button', { name: '取消' }).last()
+      await cancelButton.click()
+      await expect(page).toHaveURL(/\/tasks$/)
+    }
+  })
 })

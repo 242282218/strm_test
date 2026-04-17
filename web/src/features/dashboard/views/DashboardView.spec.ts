@@ -113,7 +113,7 @@ describe('DashboardView', () => {
       routes: [
         { path: '/', component: { template: '<div />' } },
         { path: '/tasks', component: { template: '<div />' } },
-        { path: '/proxy-service', component: { template: '<div />' } },
+        { path: '/scrape-pathes', component: { template: '<div />' } },
         { path: '/config', component: { template: '<div />' } }
       ]
     })
@@ -143,5 +143,23 @@ describe('DashboardView', () => {
     expect(wrapper.get('.spotlight-name').text()).toBe('同步媒体库')
     expect(wrapper.text()).toContain('MKV')
     expect(wrapper.text()).toContain('91.2%')
+    expect(wrapper.text()).toContain('刮削目录')
+    expect(wrapper.text()).not.toContain('验证文件')
+
+    const actionButtons = wrapper.findAll('.action-btn')
+
+    await actionButtons[0]!.trigger('click')
+    await flushUi()
+    expect(router.currentRoute.value.fullPath).toBe('/tasks?createTask=file_sync')
+
+    await router.push('/')
+    await actionButtons[1]!.trigger('click')
+    await flushUi()
+    expect(router.currentRoute.value.fullPath).toBe('/tasks?createTask=strm_generation')
+
+    await router.push('/')
+    await actionButtons[2]!.trigger('click')
+    await flushUi()
+    expect(router.currentRoute.value.fullPath).toBe('/scrape-pathes')
   })
 })
