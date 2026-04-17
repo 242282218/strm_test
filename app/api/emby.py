@@ -94,8 +94,11 @@ async def _resolve_media_source_file_id_for_request(
         proxy_base_url = f"http://{request.headers.get('host', 'localhost:8000')}"
     validate_http_url(proxy_base_url, "proxy_base_url")
 
-    api_key = request.headers.get("X-Emby-Token") or request.query_params.get("api_key") or getattr(
-        getattr(app_config, "emby", None), "api_key", ""
+    api_key = (
+        request.headers.get("X-Emby-Token")
+        or request.headers.get("X-MediaBrowser-Token")
+        or request.query_params.get("api_key")
+        or getattr(getattr(app_config, "emby", None), "api_key", "")
     )
 
     async with EmbyProxyService(
