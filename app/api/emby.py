@@ -463,6 +463,7 @@ def _build_delete_plan_items(
     return plan_items
 
 
+@router.api_route("/Items/{item_id}/PlaybackInfo", methods=["GET", "POST"])
 @router.api_route("/items/{item_id}/PlaybackInfo", methods=["GET", "POST"])
 async def get_playback_info(
     item_id: str,
@@ -856,6 +857,7 @@ async def execute_delete_plan(
     }
 
 
+@router.get("/Items/{item_id}")
 @router.get("/items/{item_id}")
 async def get_item(item_id: str, request: Request, user_id: str | None = None):
     """获取 Emby 项目信息"""
@@ -897,6 +899,8 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.api_route("/Videos/{item_id}/stream.{filename}", methods=["GET", "HEAD"])
+@router.api_route("/Videos/{item_id}/stream", methods=["GET", "HEAD"])
 @router.api_route("/videos/{item_id}/stream.{filename}", methods=["GET", "HEAD"])
 @router.api_route("/videos/{item_id}/stream", methods=["GET", "HEAD"])
 async def stream_video(
@@ -939,6 +943,7 @@ async def stream_video(
         raise HTTPException(status_code=500, detail="Failed to stream video") from exc
 
 
+@router.api_route("/Videos/{item_id}/master.m3u8", methods=["GET", "HEAD"])
 @router.api_route("/videos/{item_id}/master.m3u8", methods=["GET", "HEAD"])
 async def get_master_playlist(
     item_id: str,
