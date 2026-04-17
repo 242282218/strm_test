@@ -19,7 +19,13 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import JSONResponse, Response
 from starlette.requests import HTTPConnection
 
-from app.api.emby import _is_web_client_request, get_master_playlist, stream_video
+from app.api.emby import (
+    _is_web_client_request,
+    _read_playback_request_payload,
+    _resolve_playback_request_field,
+    get_master_playlist,
+    stream_video,
+)
 from app.services.playbackinfo_hook import (
     LOCAL_PLAYBACK_PROXY_QUERY_KEY,
     LOCAL_PLAYBACK_PROXY_QUERY_VALUE,
@@ -192,8 +198,18 @@ async def _get_forward_client() -> httpx.AsyncClient:
 
 
 async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Response:
-    user_id = request.query_params.get("UserId") or request.query_params.get("user_id") or ""
-    media_source_id = request.query_params.get("MediaSourceId") or request.query_params.get("media_source_id")
+    playback_request = await _read_playback_request_payload(request)
+    user_id = (
+        request.query_params.get("UserId")
+        or request.query_params.get("user_id")
+        or _resolve_playback_request_field(playback_request, "UserId", "user_id")
+        or ""
+    )
+    media_source_id = (
+        request.query_params.get("MediaSourceId")
+        or request.query_params.get("media_source_id")
+        or _resolve_playback_request_field(playback_request, "MediaSourceId", "media_source_id")
+    )
     api_key = (
         request.query_params.get("api_key")
         or request.headers.get("X-Emby-Token")
@@ -220,13 +236,17 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
         cookie=cookie,
         proxy_base_url=proxy_base_url,
     ) as proxy_service:
-        data = await proxy_service.proxy_playback_info(
+        playback_hook = proxy_service.playback_hook
+        if playback_hook is None:
+            raise RuntimeError("Playback hook not initialized")
+        data = await playback_hook.hook_playback_info(
             item_id=item_id,
             user_id=user_id,
             media_source_id=media_source_id,
             is_web_client=is_web_client,
             client_name=client_name,
             device_name=device_name,
+            playback_request=playback_request,
         )
     return JSONResponse(content=data)
 
@@ -294,7 +314,7 @@ async def _handle_gateway_request(request: Request, path: str) -> Response:
         raise HTTPException(status_code=404, detail="Not Found")
 
     path = (path or "").lstrip("/")
-    if request.method == "GET":
+    if request.method in {"GET", "POST"}:
         matched = _PLAYBACKINFO_RE.match(path)
         if matched:
             item_id = validate_identifier(matched.group("item_id"), "item_id")

@@ -52,7 +52,11 @@ def create_test_app() -> FastAPI:
         return {"data": "sensitive"}
 
     @app.get("/api/emby/items/144/PlaybackInfo")
-    async def emby_playback_info():
+    async def emby_playback_info_get():
+        return {"ok": True, "route": "playback"}
+
+    @app.post("/api/emby/items/144/PlaybackInfo")
+    async def emby_playback_info_post():
         return {"ok": True, "route": "playback"}
 
     @app.get("/api/emby/not-emby")
@@ -183,6 +187,21 @@ class TestPublicPathNoAuthRequired:
         with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "test-key"}):
             client = TestClient(app)
             response = client.get("/api/emby/items/144/PlaybackInfo", headers={"host": "127.0.0.1:18097"})
+            assert response.status_code == 200
+            assert response.json() == {"ok": True, "route": "playback"}
+
+    def test_api_emby_playbackinfo_post_on_dedicated_proxy_port_is_public(self):
+        """Dedicated proxy PlaybackInfo POST route should bypass app auth for Emby clients."""
+        app = create_test_app()
+        app.add_middleware(AuthMiddleware)
+
+        with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "test-key"}):
+            client = TestClient(app)
+            response = client.post(
+                "/api/emby/items/144/PlaybackInfo",
+                headers={"host": "127.0.0.1:18097"},
+                json={"UserId": "user1", "DeviceProfile": {"Name": "Android TV"}},
+            )
             assert response.status_code == 200
             assert response.json() == {"ok": True, "route": "playback"}
 

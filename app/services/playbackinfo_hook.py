@@ -56,6 +56,7 @@ class PlaybackInfoHook:
         is_web_client: bool = False,
         client_name: str | None = None,
         device_name: str | None = None,
+        playback_request: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Hook PlaybackInfo接口
@@ -73,9 +74,25 @@ class PlaybackInfoHook:
         try:
             # 1. 获取原始PlaybackInfo，失败时对远程 STRM 条目退化为 Items 查询结果
             try:
-                playback_info = await self.emby_client.get_playback_info(
-                    item_id=item_id, user_id=user_id, media_source_id=media_source_id
-                )
+                if playback_request is not None:
+                    request_payload = dict(playback_request)
+                    if "DeviceProfile" not in request_payload:
+                        request_payload.update(self.emby_client._get_default_device_profile())
+                    if media_source_id and not request_payload.get("MediaSourceId") and not request_payload.get(
+                        "media_source_id"
+                    ):
+                        request_payload["MediaSourceId"] = media_source_id
+                    playback_info = await self.emby_client.post_playback_info(
+                        item_id=item_id,
+                        user_id=user_id,
+                        device_profile=request_payload,
+                    )
+                else:
+                    playback_info = await self.emby_client.get_playback_info(
+                        item_id=item_id,
+                        user_id=user_id,
+                        media_source_id=media_source_id,
+                    )
             except Exception as original_error:
                 logger.warning(f"PlaybackInfo request failed for {item_id}, try item fallback: {original_error!s}")
                 playback_info = await self._build_fallback_playback_info(

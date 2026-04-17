@@ -16,7 +16,7 @@ from app.api import emby_gateway as emby_gateway_main
 
 class _FakeEmbyProxyService:
     last_init: dict[str, str] | None = None
-    last_proxy_playback_info_call: dict[str, str | bool | None] | None = None
+    last_proxy_playback_info_call: dict[str, object] | None = None
 
     def __init__(self, emby_base_url: str, api_key: str, cookie: str, proxy_base_url: str):
         _FakeEmbyProxyService.last_init = {
@@ -28,12 +28,13 @@ class _FakeEmbyProxyService:
         self.proxy_base_url = proxy_base_url
 
     async def __aenter__(self):
+        self.playback_hook = self
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         return None
 
-    async def proxy_playback_info(
+    async def hook_playback_info(
         self,
         item_id: str,
         user_id: str,
@@ -41,6 +42,7 @@ class _FakeEmbyProxyService:
         is_web_client: bool = False,
         client_name: str | None = None,
         device_name: str | None = None,
+        playback_request: dict[str, object] | None = None,
     ):
         _FakeEmbyProxyService.last_proxy_playback_info_call = {
             "item_id": item_id,
@@ -49,6 +51,7 @@ class _FakeEmbyProxyService:
             "is_web_client": is_web_client,
             "client_name": client_name,
             "device_name": device_name,
+            "playback_request": playback_request,
         }
         return {
             "item_id": item_id,
@@ -58,6 +61,7 @@ class _FakeEmbyProxyService:
             "is_web_client": is_web_client,
             "client_name": client_name,
             "device_name": device_name,
+            "playback_request": playback_request,
         }
 
 
@@ -237,6 +241,43 @@ def test_gateway_playbackinfo_when_web_headers_present_then_forwards_web_client_
     assert data["device_name"] == "Chrome on Windows"
     assert _FakeEmbyProxyService.last_proxy_playback_info_call is not None
     assert _FakeEmbyProxyService.last_proxy_playback_info_call["is_web_client"] is True
+
+
+def test_gateway_playbackinfo_when_post_body_uses_emby_contract_then_intercepts_and_forwards_payload():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not forward PlaybackInfo POST upstream")),
+        ),
+    ):
+        response = client.post(
+            "/Items/item123/PlaybackInfo",
+            headers={"host": "proxy.example:18097", "X-MediaBrowser-Token": "legacy-emby-api-key"},
+            json={
+                "UserId": "user123",
+                "MediaSourceId": "media123",
+                "DeviceProfile": {"Name": "Android TV"},
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["item_id"] == "item123"
+    assert data["user_id"] == "user123"
+    assert data["media_source_id"] == "media123"
+    assert data["playback_request"] == {
+        "UserId": "user123",
+        "MediaSourceId": "media123",
+        "DeviceProfile": {"Name": "Android TV"},
+    }
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["api_key"] == "legacy-emby-api-key"
 
 
 def test_gateway_videos_stream_when_head_requested_on_dedicated_proxy_host_then_intercepts_local_stream_path():

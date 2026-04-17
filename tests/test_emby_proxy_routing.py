@@ -19,7 +19,7 @@ from app.services.playbackinfo_hook import PlaybackInfoHook
 
 class _FakeEmbyProxyService:
     last_init: dict[str, str] | None = None
-    last_proxy_playback_info_call: dict[str, str | None | bool] | None = None
+    last_proxy_playback_info_call: dict[str, object] | None = None
 
     def __init__(self, emby_base_url: str, api_key: str, cookie: str, proxy_base_url: str):
         self.emby_base_url = emby_base_url
@@ -34,12 +34,13 @@ class _FakeEmbyProxyService:
         }
 
     async def __aenter__(self):
+        self.playback_hook = self
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         return None
 
-    async def proxy_playback_info(
+    async def hook_playback_info(
         self,
         item_id: str,
         user_id: str,
@@ -47,6 +48,7 @@ class _FakeEmbyProxyService:
         is_web_client: bool = False,
         client_name: str | None = None,
         device_name: str | None = None,
+        playback_request: dict[str, object] | None = None,
     ):
         _FakeEmbyProxyService.last_proxy_playback_info_call = {
             "item_id": item_id,
@@ -55,6 +57,7 @@ class _FakeEmbyProxyService:
             "is_web_client": is_web_client,
             "client_name": client_name,
             "device_name": device_name,
+            "playback_request": playback_request,
         }
         return {
             "item_id": item_id,
@@ -64,6 +67,7 @@ class _FakeEmbyProxyService:
             "is_web_client": is_web_client,
             "client_name": client_name,
             "device_name": device_name,
+            "playback_request": playback_request,
         }
 
 
@@ -174,6 +178,55 @@ async def test_playback_info_hook_when_playback_info_fails_then_falls_back_to_it
     assert "SupportsDirectStream" not in media_source
     assert "SupportsTranscoding" not in media_source
     emby_client.get_items.assert_awaited_once_with(item_id="item1", user_id="user1")
+
+
+@pytest.mark.asyncio
+async def test_playback_info_hook_when_post_request_payload_provided_then_uses_post_playback_info():
+    emby_client = AsyncMock()
+    emby_client.get_playback_info = AsyncMock()
+    emby_client.post_playback_info = AsyncMock(
+        return_value={
+            "MediaSources": [
+                {
+                    "Id": "media_source_1",
+                    "Path": "http://example.com/api/proxy/stream/file123",
+                    "IsRemote": True,
+                }
+            ]
+        }
+    )
+
+    hook = PlaybackInfoHook(
+        emby_client=emby_client,
+        quark_service=AsyncMock(),
+        proxy_base_url="http://proxy.example:18097",
+    )
+    playback_request = {
+        "UserId": "user1",
+        "MediaSourceId": "media_source_1",
+        "DeviceProfile": {"Name": "Android TV"},
+    }
+
+    result = await hook.hook_playback_info(
+        item_id="item1",
+        user_id="user1",
+        media_source_id="media_source_1",
+        playback_request=playback_request,
+    )
+
+    assert result["MediaSources"][0]["DirectStreamUrl"] == (
+        "http://proxy.example:18097/api/proxy/redirect/file123?Static=true"
+    )
+    emby_client.post_playback_info.assert_awaited_once_with(
+        item_id="item1",
+        user_id="user1",
+        device_profile={
+            "UserId": "user1",
+            "MediaSourceId": "media_source_1",
+            "DeviceProfile": {"Name": "Android TV"},
+        },
+    )
+    emby_client.get_playback_info.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -674,6 +727,49 @@ def test_get_playback_info_when_user_id_and_legacy_token_use_emby_contract_then_
     assert _FakeEmbyProxyService.last_init["api_key"] == "legacy-emby-api-key"
     assert _FakeEmbyProxyService.last_proxy_playback_info_call is not None
     assert _FakeEmbyProxyService.last_proxy_playback_info_call["user_id"] == "user123"
+
+
+def test_get_playback_info_when_post_body_uses_emby_contract_then_forwards_payload_to_proxy_service():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.post(
+            "/api/emby/items/item123/PlaybackInfo",
+            headers={"X-MediaBrowser-Token": "legacy-emby-api-key"},
+            json={
+                "UserId": "user123",
+                "MediaSourceId": "media_source_1",
+                "StartTimeTicks": 0,
+                "DeviceProfile": {"Name": "Android TV"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == "user123"
+    assert response.json()["media_source_id"] == "media_source_1"
+    assert response.json()["playback_request"] == {
+        "UserId": "user123",
+        "MediaSourceId": "media_source_1",
+        "StartTimeTicks": 0,
+        "DeviceProfile": {"Name": "Android TV"},
+    }
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["api_key"] == "legacy-emby-api-key"
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call is not None
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call["playback_request"] == {
+        "UserId": "user123",
+        "MediaSourceId": "media_source_1",
+        "StartTimeTicks": 0,
+        "DeviceProfile": {"Name": "Android TV"},
+    }
 
 
 def test_get_playback_info_when_non_web_headers_present_then_keeps_request_as_non_web_client():

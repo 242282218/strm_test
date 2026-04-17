@@ -72,6 +72,39 @@ def _resolve_requested_user_id(request: Request, user_id: str | None) -> str | N
     return user_id or request.query_params.get("UserId") or request.query_params.get("user_id")
 
 
+def _resolve_playback_request_field(payload: dict[str, Any] | None, *keys: str) -> str | None:
+    if not payload:
+        return None
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+async def _read_playback_request_payload(request: Request) -> dict[str, Any] | None:
+    if request.method.upper() != "POST":
+        return None
+
+    raw_body = await request.body()
+    if not raw_body:
+        return {}
+
+    try:
+        payload = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid PlaybackInfo payload") from exc
+
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid PlaybackInfo payload")
+    return payload
+
+
 async def _resolve_media_source_file_id_for_request(
     request: Request,
     *,
@@ -430,7 +463,7 @@ def _build_delete_plan_items(
     return plan_items
 
 
-@router.get("/items/{item_id}/PlaybackInfo")
+@router.api_route("/items/{item_id}/PlaybackInfo", methods=["GET", "POST"])
 async def get_playback_info(
     item_id: str,
     request: Request,
@@ -440,10 +473,22 @@ async def get_playback_info(
     """获取 PlaybackInfo（Hook 版本）"""
     try:
         item_id = validate_identifier(item_id, "item_id")
-        user_id = _resolve_requested_user_id(request, user_id)
+        playback_request = await _read_playback_request_payload(request)
+        user_id = _resolve_requested_user_id(request, user_id) or _resolve_playback_request_field(
+            playback_request,
+            "UserId",
+            "user_id",
+        )
         if user_id:
             user_id = validate_identifier(user_id, "user_id")
-        media_source_id = _resolve_requested_media_source_id(request, media_source_id)
+        media_source_id = _resolve_requested_media_source_id(
+            request,
+            media_source_id,
+        ) or _resolve_playback_request_field(
+            playback_request,
+            "MediaSourceId",
+            "media_source_id",
+        )
         if media_source_id:
             media_source_id = validate_identifier(media_source_id, "media_source_id")
 
@@ -485,13 +530,17 @@ async def get_playback_info(
             cookie=cookie,
             proxy_base_url=proxy_base_url,
         ) as proxy_service:
-            return await proxy_service.proxy_playback_info(
+            playback_hook = proxy_service.playback_hook
+            if playback_hook is None:
+                raise RuntimeError("Playback hook not initialized")
+            return await playback_hook.hook_playback_info(
                 item_id=item_id,
                 user_id=user_id or "",
                 media_source_id=media_source_id,
                 is_web_client=is_web_client,
                 client_name=client_name,
                 device_name=device_name,
+                playback_request=playback_request,
             )
     except HTTPException:
         raise
