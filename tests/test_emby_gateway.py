@@ -234,6 +234,35 @@ def test_gateway_playbackinfo_when_header_and_query_api_keys_conflict_then_prefe
     assert _FakeEmbyProxyService.last_init["api_key"] == "header-emby-api-key"
 
 
+def test_gateway_playbackinfo_when_proxy_override_header_present_then_prefers_header_proxy_base_url():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/Items/item123/PlaybackInfo",
+            params={
+                "UserId": "user123",
+                "MediaSourceId": "media123",
+                "api_key": "emby-api-key",
+            },
+            headers={
+                "host": "proxy.example:18097",
+                "X-Proxy-Server-Url": "https://public.proxy.example",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["proxy_base_url"] == "https://public.proxy.example"
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["proxy_base_url"] == "https://public.proxy.example"
+
+
 def test_gateway_playbackinfo_when_prefixed_lowercase_path_used_then_still_uses_hook_proxy():
     client = _build_client()
     app_config = _mock_config()
@@ -707,20 +736,6 @@ def test_build_ws_extra_headers_when_handshake_headers_present_then_filters_rese
 
 
 def test_build_response_headers_when_conflicting_headers_then_strip_and_rewrite_location():
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0"},
-        "http_version": "1.1",
-        "method": "GET",
-        "scheme": "http",
-        "path": "/",
-        "raw_path": b"/",
-        "query_string": b"",
-        "headers": [(b"host", b"proxy.example:18097")],
-        "client": ("127.0.0.1", 12345),
-        "server": ("proxy.example", 18097),
-    }
-    request = Request(scope)
     upstream_headers = httpx.Headers(
         {
             "content-length": "123",
@@ -736,7 +751,7 @@ def test_build_response_headers_when_conflicting_headers_then_strip_and_rewrite_
     headers = emby_gateway_module._build_response_headers(
         upstream_headers,
         emby_base_url="http://emby.example:18096",
-        request=request,
+        proxy_base_url="https://media.example",
     )
 
     lowered = {k.lower() for k in headers}
@@ -745,7 +760,7 @@ def test_build_response_headers_when_conflicting_headers_then_strip_and_rewrite_
     assert "date" not in lowered
     assert "server" not in lowered
     assert "set-cookie" not in lowered
-    assert headers["location"] == "http://proxy.example:18097/web/index.html"
+    assert headers["location"] == "https://media.example/web/index.html"
 
 
 # 注意：main_root 测试已更新，因为 root handler 现在定义在 app.main 中
@@ -796,6 +811,52 @@ async def test_forward_to_emby_when_multiple_requests_then_reuses_pool_client():
     assert resp2.status_code == 200
     assert fake_pool.get_client.await_count == 1
     assert fake_client.request.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_forward_to_emby_when_proxy_override_header_present_then_rewrites_location_to_override_proxy_base_url():
+    app_config = _mock_config()
+    fake_upstream = httpx.Response(
+        status_code=302,
+        headers={
+            "content-type": "text/html",
+            "location": "http://emby.example:18096/web/index.html",
+        },
+        content=b"",
+    )
+    fake_client = SimpleNamespace(
+        request=AsyncMock(return_value=fake_upstream),
+        is_closed=False,
+    )
+    fake_pool = SimpleNamespace(get_client=AsyncMock(return_value=fake_client))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/web/index.html",
+        "raw_path": b"/web/index.html",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"proxy.internal:18097"),
+            (b"x-proxy-server-url", b"https://public.proxy.example"),
+        ],
+        "client": ("127.0.0.1", 12345),
+        "server": ("proxy.internal", 18097),
+    }
+
+    with (
+        patch("app.api.emby_gateway.get_http_pool_sync", new=Mock(return_value=fake_pool)),
+        patch.object(emby_gateway_module, "_forward_pool", None),
+        patch.object(emby_gateway_module, "_forward_client", None),
+    ):
+        request = emby_gateway_module.Request(scope)
+        response = await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://public.proxy.example/web/index.html"
 
 
 def test_build_forward_headers_when_accept_encoding_then_force_identity():

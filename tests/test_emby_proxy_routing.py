@@ -626,6 +626,33 @@ def test_get_playback_info_when_configured_proxy_base_url_then_uses_dedicated_pr
     assert _FakeEmbyProxyService.last_init["proxy_base_url"] == "http://proxy.example:18097"
 
 
+def test_get_playback_info_when_proxy_override_header_present_then_prefers_requested_proxy_base_url():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"user_id": "user123"},
+            headers={
+                "X-Emby-Token": "emby-api-key",
+                "X-Proxy-Server-Url": "https://public.proxy.example",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["proxy_base_url"] == "https://public.proxy.example"
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["proxy_base_url"] == "https://public.proxy.example"
+
+
 def test_get_playback_info_when_endpoint_emby_url_is_empty_then_falls_back_to_emby_config_url():
     client = _build_emby_client()
     app_config = SimpleNamespace(

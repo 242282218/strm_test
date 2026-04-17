@@ -146,6 +146,28 @@ def _resolve_requested_emby_api_key(request: Request, app_config) -> str:
     return ""
 
 
+def _resolve_requested_proxy_base_url(request: Request, app_config) -> str:
+    candidates = [
+        request.headers.get("X-Proxy-Server-Url"),
+        getattr(getattr(app_config, "emby", None), "proxy_base_url", ""),
+    ]
+    host_header = str(request.headers.get("host") or "").strip()
+    if host_header:
+        candidates.append(f"{request.url.scheme}://{host_header}")
+    candidates.append(str(request.base_url).rstrip("/"))
+
+    for candidate in candidates:
+        text = str(candidate or "").strip().rstrip("/")
+        if not text:
+            continue
+        validate_http_url(text, "proxy_base_url")
+        return text
+
+    fallback_proxy_base_url = "http://localhost:8000"
+    validate_http_url(fallback_proxy_base_url, "proxy_base_url")
+    return fallback_proxy_base_url
+
+
 async def _resolve_media_source_file_id_for_request(
     request: Request,
     *,
@@ -155,13 +177,7 @@ async def _resolve_media_source_file_id_for_request(
 ) -> str:
     app_config = config_service.get_config()
     emby_base_url = _resolve_requested_emby_base_url(request, app_config)
-
-    configured_proxy_base_url = (getattr(getattr(app_config, "emby", None), "proxy_base_url", "") or "").strip()
-    proxy_base_url = request.headers.get("X-Proxy-Server-Url") or configured_proxy_base_url
-    if not proxy_base_url:
-        proxy_base_url = f"http://{request.headers.get('host', 'localhost:8000')}"
-    validate_http_url(proxy_base_url, "proxy_base_url")
-
+    proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
     api_key = _resolve_requested_emby_api_key(request, app_config)
 
     async with EmbyProxyService(
@@ -531,13 +547,7 @@ async def get_playback_info(
             raise HTTPException(status_code=401, detail="Missing API key")
 
         emby_base_url = _resolve_requested_emby_base_url(request, app_config)
-
-        configured_proxy_base_url = (getattr(app_config.emby, "proxy_base_url", "") or "").strip()
-        proxy_base_url = request.headers.get("X-Proxy-Server-Url") or configured_proxy_base_url
-        if not proxy_base_url:
-            proxy_base_url = f"http://{request.headers.get('host', 'localhost:8000')}"
-        validate_http_url(proxy_base_url, "proxy_base_url")
-
+        proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
         cookie = config.get_quark_cookie()
         if not cookie:
             raise HTTPException(status_code=400, detail="Cookie not configured")

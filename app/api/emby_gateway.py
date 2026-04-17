@@ -25,6 +25,7 @@ from app.api.emby import (
     _resolve_playback_request_field,
     _resolve_configured_emby_base_url,
     _resolve_requested_emby_api_key,
+    _resolve_requested_proxy_base_url,
     get_master_playlist,
     stream_video,
 )
@@ -126,23 +127,14 @@ def _resolve_emby_base_url(app_config) -> str:
     return emby_base_url.rstrip("/")
 
 
-def _resolve_proxy_base_url(app_config, request: Request) -> str:
-    configured_proxy = (getattr(app_config.emby, "proxy_base_url", "") or "").strip()
-    if configured_proxy:
-        validate_http_url(configured_proxy, "proxy_base_url")
-        return configured_proxy.rstrip("/")
-    return str(request.base_url).rstrip("/")
-
-
 def _is_local_playback_proxy_request(request: Request) -> bool:
     return request.query_params.get(LOCAL_PLAYBACK_PROXY_QUERY_KEY) == LOCAL_PLAYBACK_PROXY_QUERY_VALUE
 
 
-def _rewrite_location(location: str, emby_base_url: str, request: Request) -> str:
+def _rewrite_location(location: str, emby_base_url: str, proxy_base_url: str) -> str:
     if not location:
         return location
 
-    proxy_base_url = str(request.base_url).rstrip("/")
     normalized_emby = emby_base_url.rstrip("/")
     if location.startswith(normalized_emby):
         return f"{proxy_base_url}{location[len(normalized_emby):]}"
@@ -164,7 +156,7 @@ def _build_forward_headers(request: Request) -> dict[str, str]:
     return headers
 
 
-def _build_response_headers(upstream_headers: httpx.Headers, emby_base_url: str, request: Request) -> dict[str, str]:
+def _build_response_headers(upstream_headers: httpx.Headers, emby_base_url: str, proxy_base_url: str) -> dict[str, str]:
     headers: dict[str, str] = {}
     # Let Starlette/Uvicorn recalculate framing/date/server headers for proxied responses.
     # Forwarding upstream content-length with middleware transforms (e.g. gzip) can cause
@@ -177,7 +169,7 @@ def _build_response_headers(upstream_headers: httpx.Headers, emby_base_url: str,
         if lowered in _HOP_BY_HOP_HEADERS or lowered in filtered_headers:
             continue
         if lowered == "location":
-            headers[key] = _rewrite_location(value, emby_base_url, request)
+            headers[key] = _rewrite_location(value, emby_base_url, proxy_base_url)
             continue
         headers[key] = value
     return headers
@@ -221,7 +213,7 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
         raise HTTPException(status_code=400, detail="Cookie not configured")
 
     emby_base_url = _resolve_emby_base_url(app_config)
-    proxy_base_url = _resolve_proxy_base_url(app_config, request)
+    proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
     client_name = request.headers.get("X-Emby-Client")
     device_name = request.headers.get("X-Emby-Device-Name")
     user_agent = request.headers.get("User-Agent")
@@ -250,6 +242,7 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
 
 async def _forward_to_emby(request: Request, app_config, path: str) -> Response:
     emby_base_url = _resolve_emby_base_url(app_config)
+    proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
     target_path = (path or "").lstrip("/")
     target_url = emby_base_url if not target_path else f"{emby_base_url}/{target_path}"
     query_string = str(request.url.query)
@@ -270,7 +263,7 @@ async def _forward_to_emby(request: Request, app_config, path: str) -> Response:
         timeout=30.0,
     )
 
-    response_headers = _build_response_headers(upstream.headers, emby_base_url, request)
+    response_headers = _build_response_headers(upstream.headers, emby_base_url, proxy_base_url)
     media_type = upstream.headers.get("content-type")
     response = Response(
         content=upstream.content,
