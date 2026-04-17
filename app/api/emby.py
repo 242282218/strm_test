@@ -463,6 +463,7 @@ def _build_delete_plan_items(
     return plan_items
 
 
+@router.api_route("/emby/items/{item_id}/PlaybackInfo", methods=["GET", "POST"])
 @router.api_route("/emby/Items/{item_id}/PlaybackInfo", methods=["GET", "POST"])
 @router.api_route("/Items/{item_id}/PlaybackInfo", methods=["GET", "POST"])
 @router.api_route("/items/{item_id}/PlaybackInfo", methods=["GET", "POST"])
@@ -858,6 +859,7 @@ async def execute_delete_plan(
     }
 
 
+@router.get("/emby/items/{item_id}")
 @router.get("/emby/Items/{item_id}")
 @router.get("/Items/{item_id}")
 @router.get("/items/{item_id}")
@@ -901,6 +903,8 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.api_route("/emby/videos/{item_id}/stream.{filename}", methods=["GET", "HEAD"])
+@router.api_route("/emby/videos/{item_id}/stream", methods=["GET", "HEAD"])
 @router.api_route("/emby/Videos/{item_id}/stream.{filename}", methods=["GET", "HEAD"])
 @router.api_route("/emby/Videos/{item_id}/stream", methods=["GET", "HEAD"])
 @router.api_route("/Videos/{item_id}/stream.{filename}", methods=["GET", "HEAD"])
@@ -947,6 +951,7 @@ async def stream_video(
         raise HTTPException(status_code=500, detail="Failed to stream video") from exc
 
 
+@router.api_route("/emby/videos/{item_id}/master.m3u8", methods=["GET", "HEAD"])
 @router.api_route("/emby/Videos/{item_id}/master.m3u8", methods=["GET", "HEAD"])
 @router.api_route("/Videos/{item_id}/master.m3u8", methods=["GET", "HEAD"])
 @router.api_route("/videos/{item_id}/master.m3u8", methods=["GET", "HEAD"])
