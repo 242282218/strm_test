@@ -182,6 +182,15 @@ class TestV1RouterStructure:
         assert any(path == "/tasks" for path in route_paths)
         assert any(path == "/tasks/ws" for path in route_paths)
 
+    def test_v1_router_does_not_expose_root_level_task_aliases(self):
+        """验证 v1 不再暴露会抢占 collection 路由的 tasks 根级别别名"""
+        from app.api.v1 import v1_router
+
+        route_paths = {str(route.path) for route in v1_router.routes}
+
+        assert "/{task_id}" not in route_paths
+        assert "/ws" not in route_paths
+
     def test_main_app_keeps_v1_legacy_alias_and_canonical_paths(self):
         """验证主应用同时保留 canonical 与 legacy alias v1 路径。"""
         from app.main import app
@@ -228,3 +237,11 @@ class TestMainRouterRegistration:
 
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+    def test_main_app_does_not_register_root_level_v1_task_aliases(self):
+        from app.main import app
+
+        paths = {getattr(route, "path", None) for route in app.routes}
+
+        assert "/api/v1/{task_id}" not in paths
+        assert "/api/v1/ws" not in paths
