@@ -266,7 +266,7 @@ def test_gateway_videos_stream_when_head_requested_on_dedicated_proxy_host_then_
     ):
         response = client.head(
             "/Videos/item123/stream",
-            params={"MediaSourceId": "media123", "Static": "true", "container": "mkv"},
+            params={"MediaSourceId": "media123", "Static": "true", "container": "mkv", "smart_media_proxy": "1"},
             headers={"host": "proxy.example:18097"},
         )
 
@@ -294,7 +294,7 @@ def test_gateway_videos_stream_when_dedicated_proxy_host_then_intercepts_local_s
     ):
         response = client.get(
             "/Videos/item123/stream",
-            params={"MediaSourceId": "media123", "Static": "true", "container": "mkv"},
+            params={"MediaSourceId": "media123", "Static": "true", "container": "mkv", "smart_media_proxy": "1"},
             headers={"host": "proxy.example:18097", "Range": "bytes=0-1"},
         )
 
@@ -326,13 +326,104 @@ def test_gateway_videos_master_playlist_when_dedicated_proxy_host_then_intercept
     ):
         response = client.get(
             "/Videos/item123/master.m3u8",
-            params={"MediaSourceId": "media123"},
+            params={"MediaSourceId": "media123", "smart_media_proxy": "1"},
             headers={"host": "proxy.example:18097"},
         )
 
     assert response.status_code == 200
     assert "/api/proxy/transcoding/file123" in response.text
     mock_master.assert_awaited_once()
+
+
+def test_gateway_videos_master_playlist_when_head_requested_with_local_proxy_marker_then_intercepts_local_master_path():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._handle_emby_style_master_playlist",
+            new=AsyncMock(
+                return_value=Response(
+                    content="",
+                    media_type="application/vnd.apple.mpegurl",
+                    status_code=200,
+                    headers={"Cache-Control": "no-cache"},
+                )
+            ),
+        ) as mock_master,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not forward to upstream emby")),
+        ),
+    ):
+        response = client.head(
+            "/Videos/item123/master.m3u8",
+            params={"MediaSourceId": "media123", "smart_media_proxy": "1"},
+            headers={"host": "proxy.example:18097"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-cache"
+    mock_master.assert_awaited_once()
+
+
+def test_gateway_videos_stream_when_marker_missing_then_forwards_upstream_emby():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._handle_emby_style_stream",
+            new=AsyncMock(side_effect=AssertionError("should not intercept local stream without marker")),
+        ),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(return_value=Response(content=b"upstream-stream", media_type="video/mp4", status_code=206)),
+        ) as mock_forward,
+    ):
+        response = client.get(
+            "/Videos/item123/stream",
+            params={"MediaSourceId": "media123", "Static": "true", "container": "mkv"},
+            headers={"host": "proxy.example:18097", "Range": "bytes=0-1"},
+        )
+
+    assert response.status_code == 206
+    assert response.content == b"upstream-stream"
+    mock_forward.assert_awaited_once()
+
+
+def test_gateway_videos_master_playlist_when_marker_missing_then_forwards_upstream_emby():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._handle_emby_style_master_playlist",
+            new=AsyncMock(side_effect=AssertionError("should not intercept local playlist without marker")),
+        ),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(
+                return_value=Response(
+                    content="#EXTM3U\n# upstream emby\n",
+                    media_type="application/vnd.apple.mpegurl",
+                    status_code=200,
+                )
+            ),
+        ) as mock_forward,
+    ):
+        response = client.get(
+            "/Videos/item123/master.m3u8",
+            params={"MediaSourceId": "media123"},
+            headers={"host": "proxy.example:18097"},
+        )
+
+    assert response.status_code == 200
+    assert "# upstream emby" in response.text
+    mock_forward.assert_awaited_once()
 
 
 @pytest.mark.asyncio

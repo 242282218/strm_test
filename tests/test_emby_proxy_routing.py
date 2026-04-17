@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from aiohttp.http_exceptions import LineTooLong
@@ -265,7 +266,7 @@ async def test_playback_info_hook_when_remote_source_has_transcoding_then_preser
     media_source = result["MediaSources"][0]
     assert media_source["DirectStreamUrl"] == "http://proxy.example:18097/api/proxy/redirect/file123?Static=true"
     assert media_source["SupportsTranscoding"] is True
-    assert media_source["TranscodingUrl"] == "/Videos/77/master.m3u8"
+    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
     assert media_source["TranscodingSubProtocol"] == "hls"
     assert media_source["TranscodingContainer"] == "ts"
 
@@ -299,10 +300,11 @@ async def test_playback_info_hook_when_web_client_and_remote_source_then_rewrite
 
     media_source = result["MediaSources"][0]
     assert media_source["DirectStreamUrl"] == (
-        "http://proxy.example:18097/Videos/item1/stream?MediaSourceId=media_source_1&Static=true&container=mkv"
+        "http://proxy.example:18097/Videos/item1/stream?MediaSourceId=media_source_1&Static=true"
+        "&smart_media_proxy=1&container=mkv"
     )
     assert media_source["SupportsTranscoding"] is True
-    assert media_source["TranscodingUrl"] == "/Videos/77/master.m3u8"
+    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
 
 
 @pytest.mark.asyncio
@@ -334,7 +336,42 @@ async def test_playback_info_hook_when_non_web_client_and_remote_source_then_rew
     media_source = result["MediaSources"][0]
     assert media_source["DirectStreamUrl"] == "http://proxy.example:18097/api/proxy/redirect/file123?Static=true"
     assert media_source["SupportsTranscoding"] is True
-    assert media_source["TranscodingUrl"] == "/Videos/77/master.m3u8"
+    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+
+
+@pytest.mark.asyncio
+async def test_playback_info_hook_when_remote_transcoding_query_present_then_rewrites_to_local_master_playlist():
+    emby_client = AsyncMock()
+    emby_client.get_playback_info = AsyncMock(
+        return_value={
+            "MediaSources": [
+                {
+                    "Id": "media_source_1",
+                    "Path": "http://example.com/api/proxy/stream/file123",
+                    "IsRemote": True,
+                    "SupportsTranscoding": True,
+                    "TranscodingUrl": "/Videos/77/master.m3u8?PlaySessionId=session77&DeviceId=device77",
+                }
+            ]
+        }
+    )
+
+    hook = PlaybackInfoHook(
+        emby_client=emby_client,
+        quark_service=AsyncMock(),
+        proxy_base_url="http://proxy.example:18097",
+    )
+
+    result = await hook.hook_playback_info(item_id="item1", user_id="user1", is_web_client=True)
+
+    transcoding_url = result["MediaSources"][0]["TranscodingUrl"]
+    parsed = urlsplit(transcoding_url)
+    query = parse_qs(parsed.query)
+    assert parsed.path == "/Videos/item1/master.m3u8"
+    assert query["MediaSourceId"] == ["media_source_1"]
+    assert query["smart_media_proxy"] == ["1"]
+    assert query["PlaySessionId"] == ["session77"]
+    assert query["DeviceId"] == ["device77"]
 
 
 @pytest.mark.asyncio

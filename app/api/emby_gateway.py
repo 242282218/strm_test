@@ -20,6 +20,10 @@ from fastapi.responses import JSONResponse, Response
 from starlette.requests import HTTPConnection
 
 from app.api.emby import _is_web_client_request, get_master_playlist, stream_video
+from app.services.playbackinfo_hook import (
+    LOCAL_PLAYBACK_PROXY_QUERY_KEY,
+    LOCAL_PLAYBACK_PROXY_QUERY_VALUE,
+)
 
 from app.core.config_manager import get_config
 from app.core.http_pool import ClientType, get_http_pool_sync
@@ -120,6 +124,10 @@ def _resolve_proxy_base_url(app_config, request: Request) -> str:
         validate_http_url(configured_proxy, "proxy_base_url")
         return configured_proxy.rstrip("/")
     return str(request.base_url).rstrip("/")
+
+
+def _is_local_playback_proxy_request(request: Request) -> bool:
+    return request.query_params.get(LOCAL_PLAYBACK_PROXY_QUERY_KEY) == LOCAL_PLAYBACK_PROXY_QUERY_VALUE
 
 
 def _rewrite_location(location: str, emby_base_url: str, request: Request) -> str:
@@ -292,13 +300,13 @@ async def _handle_gateway_request(request: Request, path: str) -> Response:
             item_id = validate_identifier(matched.group("item_id"), "item_id")
             return await _proxy_playback_info(request, app_config, item_id)
 
-    if request.method in {"GET", "HEAD"}:
+    if request.method in {"GET", "HEAD"} and _is_local_playback_proxy_request(request):
         stream_match = _VIDEOS_STREAM_RE.match(path)
         if stream_match:
             item_id = validate_identifier(stream_match.group("item_id"), "item_id")
             return await _handle_emby_style_stream(request, item_id)
 
-    if request.method == "GET":
+    if request.method in {"GET", "HEAD"} and _is_local_playback_proxy_request(request):
         master_match = _VIDEOS_MASTER_RE.match(path)
         if master_match:
             item_id = validate_identifier(master_match.group("item_id"), "item_id")
