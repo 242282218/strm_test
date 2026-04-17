@@ -105,12 +105,37 @@ async def _read_playback_request_payload(request: Request) -> dict[str, Any] | N
     return payload
 
 
+def _resolve_legacy_endpoint_emby_field(app_config, field_name: str) -> str:
+    endpoints = getattr(app_config, "endpoints", None) or []
+    if not endpoints:
+        return ""
+    return str(getattr(endpoints[0], field_name, "") or "").strip()
+
+
+def _resolve_configured_emby_base_url(app_config) -> str:
+    configured_emby_url = str(getattr(getattr(app_config, "emby", None), "url", "") or "").strip()
+    if not configured_emby_url:
+        configured_emby_url = _resolve_legacy_endpoint_emby_field(app_config, "emby_url")
+    return configured_emby_url
+
+
+def _resolve_requested_emby_base_url(request: Request, app_config) -> str:
+    emby_base_url = (
+        request.headers.get("X-Emby-Server-Url")
+        or _resolve_configured_emby_base_url(app_config)
+        or "http://localhost:8096"
+    )
+    validate_http_url(emby_base_url, "emby_base_url")
+    return emby_base_url
+
+
 def _resolve_requested_emby_api_key(request: Request, app_config) -> str:
     candidates = (
         request.headers.get("X-Emby-Token"),
         request.headers.get("X-MediaBrowser-Token"),
         request.query_params.get("api_key"),
         getattr(getattr(app_config, "emby", None), "api_key", ""),
+        _resolve_legacy_endpoint_emby_field(app_config, "emby_api_key"),
     )
     for candidate in candidates:
         if candidate is None:
@@ -129,13 +154,7 @@ async def _resolve_media_source_file_id_for_request(
     cookie: str,
 ) -> str:
     app_config = config_service.get_config()
-    configured_emby_url = ""
-    if getattr(app_config, "endpoints", None):
-        configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
-    if not configured_emby_url:
-        configured_emby_url = (getattr(getattr(app_config, "emby", None), "url", "") or "").strip()
-    emby_base_url = request.headers.get("X-Emby-Server-Url") or configured_emby_url or "http://localhost:8096"
-    validate_http_url(emby_base_url, "emby_base_url")
+    emby_base_url = _resolve_requested_emby_base_url(request, app_config)
 
     configured_proxy_base_url = (getattr(getattr(app_config, "emby", None), "proxy_base_url", "") or "").strip()
     proxy_base_url = request.headers.get("X-Proxy-Server-Url") or configured_proxy_base_url
@@ -511,13 +530,7 @@ async def get_playback_info(
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 
-        configured_emby_url = ""
-        if getattr(app_config, "endpoints", None):
-            configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
-        if not configured_emby_url:
-            configured_emby_url = (getattr(getattr(app_config, "emby", None), "url", "") or "").strip()
-        emby_base_url = request.headers.get("X-Emby-Server-Url") or configured_emby_url or "http://localhost:8096"
-        validate_http_url(emby_base_url, "emby_base_url")
+        emby_base_url = _resolve_requested_emby_base_url(request, app_config)
 
         configured_proxy_base_url = (getattr(app_config.emby, "proxy_base_url", "") or "").strip()
         proxy_base_url = request.headers.get("X-Proxy-Server-Url") or configured_proxy_base_url
@@ -883,13 +896,7 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 
-        configured_emby_url = ""
-        if getattr(app_config, "endpoints", None):
-            configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
-        if not configured_emby_url:
-            configured_emby_url = (getattr(getattr(app_config, "emby", None), "url", "") or "").strip()
-        emby_base_url = request.headers.get("X-Emby-Server-Url") or configured_emby_url or "http://localhost:8096"
-        validate_http_url(emby_base_url, "emby_base_url")
+        emby_base_url = _resolve_requested_emby_base_url(request, app_config)
 
         cookie = config.get_quark_cookie()
         if not cookie:

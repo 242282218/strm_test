@@ -210,6 +210,30 @@ def test_gateway_playbackinfo_when_dedicated_proxy_host_then_uses_hook_proxy():
     assert _FakeEmbyProxyService.last_init["emby_base_url"] == "http://emby.example:18096"
 
 
+def test_gateway_playbackinfo_when_header_and_query_api_keys_conflict_then_prefers_header_token():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/Items/item123/PlaybackInfo",
+            params={
+                "UserId": "user123",
+                "MediaSourceId": "media123",
+                "api_key": "query-emby-api-key",
+            },
+            headers={"host": "proxy.example:18097", "X-Emby-Token": "header-emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["api_key"] == "header-emby-api-key"
+
+
 def test_gateway_playbackinfo_when_prefixed_lowercase_path_used_then_still_uses_hook_proxy():
     client = _build_client()
     app_config = _mock_config()

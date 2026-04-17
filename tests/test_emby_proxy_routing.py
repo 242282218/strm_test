@@ -649,6 +649,29 @@ def test_get_playback_info_when_endpoint_emby_url_is_empty_then_falls_back_to_em
     assert _FakeEmbyProxyService.last_init["emby_base_url"] == "http://emby.example:8096"
 
 
+def test_get_playback_info_when_global_and_legacy_emby_urls_both_present_then_prefers_global_emby_url():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="http://legacy.emby.example:8096")],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097", url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"user_id": "user123"},
+            headers={"X-Emby-Token": "emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["emby_base_url"] == "http://emby.example:8096"
+
+
 def test_get_playback_info_when_web_headers_present_then_marks_request_as_web_client():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -750,6 +773,29 @@ def test_get_playback_info_when_request_token_missing_then_falls_back_to_configu
     assert response.json()["user_id"] == "user123"
     assert _FakeEmbyProxyService.last_init is not None
     assert _FakeEmbyProxyService.last_init["api_key"] == "configured-emby-api-key"
+
+
+def test_get_playback_info_when_global_api_key_missing_then_falls_back_to_legacy_endpoint_api_key():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_api_key="legacy-endpoint-api-key")],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097", api_key=""),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"UserId": "user123"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == "user123"
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["api_key"] == "legacy-endpoint-api-key"
 
 
 def test_get_playback_info_when_native_items_path_used_then_still_hits_local_hook_route():

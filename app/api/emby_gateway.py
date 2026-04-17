@@ -23,6 +23,8 @@ from app.api.emby import (
     _is_web_client_request,
     _read_playback_request_payload,
     _resolve_playback_request_field,
+    _resolve_configured_emby_base_url,
+    _resolve_requested_emby_api_key,
     get_master_playlist,
     stream_video,
 )
@@ -116,10 +118,7 @@ def _is_dedicated_proxy_request(connection: HTTPConnection, app_config) -> bool:
 
 
 def _resolve_emby_base_url(app_config) -> str:
-    emby_base_url = (getattr(app_config.emby, "url", "") or "").strip()
-    if not emby_base_url and getattr(app_config, "endpoints", None):
-        first = app_config.endpoints[0]
-        emby_base_url = (getattr(first, "emby_url", "") or "").strip()
+    emby_base_url = _resolve_configured_emby_base_url(app_config)
     if not emby_base_url:
         emby_base_url = "http://localhost:8096"
 
@@ -213,12 +212,7 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
         or request.query_params.get("media_source_id")
         or _resolve_playback_request_field(playback_request, "MediaSourceId", "media_source_id")
     )
-    api_key = (
-        request.query_params.get("api_key")
-        or request.headers.get("X-Emby-Token")
-        or request.headers.get("X-MediaBrowser-Token")
-        or (getattr(app_config.emby, "api_key", "") or "")
-    )
+    api_key = _resolve_requested_emby_api_key(request, app_config)
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing API key")
 
