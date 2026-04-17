@@ -15,6 +15,11 @@ const taskApiMocks = vi.hoisted(() => ({
   getTaskTypeLabel: vi.fn((type: string) => type)
 }))
 
+const notificationMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn()
+}))
+
 vi.mock('@/features/tasks/api/tasks', () => taskApiMocks)
 
 vi.mock('@/composables', () => ({
@@ -24,10 +29,7 @@ vi.mock('@/composables', () => ({
       await fn()
     }
   }),
-  useNotification: () => ({
-    success: vi.fn(),
-    error: vi.fn()
-  }),
+  useNotification: () => notificationMocks,
   useAsyncNotify: () => ({
     withConfirm: async (fn: () => Promise<void>) => {
       await fn()
@@ -110,10 +112,45 @@ describe('TasksView task launch routing', () => {
     expect(taskApiMocks.getTasks).toHaveBeenCalledTimes(1)
     expect(wrapper.get('.create-task-dialog-mock').attributes('data-visible')).toBe('true')
     expect(wrapper.get('.create-task-dialog-mock').attributes('data-task-type')).toBe('file_sync')
+    expect(wrapper.text()).toContain('快捷入口已预填')
+    expect(wrapper.text()).toContain('来自概览页的快捷入口')
 
     wrapper.getComponent({ name: 'CreateTaskDialog' }).vm.$emit('update:modelValue', false)
     await flushUi()
 
+    expect(router.currentRoute.value.fullPath).toBe('/tasks')
+  })
+
+  it('reloads tasks after dialog success without emitting a duplicate parent success toast', async () => {
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        {
+          path: '/tasks',
+          name: 'Tasks',
+          component: TasksView
+        }
+      ]
+    })
+
+    await router.push('/tasks?createTask=strm_generation')
+    await router.isReady()
+
+    const wrapper = mount(TasksView, {
+      global: {
+        plugins: [router, ElementPlus]
+      }
+    })
+
+    await flushUi()
+    taskApiMocks.getTasks.mockClear()
+
+    wrapper.getComponent({ name: 'CreateTaskDialog' }).vm.$emit('success')
+    await flushUi()
+
+    expect(wrapper.get('.create-task-dialog-mock').attributes('data-visible')).toBe('false')
+    expect(taskApiMocks.getTasks).toHaveBeenCalledTimes(1)
+    expect(notificationMocks.success).not.toHaveBeenCalled()
     expect(router.currentRoute.value.fullPath).toBe('/tasks')
   })
 })
