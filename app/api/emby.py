@@ -938,7 +938,7 @@ async def stream_video(
         raise HTTPException(status_code=500, detail="Failed to stream video") from exc
 
 
-@router.get("/videos/{item_id}/master.m3u8")
+@router.api_route("/videos/{item_id}/master.m3u8", methods=["GET", "HEAD"])
 async def get_master_playlist(
     item_id: str,
     request: Request,
@@ -971,8 +971,9 @@ async def get_master_playlist(
             "#EXT-X-STREAM-INF:BANDWIDTH=8000000,RESOLUTION=1920x1080\n"
             f"/api/proxy/transcoding/{file_id}\n"
         )
+        response_content = "" if request.method.upper() == "HEAD" else playlist
         return Response(
-            content=playlist,
+            content=response_content,
             media_type="application/vnd.apple.mpegurl",
             headers={
                 "Content-Type": "application/vnd.apple.mpegurl",
