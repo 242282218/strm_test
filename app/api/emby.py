@@ -105,6 +105,22 @@ async def _read_playback_request_payload(request: Request) -> dict[str, Any] | N
     return payload
 
 
+def _resolve_requested_emby_api_key(request: Request, app_config) -> str:
+    candidates = (
+        request.headers.get("X-Emby-Token"),
+        request.headers.get("X-MediaBrowser-Token"),
+        request.query_params.get("api_key"),
+        getattr(getattr(app_config, "emby", None), "api_key", ""),
+    )
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        text = str(candidate).strip()
+        if text:
+            return text
+    return ""
+
+
 async def _resolve_media_source_file_id_for_request(
     request: Request,
     *,
@@ -127,12 +143,7 @@ async def _resolve_media_source_file_id_for_request(
         proxy_base_url = f"http://{request.headers.get('host', 'localhost:8000')}"
     validate_http_url(proxy_base_url, "proxy_base_url")
 
-    api_key = (
-        request.headers.get("X-Emby-Token")
-        or request.headers.get("X-MediaBrowser-Token")
-        or request.query_params.get("api_key")
-        or getattr(getattr(app_config, "emby", None), "api_key", "")
-    )
+    api_key = _resolve_requested_emby_api_key(request, app_config)
 
     async with EmbyProxyService(
         emby_base_url=emby_base_url,
@@ -495,15 +506,11 @@ async def get_playback_info(
         if media_source_id:
             media_source_id = validate_identifier(media_source_id, "media_source_id")
 
-        api_key = (
-            request.headers.get("X-Emby-Token")
-            or request.headers.get("X-MediaBrowser-Token")
-            or request.query_params.get("api_key")
-        )
+        app_config = config_service.get_config()
+        api_key = _resolve_requested_emby_api_key(request, app_config)
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 
-        app_config = config_service.get_config()
         configured_emby_url = ""
         if getattr(app_config, "endpoints", None):
             configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
@@ -871,15 +878,11 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
         if user_id:
             user_id = validate_identifier(user_id, "user_id")
 
-        api_key = (
-            request.headers.get("X-Emby-Token")
-            or request.headers.get("X-MediaBrowser-Token")
-            or request.query_params.get("api_key")
-        )
+        app_config = config_service.get_config()
+        api_key = _resolve_requested_emby_api_key(request, app_config)
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 
-        app_config = config_service.get_config()
         configured_emby_url = ""
         if getattr(app_config, "endpoints", None):
             configured_emby_url = (getattr(app_config.endpoints[0], "emby_url", "") or "").strip()
