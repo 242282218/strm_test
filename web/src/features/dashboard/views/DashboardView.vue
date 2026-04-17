@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard">
-    <el-skeleton v-if="loading" :rows="8" animated class="dashboard-skeleton" />
+    <el-skeleton v-if="isInitialLoading" :rows="8" animated class="dashboard-skeleton" />
 
     <template v-else>
       <section class="dashboard-hero page-surface">
@@ -19,7 +19,7 @@
                 任务中心
                 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
               </el-button>
-              <el-button plain :icon="Refresh" @click="fetchDashboardData">刷新数据</el-button>
+              <el-button plain :icon="Refresh" :loading="isRefreshing" @click="refreshDashboard">刷新数据</el-button>
             </div>
           </div>
 
@@ -310,13 +310,13 @@
     </template>
 
     <div aria-live="polite" aria-atomic="true" class="sr-only">
-      {{ loading ? '正在加载数据' : '数据加载完成' }}
+      {{ isInitialLoading ? '正在加载数据' : isRefreshing ? '正在刷新数据' : '数据加载完成' }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts/core'
@@ -410,7 +410,8 @@ interface StatusBadge {
 }
 
 const router = useRouter()
-const loading = ref(false)
+const isInitialLoading = ref(true)
+const isRefreshing = ref(false)
 const isClearingCache = ref(false)
 const timeRange = ref<TimeRange>('week')
 const timeRangeLabel = computed(() => timeRange.value === 'week' ? '7 天' : '30 天')
@@ -433,6 +434,12 @@ const cacheStats = ref<CacheDetail>({
   ttl: 600
 })
 const fileTypes = ref<Record<string, number>>({})
+const taskTrends = ref<TaskTrends>({
+  status: 'ok',
+  dates: [],
+  success: [],
+  failed: []
+})
 
 const taskChartApi = useECharts({ lazy: true })
 const fileChartApi = useECharts({ lazy: true })
@@ -551,7 +558,7 @@ const heroSignals = computed<HeroSignal[]>(() => {
       value: services.value.length === 0 ? '待同步' : `${runningServiceCount.value} / ${services.value.length}`,
       detail: serviceDetail,
       icon: Cpu,
-      tone: runningServiceCount.value === services.value.length ? 'success' : 'primary'
+      tone: services.value.length === 0 ? 'primary' : runningServiceCount.value === services.value.length ? 'success' : 'warning'
     },
     {
       label: '任务队列',
@@ -695,6 +702,16 @@ const formatTypeShare = (value: number): string => {
   return `${Math.round((value / totalFileCount.value) * 100)}%`
 }
 
+const getTrendDays = () => timeRange.value === 'week' ? 7 : 30
+
+const syncDashboardStats = (data: DashboardData) => {
+  recentTasks.value = data.recent_tasks.map(normalizeTask)
+  services.value = data.services
+  cacheStats.value = data.cache_detail
+  fileTypes.value = data.file_types
+  stats.value = buildStats(data)
+}
+
 const updateTaskChart = (trends: TaskTrends) => {
   const theme = getChartTheme()
 
@@ -828,37 +845,68 @@ const updateFileTypeChart = () => {
   }, true)
 }
 
-const fetchDashboardData = async () => {
-  loading.value = true
-  try {
-    const data = await getDashboardStats()
+const renderDashboardCharts = () => {
+  updateTaskChart(taskTrends.value)
+  updateFileTypeChart()
+}
 
-    recentTasks.value = data.recent_tasks.map(normalizeTask)
-    services.value = data.services
-    cacheStats.value = data.cache_detail
-    fileTypes.value = data.file_types
-    stats.value = buildStats(data)
-    updateFileTypeChart()
+const initDashboardCharts = async () => {
+  await nextTick()
+  taskChartApi.initChart()
+  fileChartApi.initChart()
+  renderDashboardCharts()
+}
+
+const fetchDashboardSnapshot = async () => {
+  const [data, trends] = await Promise.all([
+    getDashboardStats(),
+    getTaskTrends(getTrendDays())
+  ])
+
+  syncDashboardStats(data)
+  taskTrends.value = trends
+}
+
+const initializeDashboard = async () => {
+  try {
+    await fetchDashboardSnapshot()
   } catch (error) {
     console.error('获取仪表盘数据失败:', error)
     ElMessage.error('获取仪表盘数据失败')
   } finally {
-    loading.value = false
+    isInitialLoading.value = false
+    await initDashboardCharts()
   }
 }
 
-const fetchTaskTrends = async () => {
+const refreshDashboard = async () => {
+  if (isRefreshing.value) {
+    return
+  }
+
+  isRefreshing.value = true
   try {
-    const days = timeRange.value === 'week' ? 7 : 30
-    const trends = await getTaskTrends(days)
-    updateTaskChart(trends)
+    await fetchDashboardSnapshot()
+    renderDashboardCharts()
+  } catch (error) {
+    console.error('刷新仪表盘数据失败:', error)
+    ElMessage.error('刷新仪表盘数据失败')
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+const fetchTaskTrendData = async () => {
+  try {
+    taskTrends.value = await getTaskTrends(getTrendDays())
+    updateTaskChart(taskTrends.value)
   } catch (error) {
     console.error('获取任务趋势失败:', error)
   }
 }
 
 const { run: debouncedFetchTaskTrends, cancel: cancelTaskTrendFetch } = useDebounce(() => {
-  void fetchTaskTrends()
+  void fetchTaskTrendData()
 }, 160)
 
 const { run: debouncedResizeCharts, cancel: cancelResizeCharts } = useDebounce(() => {
@@ -883,7 +931,7 @@ const clearCache = async () => {
     isClearingCache.value = true
     await clearDashboardCache()
     ElMessage.success('缓存已清空')
-    await fetchDashboardData()
+    await refreshDashboard()
   } catch (error) {
     if (error === 'cancel' || error === 'close') {
       return
@@ -901,14 +949,7 @@ const handleResize = () => {
 }
 
 onMounted(async () => {
-  taskChartApi.initChart()
-  fileChartApi.initChart()
-
-  await Promise.all([
-    fetchDashboardData(),
-    fetchTaskTrends()
-  ])
-
+  await initializeDashboard()
   window.addEventListener('resize', handleResize)
 })
 

@@ -20,21 +20,25 @@ test.describe('仪表盘 /dashboard', () => {
 
   test('ECharts 图表容器已渲染', async ({ page }) => {
     await navigateAndWait(page, '/dashboard')
-    // ECharts 会在 canvas 元素上渲染
-    const chartContainers = page.locator('.chart-container')
-    if (await chartContainers.count() > 0) {
-      await expect(chartContainers.first()).toBeVisible()
-    }
+    await expect(page.locator('.chart-container canvas').first()).toBeVisible({ timeout: 10_000 })
   })
 
-  test('刷新按钮可点击', async ({ page }) => {
+  test('刷新按钮会同时刷新统计与趋势', async ({ page }) => {
     await navigateAndWait(page, '/dashboard')
     const refreshBtn = page.getByText('刷新数据')
-    if (await refreshBtn.count() > 0) {
-      await refreshBtn.click()
-      // 刷新后统计卡片仍可见
-      await expect(page.locator('.stat-card').first()).toBeVisible({ timeout: 10_000 })
-    }
+    const statsResponse = page.waitForResponse(response =>
+      response.request().method() === 'GET' && response.url().includes('/api/dashboard/stats'),
+    )
+    const trendsResponse = page.waitForResponse(response =>
+      response.request().method() === 'GET' && response.url().includes('/api/dashboard/trends'),
+    )
+
+    await refreshBtn.click()
+
+    expect((await statsResponse).status()).toBe(200)
+    expect((await trendsResponse).status()).toBe(200)
+    await expect(page.locator('.stat-card').first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('.chart-container canvas').first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('时间范围切换', async ({ page }) => {

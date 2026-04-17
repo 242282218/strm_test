@@ -215,7 +215,81 @@ describe('DashboardView', () => {
     expect(confirmSpy).toHaveBeenCalledTimes(1)
     expect(dashboardApiMocks.clearDashboardCache).toHaveBeenCalledTimes(1)
     expect(dashboardApiMocks.getDashboardStats).toHaveBeenCalledTimes(2)
+    expect(dashboardApiMocks.getTaskTrends).toHaveBeenCalledTimes(2)
     expect(successSpy).toHaveBeenCalledWith('缓存已清空')
     expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  it('refreshes stats and trends together from the header action', async () => {
+    const errorSpy = vi.spyOn(ElMessage, 'error').mockImplementation(vi.fn())
+
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } }
+      ]
+    })
+
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(DashboardView, {
+      global: {
+        plugins: [router, ElementPlus]
+      }
+    })
+
+    await flushUi()
+
+    const actionButtons = wrapper.findAll('.hero-header-actions .el-button')
+    await actionButtons[1]!.trigger('click')
+    await flushUi()
+
+    expect(dashboardApiMocks.getDashboardStats).toHaveBeenCalledTimes(2)
+    expect(dashboardApiMocks.getTaskTrends).toHaveBeenCalledTimes(2)
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  it('keeps the service signal in a neutral tone before service status is available', async () => {
+    dashboardApiMocks.getDashboardStats.mockResolvedValue({
+      status: 'ok',
+      stats: {
+        strm_count: 0,
+        task_count: 0,
+        cache_entries: 0,
+        cache_hit_rate: 0
+      },
+      recent_tasks: [],
+      services: [],
+      cache_detail: {
+        size: 0,
+        hit_rate: 0,
+        ttl: 600
+      },
+      file_types: {}
+    })
+
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } }
+      ]
+    })
+
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(DashboardView, {
+      global: {
+        plugins: [router, ElementPlus]
+      }
+    })
+
+    await flushUi()
+
+    const serviceSignal = wrapper.findAll('.hero-signal')[0]
+    expect(serviceSignal?.classes()).toContain('primary')
+    expect(serviceSignal?.classes()).not.toContain('success')
+    expect(serviceSignal?.text()).toContain('待同步')
   })
 })
