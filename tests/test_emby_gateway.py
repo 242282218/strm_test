@@ -210,6 +210,38 @@ def test_gateway_playbackinfo_when_dedicated_proxy_host_then_uses_hook_proxy():
     assert _FakeEmbyProxyService.last_init["emby_base_url"] == "http://emby.example:18096"
 
 
+def test_gateway_playbackinfo_when_prefixed_lowercase_path_used_then_still_uses_hook_proxy():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not forward prefixed lowercase PlaybackInfo upstream")),
+        ),
+    ):
+        response = client.get(
+            "/emby/items/item123/PlaybackInfo",
+            params={
+                "UserId": "user123",
+                "MediaSourceId": "media123",
+                "api_key": "emby-api-key",
+            },
+            headers={"host": "proxy.example:18097"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["item_id"] == "item123"
+    assert data["user_id"] == "user123"
+    assert data["media_source_id"] == "media123"
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["emby_base_url"] == "http://emby.example:18096"
+
+
 def test_gateway_playbackinfo_when_web_headers_present_then_forwards_web_client_hints():
     client = _build_client()
     app_config = _mock_config()
@@ -371,6 +403,33 @@ def test_gateway_videos_stream_when_container_suffix_present_then_intercepts_loc
     assert mock_stream.await_args.kwargs["filename"] == "mkv"
 
 
+def test_gateway_videos_stream_when_prefixed_lowercase_path_used_then_intercepts_local_stream_path():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._handle_emby_style_stream",
+            new=AsyncMock(return_value=Response(content=b"stream-body", media_type="video/mp4", status_code=206)),
+        ) as mock_stream,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not forward prefixed lowercase stream upstream")),
+        ),
+    ):
+        response = client.get(
+            "/emby/videos/item123/stream.mkv",
+            params={"MediaSourceId": "media123", "Static": "true", "smart_media_proxy": "1"},
+            headers={"host": "proxy.example:18097", "Range": "bytes=0-1"},
+        )
+
+    assert response.status_code == 206
+    assert response.content == b"stream-body"
+    mock_stream.assert_awaited_once()
+    assert mock_stream.await_args.kwargs["filename"] == "mkv"
+
+
 def test_gateway_videos_master_playlist_when_dedicated_proxy_host_then_intercepts_local_master_path():
     client = _build_client()
     app_config = _mock_config()
@@ -394,6 +453,38 @@ def test_gateway_videos_master_playlist_when_dedicated_proxy_host_then_intercept
     ):
         response = client.get(
             "/Videos/item123/master.m3u8",
+            params={"MediaSourceId": "media123", "smart_media_proxy": "1"},
+            headers={"host": "proxy.example:18097"},
+        )
+
+    assert response.status_code == 200
+    assert "/api/proxy/transcoding/file123" in response.text
+    mock_master.assert_awaited_once()
+
+
+def test_gateway_videos_master_playlist_when_prefixed_lowercase_path_used_then_intercepts_local_master_path():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._handle_emby_style_master_playlist",
+            new=AsyncMock(
+                return_value=Response(
+                    content="#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=8000000,RESOLUTION=1920x1080\n/api/proxy/transcoding/file123\n",
+                    media_type="application/vnd.apple.mpegurl",
+                    status_code=200,
+                )
+            ),
+        ) as mock_master,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not forward prefixed lowercase master upstream")),
+        ),
+    ):
+        response = client.get(
+            "/emby/videos/item123/master.m3u8",
             params={"MediaSourceId": "media123", "smart_media_proxy": "1"},
             headers={"host": "proxy.example:18097"},
         )
