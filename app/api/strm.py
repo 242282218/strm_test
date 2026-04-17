@@ -2,14 +2,17 @@
 STRM API路由
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
-from app.services.strm_service import StrmService
-from app.core.database import resolve_db_path
-from app.core.database import Database
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from app.api.emby import _resolve_requested_proxy_base_url
+from app.core.constants import MAX_CONCURRENT_LIMIT, MAX_PATH_LENGTH, MIN_CONCURRENT_LIMIT
+from app.core.database import Database, resolve_db_path
+from app.core.dependencies import get_quark_cookie
 from app.core.logging import get_logger
-from app.core.dependencies import get_quark_cookie, require_api_key
-from app.core.validators import validate_path, InputValidationError
-from app.core.constants import MAX_CONCURRENT_LIMIT, MIN_CONCURRENT_LIMIT, MAX_PATH_LENGTH
+from app.core.validators import InputValidationError, validate_path
+from app.services.config_service import get_config_service
+from app.services.strm_service import StrmService
+
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/strm", tags=["STRM服务"])
@@ -17,15 +20,15 @@ router = APIRouter(prefix="/api/strm", tags=["STRM服务"])
 
 @router.post("/scan")
 async def scan_directory(
+    request: Request,
     remote_path: str = Query(..., min_length=1, max_length=MAX_PATH_LENGTH),
     local_path: str = Query(..., min_length=1, max_length=MAX_PATH_LENGTH),
     recursive: bool = Query(True),
     concurrent_limit: int = Query(5, ge=MIN_CONCURRENT_LIMIT, le=MAX_CONCURRENT_LIMIT),
-    base_url: str = Query("http://localhost:8000", description="代理服务器基础URL"),
+    base_url: str | None = Query(None, description="代理服务器基础URL"),
     strm_url_mode: str = Query("redirect", description="URL模式: redirect/stream/direct/webdav"),
     overwrite: bool = Query(False, description="是否覆盖已存在的 STRM 文件"),
-    _auth: None = Depends(require_api_key),
-    cookie: str = Depends(get_quark_cookie)
+    cookie: str = Depends(get_quark_cookie),
 ):
     """
     扫描目录并生成STRM
@@ -37,12 +40,17 @@ async def scan_directory(
     try:
         remote_path = validate_path(remote_path, "remote_path", allow_absolute=True)
         local_path = validate_path(local_path, "local_path", allow_absolute=True)
+
+        resolved_base_url = (base_url or "").strip()
+        if not resolved_base_url:
+            app_config = get_config_service().get_config()
+            resolved_base_url = _resolve_requested_proxy_base_url(request, app_config)
+
         database = Database(resolve_db_path())
         service = StrmService(
             cookie=cookie,
-            database=database,
             recursive=recursive,
-            base_url=base_url,
+            base_url=resolved_base_url,
             strm_url_mode=strm_url_mode,
             overwrite_existing=overwrite,
         )
@@ -57,7 +65,7 @@ async def scan_directory(
     except InputValidationError:
         raise
     except Exception as e:
-        logger.error(f"Failed to scan directory: {str(e)}")
+        logger.error(f"Failed to scan directory: {e!s}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if service:
