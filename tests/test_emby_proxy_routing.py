@@ -834,6 +834,35 @@ def test_get_item_when_user_id_legacy_token_and_emby_url_fallback_use_emby_contr
     mock_emby_proxy_service.proxy_items_request.assert_awaited_once_with(item_id="item123", user_id="user123")
 
 
+def test_proxy_emby_request_when_head_and_endpoint_url_empty_then_reuses_gateway_forwarder_with_emby_url_fallback():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(
+                return_value=Response(
+                    content=b"",
+                    status_code=200,
+                    media_type="application/json",
+                    headers={"Content-Length": "2"},
+                )
+            ),
+        ) as mock_forward,
+    ):
+        response = client.head("/api/emby/System/Info/Public")
+
+    assert response.status_code == 200
+    assert response.content == b""
+    assert mock_forward.await_args.args[1] is app_config
+    assert mock_forward.await_args.args[2] == "System/Info/Public"
+
+
 def test_stream_video_when_media_source_id_is_not_file_id_then_resolves_item_media_source_and_returns_stream_response():
     client = _build_emby_client()
     app_config = SimpleNamespace(

@@ -1045,31 +1045,16 @@ async def trigger_sync(
     return {"status": "started", "message": "Emby sync started in background"}
 
 
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
 async def proxy_emby_request(request: Request, path: str):
     """Emby 通用反代入口（兜底）"""
     try:
         path = validate_proxy_path(path, "path")
 
         app_config = config_service.get_config()
-        emby_base_url = request.headers.get(
-            "X-Emby-Server-Url",
-            app_config.endpoints[0].emby_url if app_config.endpoints else "http://localhost:8096",
-        )
-        validate_http_url(emby_base_url, "emby_base_url")
+        from app.api import emby_gateway as emby_gateway_module
 
-        target_url = f"{emby_base_url}/{path}"
-        query_string = str(request.query_params)
-        if query_string:
-            target_url = f"{target_url}?{query_string}"
-
-        logger.debug("Proxying Emby request: %s %s", request.method, target_url)
-        return {
-            "message": "Emby proxy endpoint",
-            "method": request.method,
-            "target_url": target_url,
-            "path": path,
-        }
+        return await emby_gateway_module._forward_to_emby(request, app_config, path)
     except InputValidationError:
         raise
     except Exception as exc:
