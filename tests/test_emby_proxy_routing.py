@@ -1230,6 +1230,54 @@ def test_proxy_emby_request_when_internal_error_then_does_not_leak_error_detail(
     assert response.json() == {"detail": "Failed to proxy Emby request"}
 
 
+def test_proxy_router_emby_request_when_endpoint_url_empty_then_reuses_gateway_forwarder_with_emby_url_fallback():
+    client = _build_proxy_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(
+                return_value=Response(
+                    content=b'{"ok":true}',
+                    status_code=200,
+                    media_type="application/json",
+                )
+            ),
+        ) as mock_forward,
+    ):
+        response = client.get("/api/proxy/emby/System/Info/Public")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert mock_forward.await_args.args[1] is app_config
+    assert mock_forward.await_args.args[2] == "System/Info/Public"
+
+
+def test_proxy_router_emby_request_when_internal_error_then_does_not_leak_error_detail():
+    client = _build_proxy_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=RuntimeError("internal secret path")),
+        ),
+    ):
+        response = client.get("/api/proxy/emby/System/Info/Public")
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Failed to proxy Emby request"}
+
+
 def test_stream_video_when_media_source_id_is_not_file_id_then_resolves_item_media_source_and_returns_stream_response():
     client = _build_emby_client()
     app_config = SimpleNamespace(

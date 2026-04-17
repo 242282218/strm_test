@@ -689,9 +689,10 @@ async def proxy_emby_request(request: Request, path: str):
     """
     try:
         path = validate_proxy_path(path, "path")
-        # 从配置获取Emby服务器地址
         app_config = config_service.get_config()
-        emby_url = app_config.endpoints[0].emby_url if app_config.endpoints else "http://localhost:8096"
+        from app.api import emby_gateway as emby_gateway_module
+
+        emby_url = emby_gateway_module._resolve_emby_base_url(app_config)
 
         # SSRF 防护: 验证 Emby URL
         try:
@@ -700,18 +701,7 @@ async def proxy_emby_request(request: Request, path: str):
             logger.error(f"Invalid Emby URL (SSRF protection): {e}")
             raise HTTPException(status_code=400, detail=f"Invalid Emby server URL: {e}")
 
-        # 构建目标URL
-        target_url = f"{emby_url}/{path}"
-        query_string = str(request.query_params)
-        if query_string:
-            target_url = f"{target_url}?{query_string}"
-
-        logger.debug(f"Proxying Emby request to: {target_url}")
-
-        # 这里可以实现完整的Emby反代逻辑
-        # 包括PlaybackInfo Hook等
-
-        return {"message": "Emby proxy endpoint", "target_url": target_url, "path": path}
+        return await emby_gateway_module._forward_to_emby(request, app_config, path)
     except InputValidationError:
         raise
     except URLValidationError as e:
