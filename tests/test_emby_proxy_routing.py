@@ -650,6 +650,32 @@ def test_get_playback_info_when_media_source_id_sent_as_emby_param_then_forwards
     assert _FakeEmbyProxyService.last_proxy_playback_info_call["media_source_id"] == "media_source_1"
 
 
+def test_get_playback_info_when_user_id_and_legacy_token_use_emby_contract_then_still_proxies_request():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"UserId": "user123"},
+            headers={"X-MediaBrowser-Token": "legacy-emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == "user123"
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["api_key"] == "legacy-emby-api-key"
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call is not None
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call["user_id"] == "user123"
+
+
 def test_get_playback_info_when_non_web_headers_present_then_keeps_request_as_non_web_client():
     client = _build_emby_client()
     app_config = SimpleNamespace(

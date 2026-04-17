@@ -68,6 +68,10 @@ def _resolve_requested_media_source_id(request: Request, media_source_id: str | 
     return media_source_id or request.query_params.get("MediaSourceId") or request.query_params.get("media_source_id")
 
 
+def _resolve_requested_user_id(request: Request, user_id: str | None) -> str | None:
+    return user_id or request.query_params.get("UserId") or request.query_params.get("user_id")
+
+
 async def _resolve_media_source_file_id_for_request(
     request: Request,
     *,
@@ -433,13 +437,18 @@ async def get_playback_info(
     """获取 PlaybackInfo（Hook 版本）"""
     try:
         item_id = validate_identifier(item_id, "item_id")
+        user_id = _resolve_requested_user_id(request, user_id)
         if user_id:
             user_id = validate_identifier(user_id, "user_id")
         media_source_id = _resolve_requested_media_source_id(request, media_source_id)
         if media_source_id:
             media_source_id = validate_identifier(media_source_id, "media_source_id")
 
-        api_key = request.headers.get("X-Emby-Token") or request.query_params.get("api_key")
+        api_key = (
+            request.headers.get("X-Emby-Token")
+            or request.headers.get("X-MediaBrowser-Token")
+            or request.query_params.get("api_key")
+        )
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing API key")
 
