@@ -6,10 +6,18 @@ test.describe('代理流契约', () => {
       timeout: 10_000,
     })
 
-    const body = await resp.text()
+    const body = (await resp.json()) as {
+      code: number
+      message: string
+      detail: string | null
+      error_code: string | null
+    }
 
     expect(resp.status()).not.toBe(404)
     expect(resp.status()).toBe(502)
-    console.log(`Proxy stream contract: ${resp.status()} - ${body.substring(0, 100)}`)
+    expect(body.code).toBe(502)
+    expect(body.message).toBe('上游服务异常')
+    expect(body.detail).toBe('Failed to resolve stream URL')
+    expect(body.error_code).toBe('ERR_BAD_GATEWAY')
   })
 })

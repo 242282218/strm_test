@@ -79,6 +79,34 @@ async def test_http_exception_handler_client_error_redacts_detail() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "message", "error_code"),
+    [
+        (502, "上游服务异常", "ERR_BAD_GATEWAY"),
+        (503, "服务暂时不可用", "ERR_SERVICE_UNAVAILABLE"),
+        (504, "上游服务超时", "ERR_GATEWAY_TIMEOUT"),
+    ],
+)
+async def test_http_exception_handler_gateway_errors_preserve_redacted_detail(
+    status_code: int,
+    message: str,
+    error_code: str,
+) -> None:
+    response = await http_exception_handler(
+        _request("rid-http-gateway"),
+        HTTPException(status_code=status_code, detail="token=very-secret"),
+    )
+    payload = _response_json(response)
+
+    assert response.status_code == status_code
+    assert response.headers[REQUEST_ID_HEADER] == "rid-http-gateway"
+    assert payload["message"] == message
+    assert payload["detail"] == "token=***"
+    assert payload["error_code"] == error_code
+    assert payload["request_id"] == "rid-http-gateway"
+
+
+@pytest.mark.asyncio
 async def test_http_exception_handler_server_error_hides_detail_and_header_is_optional() -> None:
     response = await http_exception_handler(
         _request(request_id=None),
@@ -92,6 +120,22 @@ async def test_http_exception_handler_server_error_hides_detail_and_header_is_op
     assert payload["detail"] is None
     assert payload["error_code"] == "ERR_INTERNAL"
     assert payload["request_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_http_exception_handler_unknown_server_error_stays_internal() -> None:
+    response = await http_exception_handler(
+        _request("rid-http-unknown"),
+        HTTPException(status_code=501, detail="token=very-secret"),
+    )
+    payload = _response_json(response)
+
+    assert response.status_code == 501
+    assert response.headers[REQUEST_ID_HEADER] == "rid-http-unknown"
+    assert payload["message"] == "服务器内部错误"
+    assert payload["detail"] is None
+    assert payload["error_code"] == "ERR_UNKNOWN"
+    assert payload["request_id"] == "rid-http-unknown"
 
 
 @pytest.mark.asyncio

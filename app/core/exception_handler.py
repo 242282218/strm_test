@@ -35,6 +35,9 @@ _STATUS_MESSAGE = {
     status.HTTP_404_NOT_FOUND: "资源不存在",
     status.HTTP_409_CONFLICT: "请求冲突",
     HTTP_422: "参数校验失败",
+    status.HTTP_502_BAD_GATEWAY: "上游服务异常",
+    status.HTTP_503_SERVICE_UNAVAILABLE: "服务暂时不可用",
+    status.HTTP_504_GATEWAY_TIMEOUT: "上游服务超时",
 }
 
 _STATUS_CODE = {
@@ -44,7 +47,16 @@ _STATUS_CODE = {
     status.HTTP_404_NOT_FOUND: "ERR_NOT_FOUND",
     status.HTTP_409_CONFLICT: "ERR_CONFLICT",
     HTTP_422: "ERR_VALIDATION",
+    status.HTTP_502_BAD_GATEWAY: "ERR_BAD_GATEWAY",
+    status.HTTP_503_SERVICE_UNAVAILABLE: "ERR_SERVICE_UNAVAILABLE",
+    status.HTTP_504_GATEWAY_TIMEOUT: "ERR_GATEWAY_TIMEOUT",
     status.HTTP_500_INTERNAL_SERVER_ERROR: "ERR_INTERNAL",
+}
+
+_PASSTHROUGH_HTTP_SERVER_ERRORS = {
+    status.HTTP_502_BAD_GATEWAY,
+    status.HTTP_503_SERVICE_UNAVAILABLE,
+    status.HTTP_504_GATEWAY_TIMEOUT,
 }
 
 
@@ -120,10 +132,15 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     request_id = _get_request_id(request)
     status_code = exc.status_code
 
-    if status_code >= 500:
+    if status_code >= 500 and status_code not in _PASSTHROUGH_HTTP_SERVER_ERRORS:
         logger.exception(f"HTTP exception: {status_code} | request_id={request_id}")
         message = "服务器内部错误"
         detail = None
+    elif status_code in _PASSTHROUGH_HTTP_SERVER_ERRORS:
+        # Why: explicit gateway/service errors are operational contracts, not hidden internal faults.
+        logger.warning(f"HTTP exception: {status_code} - {exc.detail} | request_id={request_id}")
+        message = _STATUS_MESSAGE[status_code]
+        detail = redact_sensitive(str(exc.detail)) if exc.detail else None
     else:
         logger.warning(f"HTTP exception: {status_code} - {exc.detail} | request_id={request_id}")
         message = _STATUS_MESSAGE.get(status_code, "请求失败")
