@@ -435,6 +435,7 @@ async def get_playback_info(
         item_id = validate_identifier(item_id, "item_id")
         if user_id:
             user_id = validate_identifier(user_id, "user_id")
+        media_source_id = _resolve_requested_media_source_id(request, media_source_id)
         if media_source_id:
             media_source_id = validate_identifier(media_source_id, "media_source_id")
 
