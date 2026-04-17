@@ -758,6 +758,35 @@ def test_get_playback_info_when_native_items_path_used_then_still_hits_local_hoo
     assert _FakeEmbyProxyService.last_proxy_playback_info_call["item_id"] == "item123"
 
 
+def test_get_playback_info_when_emby_prefixed_native_path_used_then_still_hits_local_hook_route():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not fall back to generic upstream forwarding")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/emby/Items/item123/PlaybackInfo",
+            params={"UserId": "user123"},
+            headers={"X-MediaBrowser-Token": "legacy-emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["item_id"] == "item123"
+    assert response.json()["user_id"] == "user123"
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call is not None
+    assert _FakeEmbyProxyService.last_proxy_playback_info_call["item_id"] == "item123"
+
+
 def test_get_playback_info_when_post_body_uses_emby_contract_then_forwards_payload_to_proxy_service():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -888,6 +917,40 @@ def test_get_item_when_native_items_path_used_then_still_hits_local_item_route()
 
         response = client.get(
             "/api/emby/Items/item123",
+            params={"UserId": "user123"},
+            headers={"X-MediaBrowser-Token": "legacy-emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"item_id": "item123", "user_id": "user123", "source": "proxy"}
+    mock_emby_proxy_service.proxy_items_request.assert_awaited_once_with(item_id="item123", user_id="user123")
+
+
+def test_get_item_when_emby_prefixed_native_path_used_then_still_hits_local_item_route():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not fall back to generic upstream forwarding")),
+        ),
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.proxy_items_request = AsyncMock(
+            return_value={"item_id": "item123", "user_id": "user123", "source": "proxy"}
+        )
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/emby/Items/item123",
             params={"UserId": "user123"},
             headers={"X-MediaBrowser-Token": "legacy-emby-api-key"},
         )
@@ -1035,6 +1098,45 @@ def test_stream_video_when_native_videos_path_used_then_handles_locally():
     mock_proxy_stream.assert_awaited_once()
 
 
+def test_stream_video_when_emby_prefixed_native_path_used_then_handles_locally():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+        patch(
+            "app.api.emby.proxy_stream_by_file_id",
+            new=AsyncMock(return_value=Response(content=b"stream-body", media_type="video/mp4", status_code=200)),
+        ) as mock_proxy_stream,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not fall back to generic upstream forwarding")),
+        ),
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(return_value="file123")
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/emby/Videos/item123/stream.mkv",
+            params={"media_source_id": "media_source_1", "static": "true"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 200
+    assert response.content == b"stream-body"
+    mock_emby_proxy_service.resolve_media_source_file_id.assert_awaited_once_with(
+        item_id="item123", media_source_id="media_source_1"
+    )
+    mock_proxy_stream.assert_awaited_once()
+
+
 def test_stream_video_when_legacy_token_header_present_then_uses_it_for_media_source_resolution():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1124,6 +1226,40 @@ def test_get_master_playlist_when_native_videos_path_used_then_handles_locally()
 
         response = client.get(
             "/api/emby/Videos/item123/master.m3u8",
+            params={"MediaSourceId": "media_source_1", "api_key": "emby-api-key"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"].startswith("application/vnd.apple.mpegurl")
+    assert "/api/proxy/transcoding/file123" in response.text
+    mock_emby_proxy_service.resolve_media_source_file_id.assert_awaited_once_with(
+        item_id="item123", media_source_id="media_source_1"
+    )
+
+
+def test_get_master_playlist_when_emby_prefixed_native_path_used_then_handles_locally():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should not fall back to generic upstream forwarding")),
+        ),
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(return_value="file123")
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/emby/Videos/item123/master.m3u8",
             params={"MediaSourceId": "media_source_1", "api_key": "emby-api-key"},
         )
 
