@@ -1,6 +1,6 @@
 <template>
   <el-header class="header">
-    <div class="header-shell">
+    <div class="header-shell" :class="{ 'is-user-only': !hasBreadcrumbPanel }">
       <section class="header-context glass">
         <div class="context-copy">
           <div class="context-meta">
@@ -22,8 +22,8 @@
         </div>
       </section>
 
-      <div class="header-rail">
-        <div class="header-breadcrumb-panel glass is-compact">
+      <div class="header-rail" :class="{ 'is-user-only': !hasBreadcrumbPanel }">
+        <div v-if="hasBreadcrumbPanel" class="header-breadcrumb-panel glass is-compact">
           <div class="header-breadcrumb">
             <Breadcrumb />
           </div>
@@ -89,6 +89,10 @@ const pageDescription = computed(() => {
   return pageDescriptionMap[routeName] || '保持关键媒体链路、任务与配置状态可见，减少在视图之间来回切换。'
 })
 
+const hasBreadcrumbPanel = computed(() => {
+  return route.matched.filter(item => typeof item.meta?.title === 'string' && item.meta.title.length > 0).length > 1
+})
+
 const username = computed(() => props.username)
 </script>
 
@@ -104,6 +108,10 @@ const username = computed(() => props.username)
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 360px);
   gap: var(--space-4);
   align-items: stretch;
+}
+
+.header-shell.is-user-only {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .header-context {
@@ -194,8 +202,13 @@ const username = computed(() => props.username)
 
 .header-rail {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
+  align-items: center;
+}
+
+.header-rail.is-user-only {
+  grid-template-columns: auto;
 }
 
 .header-breadcrumb-panel {
@@ -218,7 +231,7 @@ const username = computed(() => props.username)
 
 .header-user-panel {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: center;
   flex-shrink: 0;
 }

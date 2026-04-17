@@ -70,25 +70,32 @@ describe('AppHeader', () => {
   let pinia: ReturnType<typeof createPinia>
   let shellNavigation: ShellNavigationContext | null = null
 
-  const mountHeader = (options?: { mobile?: boolean }) => mount(defineComponent({
-    components: {
-      AppHeader
-    },
-    setup() {
-      shellNavigation = provideShellNavigation()
-
-      if (options?.mobile) {
-        shellNavigation.syncViewport(true)
-      }
-
-      return {}
-    },
-    template: '<AppHeader />'
-  }), {
-    global: {
-      plugins: [router, pinia, ElementPlus]
+  const mountHeader = async (options?: { mobile?: boolean; path?: string }) => {
+    if (options?.path) {
+      await router.push(options.path)
+      await router.isReady()
     }
-  })
+
+    return mount(defineComponent({
+      components: {
+        AppHeader
+      },
+      setup() {
+        shellNavigation = provideShellNavigation()
+
+        if (options?.mobile) {
+          shellNavigation.syncViewport(true)
+        }
+
+        return {}
+      },
+      template: '<AppHeader />'
+    }), {
+      global: {
+        plugins: [router, pinia, ElementPlus]
+      }
+    })
+  }
 
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -106,6 +113,19 @@ describe('AppHeader', () => {
           name: 'Dashboard',
           component: { template: '<div />' },
           meta: { title: '系统概览' }
+        },
+        {
+          path: '/notifications',
+          component: { template: '<router-view />' },
+          meta: { title: '通知服务' },
+          children: [
+            {
+              path: 'history',
+              name: 'NotificationHistory',
+              component: { template: '<div />' },
+              meta: { title: '通知历史' }
+            }
+          ]
         }
       ]
     })
@@ -114,8 +134,8 @@ describe('AppHeader', () => {
     await router.isReady()
   })
 
-  it('renders the contextual control-deck summary above the breadcrumb rail', () => {
-    const wrapper = mountHeader()
+  it('renders the contextual control-deck summary above the utility rail', async () => {
+    const wrapper = await mountHeader()
 
     expect(wrapper.find('.header').exists()).toBe(true)
     expect(wrapper.find('.header-shell').exists()).toBe(true)
@@ -125,18 +145,26 @@ describe('AppHeader', () => {
     expect(wrapper.get('.context-description').text()).toContain('缓存命中')
   })
 
-  it('keeps breadcrumb and user entry in the right-side rail', () => {
-    const wrapper = mountHeader()
+  it('keeps only the user entry in the rail for top-level routes', async () => {
+    const wrapper = await mountHeader()
 
-    expect(wrapper.find('.header-breadcrumb-panel').exists()).toBe(true)
-    expect(wrapper.find('.header-user-panel').exists()).toBe(true)
-    expect(wrapper.find('.breadcrumb-mock').exists()).toBe(true)
+    expect(wrapper.find('.header-shell').classes()).toContain('is-user-only')
+    expect(wrapper.find('.header-rail').classes()).toContain('is-user-only')
+    expect(wrapper.find('.header-breadcrumb-panel').exists()).toBe(false)
     expect(wrapper.find('.user-dropdown-mock').exists()).toBe(true)
     expect(wrapper.get('.user-dropdown-mock').attributes('data-username')).toBe('管理员')
   })
 
-  it('does not render standalone theme toggle in header', () => {
-    const wrapper = mountHeader()
+  it('renders breadcrumb panel when the route has nested hierarchy', async () => {
+    const wrapper = await mountHeader({ path: '/notifications/history' })
+
+    expect(wrapper.find('.header-breadcrumb-panel').exists()).toBe(true)
+    expect(wrapper.find('.breadcrumb-mock').exists()).toBe(true)
+    expect(wrapper.find('.user-dropdown-mock').exists()).toBe(true)
+  })
+
+  it('does not render standalone theme toggle in header', async () => {
+    const wrapper = await mountHeader()
 
     expect(wrapper.find('.theme-toggle').exists()).toBe(false)
     expect(wrapper.find('.toggle-label').exists()).toBe(false)
@@ -144,7 +172,7 @@ describe('AppHeader', () => {
   })
 
   it('shows a mobile drawer trigger when the shell enters narrow viewport mode', async () => {
-    const wrapper = mountHeader({ mobile: true })
+    const wrapper = await mountHeader({ mobile: true })
     const trigger = wrapper.get('.header-menu-trigger')
 
     expect(trigger.attributes('aria-expanded')).toBe('false')
