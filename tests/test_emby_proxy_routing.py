@@ -889,6 +889,34 @@ def test_get_playback_info_when_non_web_headers_present_then_keeps_request_as_no
     assert _FakeEmbyProxyService.last_proxy_playback_info_call["is_web_client"] is False
 
 
+def test_get_playback_info_when_internal_error_then_does_not_leak_error_detail():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+    ):
+        mock_playback_hook = SimpleNamespace(
+            hook_playback_info=AsyncMock(side_effect=RuntimeError("internal secret path"))
+        )
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = SimpleNamespace(playback_hook=mock_playback_hook)
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"user_id": "user123"},
+            headers={"X-Emby-Token": "emby-api-key"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Failed to get playback info"}
+
+
 def test_get_item_when_user_id_legacy_token_and_emby_url_fallback_use_emby_contract_then_proxies_item_request():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1023,6 +1051,33 @@ def test_get_item_when_emby_prefixed_lowercase_path_used_then_still_hits_local_i
     mock_emby_proxy_service.proxy_items_request.assert_awaited_once_with(item_id="item123", user_id="user123")
 
 
+def test_get_item_when_internal_error_then_does_not_leak_error_detail():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.proxy_items_request = AsyncMock(side_effect=RuntimeError("internal secret path"))
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/items/item123",
+            params={"UserId": "user123"},
+            headers={"X-MediaBrowser-Token": "legacy-emby-api-key"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Failed to get item info"}
+
+
 def test_proxy_emby_request_when_head_and_endpoint_url_empty_then_reuses_gateway_forwarder_with_emby_url_fallback():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1050,6 +1105,26 @@ def test_proxy_emby_request_when_head_and_endpoint_url_empty_then_reuses_gateway
     assert response.content == b""
     assert mock_forward.await_args.args[1] is app_config
     assert mock_forward.await_args.args[2] == "System/Info/Public"
+
+
+def test_proxy_emby_request_when_internal_error_then_does_not_leak_error_detail():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=RuntimeError("internal secret path")),
+        ),
+    ):
+        response = client.get("/api/emby/System/Info/Public")
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Failed to proxy Emby request"}
 
 
 def test_stream_video_when_media_source_id_is_not_file_id_then_resolves_item_media_source_and_returns_stream_response():

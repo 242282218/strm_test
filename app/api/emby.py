@@ -551,7 +551,7 @@ async def get_playback_info(
         raise
     except Exception as exc:
         logger.error("Failed to get playback info: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Failed to get playback info") from exc
 
 
 @router.post("/test-connection")
@@ -900,7 +900,7 @@ async def get_item(item_id: str, request: Request, user_id: str | None = None):
         raise
     except Exception as exc:
         logger.error("Failed to get item info: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Failed to get item info") from exc
 
 
 @router.api_route("/emby/videos/{item_id}/stream.{filename}", methods=["GET", "HEAD"])
@@ -1076,4 +1076,4 @@ async def proxy_emby_request(request: Request, path: str):
         raise
     except Exception as exc:
         logger.error("Failed to proxy Emby request: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Failed to proxy Emby request") from exc
