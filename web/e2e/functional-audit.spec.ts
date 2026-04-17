@@ -166,9 +166,8 @@ test.describe('Tasks 页面按钮功能', () => {
 // ============================================================
 test.describe('刮削目录按钮功能', () => {
   test('新增目录弹窗完整流程：打开 → 看到表单 → 关闭', async ({ page }) => {
-    await page.goto('/scrape-pathes')
-    await page.waitForLoadState('domcontentloaded')
-    await page.getByRole('button', { name: '新增目录' }).click()
+    await navigateAndWait(page, '/scrape-pathes')
+    await getPageRoot(page, '.scrape-pathes-page').getByTestId('scrape-create-button').click()
     const dialog = page.locator('.el-dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
     await expect(page.getByPlaceholder('例如: D:/media/raw')).toBeVisible()

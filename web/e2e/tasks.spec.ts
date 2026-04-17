@@ -26,7 +26,7 @@ test.describe('任务管理 /tasks', () => {
       const statusSelect = filterPanel.locator('.el-select').first()
       await statusSelect.click()
       // 等待下拉菜单出现
-      await expect(page.locator('.el-select-dropdown')).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('.el-select-dropdown:visible').first()).toBeVisible({ timeout: 5000 })
     }
   })
 
