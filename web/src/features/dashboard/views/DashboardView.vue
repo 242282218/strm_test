@@ -349,7 +349,12 @@ import {
   getDashboardStats,
   getTaskTrends
 } from '@/features/dashboard/api/dashboard'
-import { buildTaskLaunchQuery } from '@/features/tasks'
+import {
+  buildTaskLaunchQuery,
+  getTaskStatusLabel,
+  getTaskStatusType,
+  getTaskTypeLabel
+} from '@/features/tasks'
 import type {
   CacheDetail,
   DashboardData,
@@ -409,6 +414,9 @@ const loading = ref(false)
 const isClearingCache = ref(false)
 const timeRange = ref<TimeRange>('week')
 const timeRangeLabel = computed(() => timeRange.value === 'week' ? '7 天' : '30 天')
+const ACTIVE_TASK_STATUSES = new Set(['pending', 'planning', 'running', 'reviewing'])
+const WARNING_PROGRESS_STATUSES = new Set(['partial_success'])
+const EXCEPTION_PROGRESS_STATUSES = new Set(['failed', 'cancelled'])
 
 const stats = ref<DashboardStat[]>([
   { title: 'STRM文件', value: '0', icon: 'Document', type: 'primary', support: '等待索引同步' },
@@ -447,12 +455,24 @@ const formatNumber = (num: number): string => {
 
 const formatPercent = (value: number): string => `${Number(value || 0).toFixed(1)}%`
 
-const normalizeTaskStatus = (status: string): string => status === 'stopped' ? 'pending' : status
-
 const normalizeTask = (task: RecentTask): RecentTask => ({
   ...task,
-  status: normalizeTaskStatus(task.status)
+  time: formatTaskTime(task.time)
 })
+
+const formatTaskTime = (value: string): string => {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return parsed.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 const topFileTypes = computed<TypeHighlight[]>(() => {
   return Object.entries(fileTypes.value)
@@ -475,7 +495,7 @@ const runningServiceCount = computed(() => {
 const latestTask = computed(() => recentTasks.value[0] ?? null)
 
 const activeTaskCount = computed(() => {
-  return recentTasks.value.filter(task => ['running', 'pending'].includes(task.status)).length
+  return recentTasks.value.filter(task => ACTIVE_TASK_STATUSES.has(task.status)).length
 })
 
 const latestTaskStatus = computed(() => {
@@ -604,46 +624,32 @@ const getChartTheme = () => ({
 
 const getTaskTypeTag = (type: string) => {
   const map: Record<string, string> = {
-    sync: 'primary',
-    generate: 'success',
-    validate: 'warning',
-    cleanup: 'info'
+    file_sync: 'primary',
+    strm_generation: 'success',
+    scrape: 'warning',
+    rename: 'info'
   }
   return map[type] || 'info'
 }
 
-const getTaskTypeLabel = (type: string) => {
-  const map: Record<string, string> = {
-    sync: '同步',
-    generate: '生成',
-    validate: '验证',
-    cleanup: '清理'
-  }
-  return map[type] || type
-}
+const getStatusType = (status: string) => getTaskStatusType(status)
 
-const getStatusType = (status: string): 'success' | 'primary' | 'info' | 'danger' => {
-  const map: Record<string, 'success' | 'primary' | 'info' | 'danger'> = {
-    running: 'primary',
-    success: 'success',
-    pending: 'info',
-    failed: 'danger'
-  }
-  return map[status] || 'info'
-}
-
-const getStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    running: '运行中',
-    success: '完成',
-    pending: '等待中',
-    failed: '失败'
-  }
-  return map[status] || status
-}
+const getStatusLabel = (status: string) => getTaskStatusLabel(status)
 
 const getProgressStatus = (status: string) => {
-  return status === 'success' ? 'success' : status === 'failed' ? 'exception' : ''
+  if (status === 'completed') {
+    return 'success'
+  }
+
+  if (WARNING_PROGRESS_STATUSES.has(status)) {
+    return 'warning'
+  }
+
+  if (EXCEPTION_PROGRESS_STATUSES.has(status)) {
+    return 'exception'
+  }
+
+  return ''
 }
 
 const buildStats = (data: DashboardData): DashboardStat[] => {

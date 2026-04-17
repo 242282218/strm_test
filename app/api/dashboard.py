@@ -3,14 +3,22 @@
 
 提供首页概览所需的聚合统计数据
 """
+
+from datetime import datetime, timedelta
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any, List
-from app.core.database import Database, resolve_db_path
-from app.core.logging import get_logger
-from app.services.task_scheduler import TaskScheduler
-from app.services.link_cache import LinkCache
+from sqlalchemy import or_
+
 from app.core.config_manager import get_config
+from app.core.database import Database, resolve_db_path
+from app.core.db import get_db_session
+from app.core.logging import get_logger
+from app.models.task import Task as PlatformTask
 from app.services.config_service import get_config_service
+from app.services.link_cache import LinkCache
+from app.services.platform.task_scheduler import TaskScheduler
+
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["仪表盘"])
@@ -21,6 +29,16 @@ _task_scheduler: TaskScheduler = None
 _link_cache: LinkCache = None
 config = get_config()
 config_service = get_config_service()
+
+TASK_TYPE_LABELS = {
+    "strm_generation": "生成 STRM",
+    "file_sync": "文件同步",
+    "scrape": "媒体刮削",
+    "rename": "智能重命名",
+}
+
+SUCCESS_TASK_STATUSES = {"completed", "partial_success"}
+FAILED_TASK_STATUSES = {"failed", "cancelled"}
 
 
 def get_db() -> Database:
@@ -50,7 +68,7 @@ async def get_link_cache() -> LinkCache:
 
 
 @router.get("/stats")
-async def get_dashboard_stats() -> Dict[str, Any]:
+async def get_dashboard_stats() -> dict[str, Any]:
     """
     获取仪表盘统计数据
 
@@ -66,19 +84,19 @@ async def get_dashboard_stats() -> Dict[str, Any]:
 
         # 2. 任务统计
         scheduler = await get_task_scheduler()
-        task_status = scheduler.get_status()
-        task_count = task_status.get("task_count", 0)
+        scheduler_status = scheduler.get_status()
+        task_count = count_platform_tasks()
 
         # 3. 缓存统计
         cache = await get_link_cache()
         cache_stats = cache.get_stats()
         cache_hit_rate = calculate_hit_rate(cache_stats)
 
-        # 4. 最近任务（从任务调度器获取）
-        recent_tasks = get_recent_tasks(scheduler)
+        # 4. 最近任务（从新任务平台获取）
+        recent_tasks = get_recent_tasks(get_platform_tasks(limit=5))
 
         # 5. 服务状态
-        services = get_services_status(task_status, cache_stats)
+        services = get_services_status(scheduler_status, cache_stats)
 
         # 6. 文件类型分布
         file_type_distribution = calculate_file_types(strm_files)
@@ -102,11 +120,11 @@ async def get_dashboard_stats() -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Failed to get dashboard stats: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to get dashboard stats: {e!s}")
+        raise HTTPException(status_code=500, detail="Failed to get dashboard stats")
 
 
-def calculate_hit_rate(cache_stats: Dict[str, Any]) -> float:
+def calculate_hit_rate(cache_stats: dict[str, Any]) -> float:
     """
     计算缓存命中率
 
@@ -132,37 +150,133 @@ def calculate_hit_rate(cache_stats: Dict[str, Any]) -> float:
     return round((valid_entries / total_entries) * 100, 1)
 
 
-def get_recent_tasks(scheduler: TaskScheduler) -> List[Dict[str, Any]]:
+def count_platform_tasks() -> int:
+    with get_db_session() as session:
+        return session.query(PlatformTask).count()
+
+
+def get_platform_tasks(limit: int | None = None, since: datetime | None = None) -> list[PlatformTask]:
+    with get_db_session() as session:
+        query = session.query(PlatformTask)
+        if since is not None:
+            query = query.filter(or_(PlatformTask.created_at >= since, PlatformTask.completed_at >= since))
+
+        query = query.order_by(PlatformTask.created_at.desc(), PlatformTask.id.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
+
+def summarize_task_target(task_type: str, params: dict[str, Any]) -> str | None:
+    path_key_by_type = {
+        "strm_generation": "source_dir",
+        "file_sync": "remote_path",
+        "scrape": "path",
+        "rename": "path",
+    }
+    path_key = path_key_by_type.get(task_type)
+    if not path_key:
+        return None
+
+    raw_value = params.get(path_key)
+    if not isinstance(raw_value, str):
+        return None
+
+    target = raw_value.strip()
+    if not target:
+        return None
+
+    if len(target) <= 28:
+        return target
+
+    return f"...{target[-25:]}"
+
+
+def build_recent_task_name(task: Any) -> str:
+    task_type = str(getattr(task, "task_type", "") or "")
+    params = getattr(task, "params", {}) or {}
+    task_label = TASK_TYPE_LABELS.get(task_type, task_type or "任务")
+    task_target = summarize_task_target(task_type, params if isinstance(params, dict) else {})
+    if not task_target:
+        return task_label
+
+    return f"{task_label} · {task_target}"
+
+
+def get_recent_tasks(tasks: list[Any]) -> list[dict[str, Any]]:
     """
     获取最近任务列表
 
     Args:
-        scheduler: 任务调度器实例
+        tasks: 任务列表
 
     Returns:
         任务列表
     """
     try:
-        tasks = scheduler.list_tasks()
         recent = []
 
         for task in tasks[:5]:  # 只取前5个
-            recent.append({
-                "name": task.get("name", "未命名任务"),
-                "type": task.get("mode", "unknown"),
-                "status": "running" if task.get("enabled") else "stopped",
-                "progress": task.get("progress", 0),
-                "time": task.get("last_run", "未执行"),
-            })
+            task_time = (
+                getattr(task, "completed_at", None)
+                or getattr(task, "started_at", None)
+                or getattr(task, "created_at", None)
+            )
+            recent.append(
+                {
+                    "name": build_recent_task_name(task),
+                    "type": getattr(task, "task_type", "unknown"),
+                    "status": getattr(task, "status", "pending"),
+                    "progress": int(getattr(task, "progress", 0) or 0),
+                    "time": task_time.isoformat() if hasattr(task_time, "isoformat") else "未开始",
+                }
+            )
 
         return recent
 
     except Exception as e:
-        logger.error(f"Failed to get recent tasks: {str(e)}")
+        logger.error(f"Failed to get recent tasks: {e!s}")
         return []
 
 
-def get_services_status(task_status: Dict, cache_stats: Dict) -> List[Dict[str, str]]:
+def build_task_trends(tasks: list[Any], days: int) -> tuple[list[str], list[int], list[int]]:
+    normalized_days = max(days, 1)
+    dates: list[str] = []
+    success_data: list[int] = []
+    failed_data: list[int] = []
+    today = datetime.now().date()
+    start_day = today - timedelta(days=normalized_days - 1)
+    success_counts: dict[Any, int] = {}
+    failed_counts: dict[Any, int] = {}
+
+    for task in tasks:
+        status = str(getattr(task, "status", "") or "")
+        if status not in SUCCESS_TASK_STATUSES and status not in FAILED_TASK_STATUSES:
+            continue
+
+        task_time = getattr(task, "completed_at", None) or getattr(task, "created_at", None)
+        if not hasattr(task_time, "date"):
+            continue
+
+        task_day = task_time.date()
+        if task_day < start_day or task_day > today:
+            continue
+
+        if status in SUCCESS_TASK_STATUSES:
+            success_counts[task_day] = success_counts.get(task_day, 0) + 1
+        else:
+            failed_counts[task_day] = failed_counts.get(task_day, 0) + 1
+
+    for i in range(normalized_days - 1, -1, -1):
+        current_day = today - timedelta(days=i)
+        dates.append(current_day.strftime("%m-%d"))
+        success_data.append(success_counts.get(current_day, 0))
+        failed_data.append(failed_counts.get(current_day, 0))
+
+    return dates, success_data, failed_data
+
+
+def get_services_status(task_status: dict, cache_stats: dict) -> list[dict[str, str]]:
     """
     获取服务状态列表
 
@@ -173,7 +287,6 @@ def get_services_status(task_status: Dict, cache_stats: Dict) -> List[Dict[str, 
     Returns:
         服务状态列表
     """
-    app_config = config_service.get_config()
     services = [
         {"name": "API服务", "status": "running"},
         {"name": "任务调度器", "status": "running" if task_status.get("running") else "stopped"},
@@ -183,7 +296,7 @@ def get_services_status(task_status: Dict, cache_stats: Dict) -> List[Dict[str, 
     return services
 
 
-def calculate_file_types(strm_files: List[Dict]) -> Dict[str, int]:
+def calculate_file_types(strm_files: list[dict]) -> dict[str, int]:
     """
     计算文件类型分布
 
@@ -209,7 +322,7 @@ def calculate_file_types(strm_files: List[Dict]) -> Dict[str, int]:
 
 
 @router.get("/trends")
-async def get_task_trends(days: int = 7) -> Dict[str, Any]:
+async def get_task_trends(days: int = 7) -> dict[str, Any]:
     """
     获取任务执行趋势
 
@@ -220,24 +333,10 @@ async def get_task_trends(days: int = 7) -> Dict[str, Any]:
         趋势数据
     """
     try:
-        # 这里可以从数据库查询历史任务执行记录
-        # 目前返回模拟的趋势数据结构
-        scheduler = await get_task_scheduler()
-        tasks = scheduler.list_tasks()
-
-        # 生成日期标签
-        from datetime import datetime, timedelta
-
-        dates = []
-        success_data = []
-        failed_data = []
-
-        for i in range(days - 1, -1, -1):
-            date = datetime.now() - timedelta(days=i)
-            dates.append(date.strftime("%m-%d"))
-            # 模拟数据，实际应该从数据库查询
-            success_data.append(len(tasks) * 2 + i)
-            failed_data.append(max(0, len(tasks) - i))
+        normalized_days = max(days, 1)
+        since = datetime.combine((datetime.now() - timedelta(days=normalized_days - 1)).date(), datetime.min.time())
+        tasks = get_platform_tasks(since=since)
+        dates, success_data, failed_data = build_task_trends(tasks, normalized_days)
 
         return {
             "status": "ok",
@@ -247,5 +346,5 @@ async def get_task_trends(days: int = 7) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Failed to get task trends: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to get task trends: {e!s}")
+        raise HTTPException(status_code=500, detail="Failed to get task trends")

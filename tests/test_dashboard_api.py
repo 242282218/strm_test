@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -85,30 +87,35 @@ def test_calculate_hit_rate_returns_rounded_ratio() -> None:
 
 
 def test_get_recent_tasks_limits_and_maps_fields() -> None:
-    class FakeScheduler:
-        @staticmethod
-        def list_tasks() -> list[dict[str, Any]]:
-            return [
-                {"name": f"task-{idx}", "mode": "scan", "enabled": idx % 2 == 0, "progress": idx * 10, "last_run": f"T{idx}"}
-                for idx in range(7)
-            ]
+    frozen_now = datetime(2026, 4, 17, 12, 0, 0)
+    tasks = [
+        SimpleNamespace(
+            task_type="file_sync",
+            status="planning" if idx == 0 else "completed",
+            progress=idx * 10,
+            params={"remote_path": f"/video/season-{idx}"},
+            created_at=frozen_now - timedelta(hours=idx),
+            started_at=None,
+            completed_at=None,
+        )
+        for idx in range(7)
+    ]
 
-    tasks = dashboard.get_recent_tasks(FakeScheduler())
+    recent_tasks = dashboard.get_recent_tasks(tasks)
 
-    assert len(tasks) == 5
-    assert tasks[0]["name"] == "task-0"
-    assert tasks[0]["status"] == "running"
-    assert tasks[1]["status"] == "stopped"
-    assert tasks[4]["time"] == "T4"
+    assert len(recent_tasks) == 5
+    assert recent_tasks[0]["name"] == "文件同步 · /video/season-0"
+    assert recent_tasks[0]["status"] == "planning"
+    assert recent_tasks[1]["progress"] == 10
+    assert recent_tasks[4]["time"] == (frozen_now - timedelta(hours=4)).isoformat()
 
 
 def test_get_recent_tasks_returns_empty_on_error() -> None:
-    class BrokenScheduler:
-        @staticmethod
-        def list_tasks() -> list[dict[str, Any]]:
-            raise RuntimeError("list failed")
+    class BrokenTask:
+        def __getattr__(self, _name: str) -> Any:
+            raise RuntimeError("task broken")
 
-    assert dashboard.get_recent_tasks(BrokenScheduler()) == []
+    assert dashboard.get_recent_tasks([BrokenTask()]) == []
 
 
 def test_get_services_status_reflects_cookie_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -149,11 +156,7 @@ async def test_get_dashboard_stats_success(monkeypatch: pytest.MonkeyPatch) -> N
     class FakeScheduler:
         @staticmethod
         def get_status() -> dict[str, Any]:
-            return {"task_count": 2, "running": True}
-
-        @staticmethod
-        def list_tasks() -> list[dict[str, Any]]:
-            return [{"name": "nightly", "mode": "sync", "enabled": True, "progress": 100, "last_run": "yesterday"}]
+            return {"task_count": 99, "running": True}
 
     class FakeCache:
         @staticmethod
@@ -170,13 +173,30 @@ async def test_get_dashboard_stats_success(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(dashboard, "get_task_scheduler", _get_scheduler)
     monkeypatch.setattr(dashboard, "get_link_cache", _get_cache)
+    monkeypatch.setattr(dashboard, "count_platform_tasks", lambda: 2)
+    monkeypatch.setattr(
+        dashboard,
+        "get_platform_tasks",
+        lambda limit=None, since=None: [
+            SimpleNamespace(
+                task_type="strm_generation",
+                status="completed",
+                progress=100,
+                params={"source_dir": "/media/library"},
+                created_at=datetime(2026, 4, 17, 10, 0, 0),
+                started_at=datetime(2026, 4, 17, 10, 1, 0),
+                completed_at=datetime(2026, 4, 17, 10, 5, 0),
+            )
+        ],
+    )
 
     payload = await dashboard.get_dashboard_stats()
 
     assert payload["status"] == "ok"
     assert payload["stats"] == {"strm_count": 3, "task_count": 2, "cache_entries": 4, "cache_hit_rate": 50.0}
     assert payload["cache_detail"] == {"size": 4, "hit_rate": 50.0, "ttl": 120}
-    assert payload["recent_tasks"][0]["name"] == "nightly"
+    assert payload["recent_tasks"][0]["name"] == "生成 STRM · /media/library"
+    assert payload["recent_tasks"][0]["status"] == "completed"
     assert payload["services"][1]["status"] == "running"
     assert payload["file_types"] == {"mkv": 1, "mp4": 1, "unknown": 1}
 
@@ -194,30 +214,63 @@ async def test_get_dashboard_stats_raises_http_500_on_error(monkeypatch: pytest.
 
 @pytest.mark.asyncio
 async def test_get_task_trends_builds_series(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeScheduler:
-        @staticmethod
-        def list_tasks() -> list[dict[str, Any]]:
-            return [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+    frozen_now = datetime(2026, 4, 17, 9, 0, 0)
 
-    async def _get_scheduler() -> FakeScheduler:
-        return FakeScheduler()
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return frozen_now
+            return frozen_now.astimezone(tz)
 
-    monkeypatch.setattr(dashboard, "get_task_scheduler", _get_scheduler)
+    monkeypatch.setattr(dashboard, "datetime", FrozenDateTime)
+    monkeypatch.setattr(
+        dashboard,
+        "get_platform_tasks",
+        lambda limit=None, since=None: [
+            SimpleNamespace(
+                status="completed",
+                created_at=frozen_now - timedelta(days=2, hours=2),
+                completed_at=frozen_now - timedelta(days=2, hours=1),
+            ),
+            SimpleNamespace(
+                status="partial_success",
+                created_at=frozen_now - timedelta(days=1, hours=2),
+                completed_at=frozen_now - timedelta(days=1, hours=1),
+            ),
+            SimpleNamespace(
+                status="failed",
+                created_at=frozen_now - timedelta(days=1, hours=4),
+                completed_at=frozen_now - timedelta(days=1, hours=3),
+            ),
+            SimpleNamespace(
+                status="cancelled",
+                created_at=frozen_now - timedelta(hours=2),
+                completed_at=frozen_now - timedelta(hours=1),
+            ),
+            SimpleNamespace(
+                status="running",
+                created_at=frozen_now - timedelta(hours=1),
+                completed_at=None,
+            ),
+        ],
+    )
 
     payload = await dashboard.get_task_trends(days=3)
 
     assert payload["status"] == "ok"
     assert len(payload["dates"]) == 3
-    assert payload["success"] == [8, 7, 6]
-    assert payload["failed"] == [1, 2, 3]
+    assert payload["success"] == [1, 1, 0]
+    assert payload["failed"] == [0, 1, 1]
 
 
 @pytest.mark.asyncio
 async def test_get_task_trends_raises_http_500_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _raise_error() -> None:
-        raise RuntimeError("scheduler boom")
-
-    monkeypatch.setattr(dashboard, "get_task_scheduler", _raise_error)
+    monkeypatch.setattr(
+        dashboard,
+        "get_platform_tasks",
+        lambda limit=None, since=None: (_ for _ in ()).throw(RuntimeError("tasks boom")),
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await dashboard.get_task_trends(days=1)

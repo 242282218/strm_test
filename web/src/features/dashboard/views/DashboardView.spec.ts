@@ -81,8 +81,20 @@ describe('DashboardView', () => {
         cache_hit_rate: 91.2
       },
       recent_tasks: [
-        { name: '同步媒体库', type: 'sync', status: 'running', progress: 62, time: '2 分钟前' },
-        { name: '补全 STRM', type: 'generate', status: 'pending', progress: 18, time: '10 分钟前' }
+        {
+          name: '文件同步 · /video/library',
+          type: 'file_sync',
+          status: 'planning',
+          progress: 62,
+          time: '2026-04-17T12:34:00'
+        },
+        {
+          name: '生成 STRM · /media/series',
+          type: 'strm_generation',
+          status: 'completed',
+          progress: 100,
+          time: '2026-04-17T09:10:00'
+        }
       ],
       services: [
         { name: '代理服务', status: 'running' },
@@ -141,12 +153,16 @@ describe('DashboardView', () => {
 
     const signalValues = wrapper.findAll('.hero-signal-value').map(node => node.text())
     expect(signalValues).toContain('2 / 2')
-    expect(signalValues).toContain('2 活跃')
+    expect(signalValues).toContain('1 活跃')
     expect(signalValues).toContain('3 类')
 
     expect(wrapper.find('.page-header').exists()).toBe(false)
     expect(wrapper.find('.hero-header-actions').exists()).toBe(true)
-    expect(wrapper.get('.spotlight-name').text()).toBe('同步媒体库')
+    expect(wrapper.get('.spotlight-name').text()).toBe('文件同步 · /video/library')
+    expect(wrapper.text()).toContain('规划中')
+    expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.text()).toContain('文件同步')
+    expect(wrapper.text()).toContain('STRM生成')
     expect(wrapper.text()).toContain('MKV')
     expect(wrapper.text()).toContain('91.2%')
     expect(wrapper.text()).toContain('刮削目录')
