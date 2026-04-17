@@ -82,27 +82,38 @@ async def proxy_stream(
     try:
         file_id = validate_identifier(file_id, "file_id")
         
-        # 1. 获取上游 URL 和请求头（优先转码，卡顿时更稳定）
+        # Keep falling back when a resolver returns an empty URL instead of raising.
         service = QuarkService(cookie=cookie)
         try:
             selected_source = (source or "transcoding").strip().lower()
             if selected_source not in {"transcoding", "download"}:
                 selected_source = "transcoding"
 
-            if selected_source == "download":
-                link = await service.get_download_link(file_id)
-            else:
+            source_order = ("download", "transcoding") if selected_source == "download" else ("transcoding", "download")
+            link = None
+
+            for source_name in source_order:
                 try:
-                    link = await service.get_transcoding_link(file_id)
+                    candidate_link = (
+                        await service.get_download_link(file_id)
+                        if source_name == "download"
+                        else await service.get_transcoding_link(file_id)
+                    )
                 except Exception:
-                    # 转码链路不可用时回退下载直链
-                    link = await service.get_download_link(file_id)
+                    continue
+
+                candidate_url = (getattr(candidate_link, "url", "") or "").strip()
+                if not candidate_url:
+                    continue
+
+                link = candidate_link
+                break
         finally:
             await service.close()
 
-        redirect_url = link.url if link else None
+        redirect_url = (getattr(link, "url", "") or "").strip()
         if not redirect_url:
-            raise HTTPException(status_code=502, detail="Failed to resolve download URL")
+            raise HTTPException(status_code=502, detail="Failed to resolve stream URL")
              
         # 2. 准备请求头
         headers = {
