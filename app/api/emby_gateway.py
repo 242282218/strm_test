@@ -24,8 +24,8 @@ from app.api.emby import (
     _read_playback_request_payload,
     _resolve_emby_authorization_context,
     _resolve_playback_request_field,
-    _resolve_configured_emby_base_url,
     _resolve_requested_emby_api_key,
+    _resolve_requested_emby_base_url,
     _resolve_requested_client_name,
     _resolve_requested_device_name,
     _resolve_requested_proxy_base_url,
@@ -40,7 +40,7 @@ from app.services.playbackinfo_hook import (
 from app.core.config_manager import get_config
 from app.core.http_pool import ClientType, get_http_pool_sync
 from app.core.logging import get_logger
-from app.core.validators import validate_http_url, validate_identifier
+from app.core.validators import validate_identifier
 from app.services.config_service import get_config_service
 from app.services.emby_proxy_service import EmbyProxyService
 
@@ -121,13 +121,8 @@ def _is_dedicated_proxy_request(connection: HTTPConnection, app_config) -> bool:
     return req_port == 18097
 
 
-def _resolve_emby_base_url(app_config) -> str:
-    emby_base_url = _resolve_configured_emby_base_url(app_config)
-    if not emby_base_url:
-        emby_base_url = "http://localhost:8096"
-
-    validate_http_url(emby_base_url, "emby_base_url")
-    return emby_base_url.rstrip("/")
+def _resolve_emby_base_url(connection: HTTPConnection, app_config) -> str:
+    return _resolve_requested_emby_base_url(connection, app_config).rstrip("/")
 
 
 def _is_local_playback_proxy_request(request: Request) -> bool:
@@ -217,7 +212,7 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie not configured")
 
-    emby_base_url = _resolve_emby_base_url(app_config)
+    emby_base_url = _resolve_emby_base_url(request, app_config)
     proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
     client_name = _resolve_requested_client_name(request.headers, auth_context)
     device_name = _resolve_requested_device_name(request.headers, auth_context)
@@ -246,7 +241,7 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
 
 
 async def _forward_to_emby(request: Request, app_config, path: str) -> Response:
-    emby_base_url = _resolve_emby_base_url(app_config)
+    emby_base_url = _resolve_emby_base_url(request, app_config)
     proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
     target_path = (path or "").lstrip("/")
     target_url = emby_base_url if not target_path else f"{emby_base_url}/{target_path}"
@@ -340,7 +335,7 @@ _WS_FORWARD_HEADERS_SKIP = {"host", "connection", "upgrade", "sec-websocket-key"
 
 def _build_ws_target_url(app_config, client_ws: WebSocket) -> str:
     """Build the upstream Emby WebSocket URL from the incoming request."""
-    emby_base_url = _resolve_emby_base_url(app_config)
+    emby_base_url = _resolve_emby_base_url(client_ws, app_config)
     # http(s) → ws(s)
     ws_base = emby_base_url.replace("https://", "wss://").replace("http://", "ws://")
     query_string = str(client_ws.url.query)

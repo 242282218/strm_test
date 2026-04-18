@@ -700,7 +700,7 @@ async def proxy_emby_request(request: Request, path: str):
         app_config = config_service.get_config()
         from app.api import emby_gateway as emby_gateway_module
 
-        emby_url = emby_gateway_module._resolve_emby_base_url(app_config)
+        emby_url = emby_gateway_module._resolve_emby_base_url(request, app_config)
 
         # SSRF 防护: 验证 Emby URL
         try:

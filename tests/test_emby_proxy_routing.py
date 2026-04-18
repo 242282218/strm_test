@@ -653,6 +653,32 @@ def test_get_playback_info_when_proxy_override_header_present_then_prefers_reque
     assert _FakeEmbyProxyService.last_init["proxy_base_url"] == "https://public.proxy.example"
 
 
+def test_get_playback_info_when_emby_override_header_present_then_prefers_requested_emby_base_url():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097", url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch("app.api.emby.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"user_id": "user123"},
+            headers={
+                "X-Emby-Token": "emby-api-key",
+                "X-Emby-Server-Url": "https://alt.emby.example:8920",
+            },
+        )
+
+    assert response.status_code == 200
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["emby_base_url"] == "https://alt.emby.example:8920"
+
+
 def test_get_playback_info_when_endpoint_emby_url_is_empty_then_falls_back_to_emby_config_url():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1348,6 +1374,36 @@ def test_proxy_router_emby_request_when_endpoint_url_empty_then_reuses_gateway_f
     assert response.json() == {"ok": True}
     assert mock_forward.await_args.args[1] is app_config
     assert mock_forward.await_args.args[2] == "System/Info/Public"
+
+
+def test_proxy_router_emby_request_when_emby_override_header_present_then_validates_override_url():
+    client = _build_proxy_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch("app.api.proxy.emby_validator.validate") as mock_validate,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(
+                return_value=Response(
+                    content=b'{"ok":true}',
+                    status_code=200,
+                    media_type="application/json",
+                )
+            ),
+        ),
+    ):
+        response = client.get(
+            "/api/proxy/emby/System/Info/Public",
+            headers={"X-Emby-Server-Url": "https://alt.emby.example:8920/base"},
+        )
+
+    assert response.status_code == 200
+    mock_validate.assert_called_once_with("https://alt.emby.example:8920/base")
 
 
 def test_proxy_router_emby_request_when_internal_error_then_does_not_leak_error_detail():

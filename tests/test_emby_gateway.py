@@ -299,6 +299,33 @@ def test_gateway_playbackinfo_when_proxy_override_header_present_then_prefers_he
     assert _FakeEmbyProxyService.last_init["proxy_base_url"] == "https://public.proxy.example"
 
 
+def test_gateway_playbackinfo_when_emby_override_header_present_then_prefers_header_emby_base_url():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
+    ):
+        response = client.get(
+            "/Items/item123/PlaybackInfo",
+            params={
+                "UserId": "user123",
+                "MediaSourceId": "media123",
+                "api_key": "emby-api-key",
+            },
+            headers={
+                "host": "proxy.example:18097",
+                "X-Emby-Server-Url": "https://alt.emby.example:8920",
+            },
+        )
+
+    assert response.status_code == 200
+    assert _FakeEmbyProxyService.last_init is not None
+    assert _FakeEmbyProxyService.last_init["emby_base_url"] == "https://alt.emby.example:8920"
+
+
 def test_gateway_playbackinfo_when_prefixed_lowercase_path_used_then_still_uses_hook_proxy():
     client = _build_client()
     app_config = _mock_config()
@@ -714,6 +741,31 @@ async def test_gateway_websocket_when_dedicated_host_then_accepts_and_proxies_up
 
 
 @pytest.mark.asyncio
+async def test_gateway_websocket_when_emby_override_header_present_then_targets_override_upstream():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key&device=pytest",
+        headers={"X-Emby-Server-Url": "https://alt.emby.example:8920/base"},
+    )
+    upstream_ws = _FakeUpstreamWebSocket()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ) as mock_connect,
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert upstream_ws.closed is True
+    assert mock_connect.await_args.args[0] == "wss://alt.emby.example:8920/base/embywebsocket?api_key=emby-api-key&device=pytest"
+
+
+@pytest.mark.asyncio
 async def test_gateway_websocket_when_proxy_base_url_empty_and_port_18097_then_accepts_and_proxies_upstream():
     ws = _FakeWebSocketClient("127.0.0.1:18097", query="api_key=emby-api-key")
     upstream_ws = _FakeUpstreamWebSocket()
@@ -893,6 +945,49 @@ async def test_forward_to_emby_when_proxy_override_header_present_then_rewrites_
 
     assert response.status_code == 302
     assert response.headers["location"] == "https://public.proxy.example/web/index.html"
+
+
+@pytest.mark.asyncio
+async def test_forward_to_emby_when_emby_override_header_present_then_targets_override_upstream_url():
+    app_config = _mock_config()
+    fake_upstream = httpx.Response(
+        status_code=200,
+        headers={"content-type": "text/html"},
+        content=b"ok",
+    )
+    fake_client = SimpleNamespace(
+        request=AsyncMock(return_value=fake_upstream),
+        is_closed=False,
+    )
+    fake_pool = SimpleNamespace(get_client=AsyncMock(return_value=fake_client))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/web/index.html",
+        "raw_path": b"/web/index.html",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"proxy.internal:18097"),
+            (b"x-emby-server-url", b"https://alt.emby.example:8920"),
+        ],
+        "client": ("127.0.0.1", 12345),
+        "server": ("proxy.internal", 18097),
+    }
+
+    with (
+        patch("app.api.emby_gateway.get_http_pool_sync", new=Mock(return_value=fake_pool)),
+        patch.object(emby_gateway_module, "_forward_pool", None),
+        patch.object(emby_gateway_module, "_forward_client", None),
+    ):
+        request = emby_gateway_module.Request(scope)
+        response = await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
+
+    assert response.status_code == 200
+    assert fake_client.request.await_args.kwargs["url"] == "https://alt.emby.example:8920/web/index.html"
 
 
 def test_build_forward_headers_when_accept_encoding_then_force_identity():
