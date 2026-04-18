@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from aiohttp.http_exceptions import LineTooLong
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from fastapi.testclient import TestClient
 
@@ -1328,6 +1328,29 @@ def test_proxy_emby_request_when_head_and_endpoint_url_empty_then_reuses_gateway
     assert mock_forward.await_args.args[2] == "System/Info/Public"
 
 
+def test_proxy_emby_request_when_emby_override_header_uses_blocked_hostname_then_returns_400():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should reject blocked Emby override before forwarding")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/System/Info/Public",
+            headers={"X-Emby-Server-Url": "http://localhost:8096"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
 def test_proxy_emby_request_when_internal_error_then_does_not_leak_error_detail():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1345,6 +1368,26 @@ def test_proxy_emby_request_when_internal_error_then_does_not_leak_error_detail(
         response = client.get("/api/emby/System/Info/Public")
 
     assert response.status_code == 500
+    assert response.json() == {"detail": "Failed to proxy Emby request"}
+
+
+def test_proxy_emby_request_when_gateway_forward_raises_502_then_passes_through():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=HTTPException(status_code=502, detail="Failed to proxy Emby request")),
+        ),
+    ):
+        response = client.get("/api/emby/System/Info/Public")
+
+    assert response.status_code == 502
     assert response.json() == {"detail": "Failed to proxy Emby request"}
 
 
@@ -1406,6 +1449,29 @@ def test_proxy_router_emby_request_when_emby_override_header_present_then_valida
     mock_validate.assert_called_once_with("https://alt.emby.example:8920/base")
 
 
+def test_proxy_router_emby_request_when_emby_override_header_uses_blocked_hostname_then_returns_400():
+    client = _build_proxy_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should reject blocked Emby override before forwarding")),
+        ),
+    ):
+        response = client.get(
+            "/api/proxy/emby/System/Info/Public",
+            headers={"X-Emby-Server-Url": "http://localhost:8096"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
 def test_proxy_router_emby_request_when_internal_error_then_does_not_leak_error_detail():
     client = _build_proxy_client()
     app_config = SimpleNamespace(
@@ -1424,6 +1490,26 @@ def test_proxy_router_emby_request_when_internal_error_then_does_not_leak_error_
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Failed to proxy Emby request"}
+
+
+def test_proxy_router_emby_request_when_gateway_forward_raises_504_then_passes_through():
+    client = _build_proxy_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=HTTPException(status_code=504, detail="Emby upstream timeout")),
+        ),
+    ):
+        response = client.get("/api/proxy/emby/System/Info/Public")
+
+    assert response.status_code == 504
+    assert response.json() == {"detail": "Emby upstream timeout"}
 
 
 def test_stream_video_when_media_source_id_is_not_file_id_then_resolves_item_media_source_and_returns_stream_response():

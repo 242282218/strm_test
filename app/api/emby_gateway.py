@@ -240,6 +240,16 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
     return JSONResponse(content=data)
 
 
+def _raise_forward_http_exception(exc: httpx.RequestError, method: str, path: str) -> None:
+    normalized_path = f"/{(path or '').lstrip('/')}" if path else "/"
+    if isinstance(exc, httpx.TimeoutException):
+        logger.warning(f"Emby upstream timeout during proxy forward: {method.upper()} {normalized_path}")
+        raise HTTPException(status_code=504, detail="Emby upstream timeout") from exc
+
+    logger.warning(f"Emby upstream request failed during proxy forward: {method.upper()} {normalized_path}")
+    raise HTTPException(status_code=502, detail="Failed to proxy Emby request") from exc
+
+
 async def _forward_to_emby(request: Request, app_config, path: str) -> Response:
     emby_base_url = _resolve_emby_base_url(request, app_config)
     proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
@@ -254,14 +264,17 @@ async def _forward_to_emby(request: Request, app_config, path: str) -> Response:
         body = await request.body()
     headers = _build_forward_headers(request)
     client = await _get_forward_client()
-    upstream = await client.request(
-        method=request.method,
-        url=target_url,
-        headers=headers,
-        content=body,
-        follow_redirects=False,
-        timeout=30.0,
-    )
+    try:
+        upstream = await client.request(
+            method=request.method,
+            url=target_url,
+            headers=headers,
+            content=body,
+            follow_redirects=False,
+            timeout=30.0,
+        )
+    except httpx.RequestError as exc:
+        _raise_forward_http_exception(exc, request.method, target_path)
 
     response_headers = _build_response_headers(upstream.headers, emby_base_url, proxy_base_url)
     media_type = upstream.headers.get("content-type")
@@ -363,7 +376,11 @@ async def emby_gateway_websocket(ws: WebSocket):
         await ws.close(code=1008)
         return
 
-    target_url = _build_ws_target_url(app_config, ws)
+    try:
+        target_url = _build_ws_target_url(app_config, ws)
+    except HTTPException:
+        await ws.close(code=1008)
+        return
     extra_headers = _build_ws_extra_headers(ws)
 
     await ws.accept()

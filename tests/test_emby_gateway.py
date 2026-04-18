@@ -326,6 +326,29 @@ def test_gateway_playbackinfo_when_emby_override_header_present_then_prefers_hea
     assert _FakeEmbyProxyService.last_init["emby_base_url"] == "https://alt.emby.example:8920"
 
 
+def test_gateway_forward_when_emby_override_header_uses_blocked_hostname_then_returns_400():
+    client = _build_client()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._get_forward_client",
+            new=AsyncMock(side_effect=AssertionError("should reject blocked Emby override before upstream request")),
+        ),
+    ):
+        response = client.get(
+            "/System/Info/Public",
+            headers={
+                "host": "proxy.example:18097",
+                "X-Emby-Server-Url": "http://localhost:8096",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
 def test_gateway_playbackinfo_when_prefixed_lowercase_path_used_then_still_uses_hook_proxy():
     client = _build_client()
     app_config = _mock_config()
@@ -766,6 +789,63 @@ async def test_gateway_websocket_when_emby_override_header_present_then_targets_
 
 
 @pytest.mark.asyncio
+async def test_gateway_websocket_when_client_headers_present_then_forwards_filtered_headers_to_upstream():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        headers={
+            "Connection": "Upgrade",
+            "Sec-WebSocket-Protocol": "chat",
+            "X-Emby-Token": "emby-api-key",
+            "X-Request-Id": "req-1",
+        },
+    )
+    upstream_ws = _FakeUpstreamWebSocket()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ) as mock_connect,
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert upstream_ws.closed is True
+    extra_headers = dict(mock_connect.await_args.kwargs["additional_headers"])
+    assert extra_headers["user-agent"] == "pytest"
+    assert extra_headers["X-Emby-Token"] == "emby-api-key"
+    assert extra_headers["X-Request-Id"] == "req-1"
+    assert "Connection" not in extra_headers
+    assert "Sec-WebSocket-Protocol" not in extra_headers
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_emby_override_header_uses_blocked_hostname_then_closes_before_accept():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        headers={"X-Emby-Server-Url": "http://localhost:8096"},
+    )
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(side_effect=AssertionError("should reject blocked Emby override before websocket dial")),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 0
+    assert ws.closed_codes == [1008]
+
+
+@pytest.mark.asyncio
 async def test_gateway_websocket_when_proxy_base_url_empty_and_port_18097_then_accepts_and_proxies_upstream():
     ws = _FakeWebSocketClient("127.0.0.1:18097", query="api_key=emby-api-key")
     upstream_ws = _FakeUpstreamWebSocket()
@@ -1062,3 +1142,77 @@ async def test_forward_to_emby_when_multiple_set_cookie_then_preserves_all():
     assert len(cookies) == 2
     assert cookies[0].startswith("a=1")
     assert cookies[1].startswith("b=2")
+
+
+@pytest.mark.asyncio
+async def test_forward_to_emby_when_upstream_connect_error_then_raises_502_http_exception():
+    app_config = _mock_config()
+    request_obj = httpx.Request("GET", "http://emby.example:18096/web/index.html")
+    fake_client = SimpleNamespace(
+        request=AsyncMock(side_effect=httpx.ConnectError("dial failed", request=request_obj)),
+        is_closed=False,
+    )
+    fake_pool = SimpleNamespace(get_client=AsyncMock(return_value=fake_client))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/web/index.html",
+        "raw_path": b"/web/index.html",
+        "query_string": b"",
+        "headers": [(b"host", b"proxy.example:18097")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("proxy.example", 18097),
+    }
+    request = Request(scope)
+
+    with (
+        patch("app.api.emby_gateway.get_http_pool_sync", new=Mock(return_value=fake_pool)),
+        patch.object(emby_gateway_module, "_forward_pool", None),
+        patch.object(emby_gateway_module, "_forward_client", None),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "Failed to proxy Emby request"
+
+
+@pytest.mark.asyncio
+async def test_forward_to_emby_when_upstream_timeout_then_raises_504_http_exception():
+    app_config = _mock_config()
+    request_obj = httpx.Request("GET", "http://emby.example:18096/web/index.html")
+    fake_client = SimpleNamespace(
+        request=AsyncMock(side_effect=httpx.ReadTimeout("slow upstream", request=request_obj)),
+        is_closed=False,
+    )
+    fake_pool = SimpleNamespace(get_client=AsyncMock(return_value=fake_client))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/web/index.html",
+        "raw_path": b"/web/index.html",
+        "query_string": b"",
+        "headers": [(b"host", b"proxy.example:18097")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("proxy.example", 18097),
+    }
+    request = Request(scope)
+
+    with (
+        patch("app.api.emby_gateway.get_http_pool_sync", new=Mock(return_value=fake_pool)),
+        patch.object(emby_gateway_module, "_forward_pool", None),
+        patch.object(emby_gateway_module, "_forward_client", None),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
+
+    assert exc_info.value.status_code == 504
+    assert exc_info.value.detail == "Emby upstream timeout"

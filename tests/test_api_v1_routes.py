@@ -199,21 +199,6 @@ class TestV1RouterStructure:
         assert "/api/v1/quark/config" in paths
         assert "/api/v1/api/quark/config" in paths
 
-
-class TestMainCorsResolution:
-    """main.py CORS 收口测试 - 已移至 middleware.py"""
-
-    @pytest.mark.skip("CORS resolution moved to middleware.py")
-    def test_resolve_cors_settings_when_config_uses_wildcards_then_falls_back_to_safe_defaults(self):
-        """此测试已废弃，_resolve_cors_settings 移至 middleware.py"""
-        pass
-
-    @pytest.mark.skip("CORS resolution moved to middleware.py")
-    def test_resolve_cors_settings_when_env_overrides_exist_then_prefers_env_values(self):
-        """此测试已废弃，_resolve_cors_settings 移至 middleware.py"""
-        pass
-
-
 class TestMainRouterRegistration:
     """main.py 路由注册收口测试"""
 
