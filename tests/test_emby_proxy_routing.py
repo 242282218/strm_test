@@ -428,6 +428,80 @@ async def test_playback_info_hook_when_remote_transcoding_query_present_then_rew
 
 
 @pytest.mark.asyncio
+async def test_playback_info_hook_when_web_client_and_local_strm_source_then_rewrites_to_local_emby_routes(tmp_path):
+    strm_file = tmp_path / "movie.strm"
+    strm_file.write_text("quark://real_file_123\n", encoding="utf-8")
+
+    emby_client = AsyncMock()
+    emby_client.get_playback_info = AsyncMock(
+        return_value={
+            "MediaSources": [
+                {
+                    "Id": "media_source_1",
+                    "Path": str(strm_file),
+                    "IsRemote": False,
+                    "Container": "mkv",
+                    "SupportsTranscoding": True,
+                    "TranscodingUrl": "/Videos/77/master.m3u8",
+                }
+            ]
+        }
+    )
+
+    hook = PlaybackInfoHook(
+        emby_client=emby_client,
+        quark_service=AsyncMock(),
+        proxy_base_url="http://proxy.example:18097",
+    )
+
+    result = await hook.hook_playback_info(item_id="item1", user_id="user1", is_web_client=True)
+
+    media_source = result["MediaSources"][0]
+    assert media_source["DirectStreamUrl"] == (
+        "http://proxy.example:18097/Videos/item1/stream?MediaSourceId=media_source_1&Static=true"
+        "&smart_media_proxy=1&container=mkv"
+    )
+    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+
+
+@pytest.mark.asyncio
+async def test_playback_info_hook_when_non_web_client_and_local_strm_source_has_transcoding_then_rewrites_master_playlist(
+    tmp_path,
+):
+    strm_file = tmp_path / "movie.strm"
+    strm_file.write_text("quark://real_file_123\n", encoding="utf-8")
+
+    emby_client = AsyncMock()
+    emby_client.get_playback_info = AsyncMock(
+        return_value={
+            "MediaSources": [
+                {
+                    "Id": "media_source_1",
+                    "Path": str(strm_file),
+                    "IsRemote": False,
+                    "SupportsTranscoding": True,
+                    "TranscodingUrl": "/Videos/77/master.m3u8?PlaySessionId=session77",
+                }
+            ]
+        }
+    )
+
+    hook = PlaybackInfoHook(
+        emby_client=emby_client,
+        quark_service=AsyncMock(),
+        proxy_base_url="http://proxy.example:18097",
+    )
+
+    result = await hook.hook_playback_info(item_id="item1", user_id="user1", is_web_client=False)
+
+    media_source = result["MediaSources"][0]
+    assert media_source["DirectStreamUrl"] == "http://proxy.example:18097/api/proxy/redirect/real_file_123?Static=true"
+    assert media_source["TranscodingUrl"] == (
+        "/Videos/item1/master.m3u8?PlaySessionId=session77&MediaSourceId=media_source_1&smart_media_proxy=1"
+    )
+
+
+@pytest.mark.asyncio
 async def test_playback_info_hook_when_fallback_has_mixed_sources_then_keeps_only_remote_candidates():
     emby_client = AsyncMock()
     emby_client.get_playback_info = AsyncMock(side_effect=TimeoutError("playback info timeout"))

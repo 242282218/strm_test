@@ -199,14 +199,9 @@ class PlaybackInfoHook:
                 logger.debug(f"Local media: {path}, skip processing")
                 return source
 
-            # 检查是否是远程资源
-            is_remote = source.get("IsRemote", False)
-
-            # 保留 Emby 原始能力声明，避免 Hook 伪造客户端能力
-
             media_source_id = source.get("Id", "")
             transcoding_url = str(source.get("TranscodingUrl") or "").strip()
-            if is_remote and media_source_id and transcoding_url:
+            if media_source_id and transcoding_url:
                 source["TranscodingUrl"] = self._rewrite_transcoding_url(
                     item_id=item_id,
                     media_source_id=media_source_id,
@@ -233,10 +228,14 @@ class PlaybackInfoHook:
                 has_stable_url=bool(stable_url),
             )
 
-            if decision.mode == "emby_stream" and is_remote:
-                source["DirectStreamUrl"] = self._build_emby_stream_url(item_id=item_id, media_source_id=media_source_id, source=source)
+            if decision.mode == "emby_stream":
+                source["DirectStreamUrl"] = self._build_emby_stream_url(
+                    item_id=item_id,
+                    media_source_id=media_source_id,
+                    source=source,
+                )
                 logger.debug(
-                    "Remote media source %s rewrote to Emby-style stream URL (reason=%s, client=%s, device=%s)",
+                    "Proxy-managed media source %s rewrote to Emby-style stream URL (reason=%s, client=%s, device=%s)",
                     media_source_id,
                     decision.reason,
                     client_name,
@@ -260,20 +259,13 @@ class PlaybackInfoHook:
             new_url = f"{build_proxy_url(self.proxy_base_url, target_id, mode='redirect')}?Static=true"
             source["DirectStreamUrl"] = new_url
 
-            if is_remote:
-                logger.debug(
-                    "Remote media source %s rewritten to proxy redirect (reason=%s, client=%s, device=%s)",
-                    media_source_id,
-                    decision.reason,
-                    client_name,
-                    device_name,
-                )
-                return source
-
-            # TODO: 添加转码MediaSource获取逻辑
-            # 参考: go-emby2openlist findVideoPreviewInfos
-
-            logger.debug(f"Processed media source: {media_source_id}")
+            logger.debug(
+                "Proxy-managed media source %s rewritten to proxy redirect (reason=%s, client=%s, device=%s)",
+                media_source_id,
+                decision.reason,
+                client_name,
+                device_name,
+            )
             return source
 
         except Exception as e:
