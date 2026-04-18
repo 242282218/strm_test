@@ -93,6 +93,10 @@ jobs:
         working-directory: web
         run: npm run test:run -- --reporter=dot
 
+      - name: Run frontend build
+        working-directory: web
+        run: npm run build-only
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
