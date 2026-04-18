@@ -81,6 +81,10 @@ jobs:
         working-directory: web
         run: npm run type-check
 
+      - name: Run frontend smoke tests
+        working-directory: web
+        run: npm run test:smoke -- --reporter=dot
+
       - name: Run frontend unit tests
         working-directory: web
         run: npm run test:run -- --reporter=dot
