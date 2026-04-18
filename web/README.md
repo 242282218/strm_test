@@ -11,6 +11,7 @@ npm run dev
 
 ```sh
 npm run test:run
+npm run test:smoke
 npm run type-check
 npm run build-only
 ```
@@ -19,6 +20,7 @@ npm run build-only
 
 ```sh
 npm run lint
+npm run test:smoke
 npm run test:coverage
 npm run test:e2e
 npm run preview
@@ -27,8 +29,8 @@ npm run preview
 ## E2E 运行约定
 
 - `npm run test:e2e` 会默认先检查并自动拉起后端 `uvicorn app.main:app` 与前端 `npm run dev`；本地若同端口已有服务则直接复用，CI 则总是拉起新进程。
-- Playwright 默认访问 `http://127.0.0.1:3000`，可用 `PLAYWRIGHT_BASE_URL` 覆盖；前端 dev server 会跟随这个地址启动。
-- Vite dev proxy 默认转发到 `http://127.0.0.1:8000`，可用 `VITE_API_PROXY_TARGET` 或 `PLAYWRIGHT_API_TARGET` 覆盖；后端 `uvicorn` 会跟随该目标地址启动。
+- Playwright 默认访问 `http://127.0.0.1:18099`，可用 `PLAYWRIGHT_BASE_URL` 覆盖；前端 dev server 会跟随这个地址启动，避免与常见本地 `3000` 端口冲突。
+- Playwright 自动启动时，Vite dev proxy 默认转发到 `http://127.0.0.1:18000`，可用 `VITE_API_PROXY_TARGET` 或 `PLAYWRIGHT_API_TARGET` 覆盖；后端 `uvicorn` 会跟随该目标地址启动，避免与常见本地 `8000` 端口冲突。
 - Playwright 本地默认使用 `2` 个 worker 且关闭 `fullyParallel`，避免压穿后端限流；可用 `PLAYWRIGHT_WORKERS` 和 `PLAYWRIGHT_FULLY_PARALLEL=true` 覆盖。
 - 如果后端启用了认证且还没初始化管理员，`web/e2e/global-setup.ts` 会尝试调用 `/api/auth/init-admin`。自动启动后端时默认注入 `ADMIN_PASSWORD=admin`，也可显式覆盖。
 
@@ -148,7 +150,16 @@ npm run type-check
 npm run build-only
 ```
 
-如果修改了路由、兼容包装、feature 导入路径，提交前至少跑完这三项。
+其中 `npm run test:smoke` 是更快的启动契约门禁，覆盖 app bootstrap、登录页回退和受保护壳层渲染，适合在改动路由、鉴权恢复、应用壳层时先跑一遍。
+
+如果修改了路由、鉴权恢复、应用启动、兼容包装或 feature 导入路径，提交前至少跑完：
+
+```sh
+npm run test:smoke
+npm run test:run
+npm run type-check
+npm run build-only
+```
 
 ## Node 环境
 
