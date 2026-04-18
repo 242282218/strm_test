@@ -26,10 +26,13 @@ async function safeClickAndVerify(
   if (!(await target.isEnabled())) return
   await target.click()
 
-  // 短暂等待，确保异步操作完成
-  await page.waitForTimeout(500)
+  await waitForPageReady(page)
 
   // 不在此处断言错误数量——由各测试用例自行判断
+}
+
+async function isSwitchChecked(target: Locator): Promise<boolean> {
+  return target.evaluate((element) => element.classList.contains('is-checked'))
 }
 
 // ===== 登录页测试 (/login) =====
@@ -415,16 +418,9 @@ test.describe('Emby 监控 /emby-monitor 按钮功能', () => {
     const switchEl = page.locator('.el-switch')
     if (await switchEl.count() > 0) {
       const firstSwitch = switchEl.first()
-      const isChecked = await firstSwitch.locator('.el-switch__core').evaluate(
-        (el) => el.classList.contains('is-checked'),
-      )
+      const isChecked = await isSwitchChecked(firstSwitch)
       await firstSwitch.click()
-      await page.waitForTimeout(300)
-      // 验证状态已改变
-      const newState = await firstSwitch.locator('.el-switch__core').evaluate(
-        (el) => el.classList.contains('is-checked'),
-      )
-      expect(newState).not.toBe(isChecked)
+      await expect.poll(() => isSwitchChecked(firstSwitch)).not.toBe(isChecked)
     }
   })
 })
@@ -465,11 +461,9 @@ test.describe('系统配置 /config 按钮功能', () => {
     const collapseHeaders = page.locator('.el-collapse-item__header')
     if (await collapseHeaders.count() > 0) {
       const header = collapseHeaders.first()
+      const expandedBefore = await header.getAttribute('aria-expanded')
       await header.click()
-      await page.waitForTimeout(300)
-      // 折叠内容应出现或消失
-      const content = page.locator('.el-collapse-item__wrap').first()
-      await expect(content).toBeVisible()
+      await expect.poll(() => header.getAttribute('aria-expanded')).not.toBe(expandedBefore)
     }
   })
 
@@ -772,15 +766,9 @@ test.describe('通知配置 /notifications 按钮功能', () => {
     const switchEl = page.locator('.el-switch')
     if (await switchEl.count() > 0) {
       const firstSwitch = switchEl.first()
-      const isChecked = await firstSwitch.locator('.el-switch__core').evaluate(
-        (el) => el.classList.contains('is-checked'),
-      )
+      const isChecked = await isSwitchChecked(firstSwitch)
       await firstSwitch.click()
-      await page.waitForTimeout(300)
-      const newState = await firstSwitch.locator('.el-switch__core').evaluate(
-        (el) => el.classList.contains('is-checked'),
-      )
-      expect(newState).not.toBe(isChecked)
+      await expect.poll(() => isSwitchChecked(firstSwitch)).not.toBe(isChecked)
     }
   })
 })
@@ -889,11 +877,10 @@ test.describe('全局导航栏与边界条件', () => {
     const userMenuTrigger = page.locator('.user-avatar, .user-info, .el-dropdown [class*="user"]')
     if (await userMenuTrigger.count() > 0) {
       await userMenuTrigger.first().click()
-      await page.waitForTimeout(500)
       // 下拉菜单应出现
       const dropdownMenu = page.locator('.el-dropdown-menu, .el-menu--popup')
       if (await dropdownMenu.count() > 0) {
-        await expect(dropdownMenu.first()).toBeVisible()
+        await expect(dropdownMenu.first()).toBeVisible({ timeout: 5000 })
         await page.keyboard.press('Escape')
       }
     }
@@ -907,13 +894,15 @@ test.describe('全局导航栏与边界条件', () => {
       const userMenu = page.locator('.user-avatar, .el-dropdown [class*="user"]')
       if (await userMenu.count() > 0) {
         await userMenu.first().click()
-        await page.waitForTimeout(500)
+        const dropdownMenu = page.locator('.el-dropdown-menu, .el-menu--popup')
+        if (await dropdownMenu.count() > 0) {
+          await expect(dropdownMenu.first()).toBeVisible({ timeout: 5000 })
+        }
       }
     }
     const logoutBtn = page.getByRole('menuitem', { name: /退出|注销|Logout|登出/ }, { has: true })
     if (await logoutBtn.count() > 0) {
       await logoutBtn.first().click()
-      await page.waitForTimeout(1000)
       // 应跳转到登录页
       const url = page.url()
       // 登出后可能在 login 页面或仍在当前页面（取决于实现）
@@ -949,7 +938,6 @@ test.describe('全局导航栏与边界条件', () => {
 
     for (const route of routes) {
       await navigateAndWait(page, route)
-      await page.waitForTimeout(500)
     }
 
     // 断言没有 JS 错误（允许已知的非关键警告）
@@ -963,13 +951,8 @@ test.describe('全局导航栏与边界条件', () => {
     expect(criticalErrors, `发现 JS 错误: ${criticalErrors.join('; ')}`).toHaveLength(0)
   })
 
-  test('各页面累积无 API 5xx 错误', async ({ page }) => {
-    const apiErrors: { url: string; status: number }[] = []
-    page.on('response', (resp) => {
-      if (resp.url().includes('/api/') && resp.status() >= 500) {
-        apiErrors.push({ url: resp.url(), status: resp.status() })
-      }
-    })
+  test('各页面累积无 API 4xx/5xx 错误', async ({ page }) => {
+    const apiErrors = collectApiErrors(page)
 
     const routes = [
       '/dashboard',
@@ -990,9 +973,8 @@ test.describe('全局导航栏与边界条件', () => {
 
     for (const route of routes) {
       await navigateAndWait(page, route)
-      await page.waitForTimeout(500)
     }
 
-    expect(apiErrors, `发现 API 5xx 错误: ${JSON.stringify(apiErrors)}`).toHaveLength(0)
+    expect(apiErrors, `发现 API 4xx/5xx 错误: ${JSON.stringify(apiErrors)}`).toHaveLength(0)
   })
 })
