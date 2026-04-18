@@ -1,6 +1,11 @@
 import { type Locator, type Page, expect } from '@playwright/test'
 
 type Scope = Page | Locator
+type ApiErrorRecord = { url: string; status: number }
+
+interface ApiErrorCollectorOptions {
+  allowStatuses?: number[]
+}
 
 /**
  * 等待页面就绪：Element Plus 骨架屏和全局 loading 消失。
@@ -56,14 +61,19 @@ export function collectConsoleErrors(page: Page): string[] {
 }
 
 /**
- * 断言页面没有请求返回 5xx 状态码。
+ * 收集页面上的 4xx/5xx API 响应，避免接口契约漂移被 E2E 误判为绿。
  */
-export function collectApiErrors(page: Page): { url: string; status: number }[] {
-  const errors: { url: string; status: number }[] = []
+export function collectApiErrors(page: Page, options: ApiErrorCollectorOptions = {}): ApiErrorRecord[] {
+  const errors: ApiErrorRecord[] = []
+  const allowedStatuses = new Set(options.allowStatuses ?? [])
+
   page.on('response', (resp) => {
-    if (resp.url().includes('/api/') && resp.status() >= 500) {
-      errors.push({ url: resp.url(), status: resp.status() })
+    const status = resp.status()
+    if (!resp.url().includes('/api/') || status < 400 || allowedStatuses.has(status)) {
+      return
     }
+
+    errors.push({ url: resp.url(), status })
   })
   return errors
 }
