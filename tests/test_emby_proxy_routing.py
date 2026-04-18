@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -95,11 +95,11 @@ class _FakeWebDAVFallback:
         return None
 
 
-def _build_proxy_client() -> TestClient:
+def _build_proxy_client(*, raise_server_exceptions: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(proxy_router)
     app.dependency_overrides[require_api_key] = lambda: None
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=raise_server_exceptions)
 
 
 def _build_proxy_client_without_auth_override() -> TestClient:
@@ -108,10 +108,10 @@ def _build_proxy_client_without_auth_override() -> TestClient:
     return TestClient(app)
 
 
-def _build_emby_client() -> TestClient:
+def _build_emby_client(*, raise_server_exceptions: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(emby_router)
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=raise_server_exceptions)
 
 
 @pytest.mark.asyncio
@@ -725,6 +725,34 @@ def test_get_playback_info_when_proxy_override_header_present_then_prefers_reque
     assert response.json()["proxy_base_url"] == "https://public.proxy.example"
     assert _FakeEmbyProxyService.last_init is not None
     assert _FakeEmbyProxyService.last_init["proxy_base_url"] == "https://public.proxy.example"
+
+
+def test_get_playback_info_when_proxy_override_header_is_invalid_then_returns_400():
+    client = _build_emby_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.emby.EmbyProxyService",
+            new=Mock(side_effect=AssertionError("should reject invalid proxy override before proxy service init")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"user_id": "user123"},
+            headers={
+                "X-Emby-Token": "emby-api-key",
+                "X-Proxy-Server-Url": "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid proxy server URL"}
 
 
 def test_get_playback_info_when_emby_override_header_present_then_prefers_requested_emby_base_url():
@@ -1431,6 +1459,23 @@ def test_proxy_emby_request_when_proxy_override_header_present_then_passes_proxy
     assert mock_forward.await_args.kwargs["proxy_base_url"] == "https://public.proxy.example"
 
 
+def test_proxy_emby_request_when_proxy_override_header_is_invalid_then_returns_400():
+    client = _build_emby_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.internal:18097"),
+    )
+
+    with patch("app.api.emby.config_service.get_config", return_value=app_config):
+        response = client.get(
+            "/api/emby/System/Info/Public",
+            headers={"X-Proxy-Server-Url": "not-a-url"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid proxy server URL"}
+
+
 def test_proxy_emby_request_when_emby_override_header_uses_blocked_hostname_then_returns_400():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1609,6 +1654,23 @@ def test_proxy_router_emby_request_when_proxy_override_header_present_then_passe
 
     assert response.status_code == 200
     assert mock_forward.await_args.kwargs["proxy_base_url"] == "https://public.proxy.example"
+
+
+def test_proxy_router_emby_request_when_proxy_override_header_is_invalid_then_returns_400():
+    client = _build_proxy_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.internal:18097"),
+    )
+
+    with patch("app.api.proxy.config_service.get_config", return_value=app_config):
+        response = client.get(
+            "/api/proxy/emby/System/Info/Public",
+            headers={"X-Proxy-Server-Url": "not-a-url"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid proxy server URL"}
 
 
 def test_proxy_router_emby_request_when_emby_override_header_uses_blocked_hostname_then_returns_400():

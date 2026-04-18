@@ -180,11 +180,17 @@ def _resolve_requested_proxy_base_url(request: Request, app_config) -> str:
         text = str(candidate or "").strip().rstrip("/")
         if not text:
             continue
-        validate_http_url(text, "proxy_base_url")
+        try:
+            validate_http_url(text, "proxy_base_url")
+        except InputValidationError as exc:
+            raise HTTPException(status_code=400, detail="Invalid proxy server URL") from exc
         return text
 
     fallback_proxy_base_url = "http://localhost:8000"
-    validate_http_url(fallback_proxy_base_url, "proxy_base_url")
+    try:
+        validate_http_url(fallback_proxy_base_url, "proxy_base_url")
+    except InputValidationError as exc:
+        raise HTTPException(status_code=400, detail="Invalid proxy server URL") from exc
     return fallback_proxy_base_url
 
 

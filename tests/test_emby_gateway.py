@@ -65,10 +65,10 @@ class _FakeEmbyProxyService:
         }
 
 
-def _build_client() -> TestClient:
+def _build_client(*, raise_server_exceptions: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(emby_gateway_router)
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=raise_server_exceptions)
 
 
 def _mock_config(proxy_base_url: str = "http://proxy.example:18097"):
@@ -299,6 +299,35 @@ def test_gateway_playbackinfo_when_proxy_override_header_present_then_prefers_he
     assert _FakeEmbyProxyService.last_init["proxy_base_url"] == "https://public.proxy.example"
 
 
+def test_gateway_playbackinfo_when_proxy_override_header_is_invalid_then_returns_400():
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch(
+            "app.api.emby_gateway.EmbyProxyService",
+            new=Mock(side_effect=AssertionError("should reject invalid proxy override before proxy service init")),
+        ),
+    ):
+        response = client.get(
+            "/Items/item123/PlaybackInfo",
+            params={
+                "UserId": "user123",
+                "MediaSourceId": "media123",
+                "api_key": "emby-api-key",
+            },
+            headers={
+                "host": "proxy.example:18097",
+                "X-Proxy-Server-Url": "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid proxy server URL"}
+
+
 def test_gateway_playbackinfo_when_emby_override_header_present_then_prefers_header_emby_base_url():
     client = _build_client()
     app_config = _mock_config()
@@ -347,6 +376,23 @@ def test_gateway_forward_when_emby_override_header_uses_blocked_hostname_then_re
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
+def test_gateway_forward_when_proxy_override_header_is_invalid_then_returns_400():
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+
+    with patch("app.api.emby_gateway.config_service.get_config", return_value=app_config):
+        response = client.get(
+            "/System/Info/Public",
+            headers={
+                "host": "proxy.example:18097",
+                "X-Proxy-Server-Url": "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid proxy server URL"}
 
 
 def test_gateway_playbackinfo_when_prefixed_lowercase_path_used_then_still_uses_hook_proxy():
