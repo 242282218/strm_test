@@ -1454,6 +1454,36 @@ def test_proxy_emby_request_when_emby_override_header_uses_blocked_hostname_then
     assert response.json() == {"detail": "Invalid Emby server URL"}
 
 
+def test_proxy_emby_request_when_emby_override_header_present_then_validates_override_url_once():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.emby_validator.validate") as mock_validate,
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(
+                return_value=Response(
+                    content=b'{"ok":true}',
+                    status_code=200,
+                    media_type="application/json",
+                )
+            ),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/System/Info/Public",
+            headers={"X-Emby-Server-Url": "https://alt.emby.example:8920/base"},
+        )
+
+    assert response.status_code == 200
+    mock_validate.assert_called_once_with("https://alt.emby.example:8920/base")
+
+
 def test_proxy_emby_request_when_internal_error_then_does_not_leak_error_detail():
     client = _build_emby_client()
     app_config = SimpleNamespace(
