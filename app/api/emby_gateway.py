@@ -250,9 +250,16 @@ def _raise_forward_http_exception(exc: httpx.RequestError, method: str, path: st
     raise HTTPException(status_code=502, detail="Failed to proxy Emby request") from exc
 
 
-async def _forward_to_emby(request: Request, app_config, path: str) -> Response:
-    emby_base_url = _resolve_emby_base_url(request, app_config)
-    proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
+async def _forward_to_emby(
+    request: Request,
+    app_config,
+    path: str,
+    *,
+    emby_base_url: str | None = None,
+    proxy_base_url: str | None = None,
+) -> Response:
+    emby_base_url = (emby_base_url or _resolve_emby_base_url(request, app_config)).rstrip("/")
+    proxy_base_url = (proxy_base_url or _resolve_requested_proxy_base_url(request, app_config)).rstrip("/")
     target_path = (path or "").lstrip("/")
     target_url = emby_base_url if not target_path else f"{emby_base_url}/{target_path}"
     query_string = str(request.url.query)

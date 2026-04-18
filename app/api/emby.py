@@ -17,6 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.core.config_manager import get_config
 from app.core.db import get_db
@@ -29,6 +30,7 @@ from app.core.validators import (
     validate_identifier,
     validate_proxy_path,
 )
+from app.core.url_validator import URLValidationError, emby_validator
 from app.models.emby import EmbyDeletePlan, EmbyEventLog, EmbyMediaItem
 from app.services.config_service import get_config_service
 from app.services.emby_proxy_service import EmbyProxyService
@@ -124,13 +126,24 @@ def _resolve_configured_emby_base_url(app_config) -> str:
     return configured_emby_url
 
 
-def _resolve_requested_emby_base_url(request: Request, app_config) -> str:
+def _resolve_requested_emby_base_url(connection: HTTPConnection, app_config) -> str:
+    requested_override = str(connection.headers.get("X-Emby-Server-Url") or "").strip()
     emby_base_url = (
-        request.headers.get("X-Emby-Server-Url")
+        requested_override
         or _resolve_configured_emby_base_url(app_config)
         or "http://localhost:8096"
     )
-    validate_http_url(emby_base_url, "emby_base_url")
+    try:
+        validate_http_url(emby_base_url, "emby_base_url")
+    except InputValidationError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Emby server URL") from exc
+
+    if requested_override:
+        try:
+            emby_validator.validate(emby_base_url)
+        except URLValidationError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Emby server URL") from exc
+
     return emby_base_url
 
 
@@ -1105,7 +1118,17 @@ async def proxy_emby_request(request: Request, path: str):
         app_config = config_service.get_config()
         from app.api import emby_gateway as emby_gateway_module
 
-        return await emby_gateway_module._forward_to_emby(request, app_config, path)
+        emby_base_url = emby_gateway_module._resolve_emby_base_url(request, app_config)
+        proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
+        return await emby_gateway_module._forward_to_emby(
+            request,
+            app_config,
+            path,
+            emby_base_url=emby_base_url,
+            proxy_base_url=proxy_base_url,
+        )
+    except HTTPException:
+        raise
     except InputValidationError:
         raise
     except Exception as exc:

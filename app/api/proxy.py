@@ -701,15 +701,16 @@ async def proxy_emby_request(request: Request, path: str):
         from app.api import emby_gateway as emby_gateway_module
 
         emby_url = emby_gateway_module._resolve_emby_base_url(request, app_config)
-
-        # SSRF 防护: 验证 Emby URL
-        try:
-            emby_validator.validate(emby_url)
-        except URLValidationError as e:
-            logger.error(f"Invalid Emby URL (SSRF protection): {e}")
-            raise HTTPException(status_code=400, detail=f"Invalid Emby server URL: {e}")
-
-        return await emby_gateway_module._forward_to_emby(request, app_config, path)
+        proxy_base_url = emby_gateway_module._resolve_requested_proxy_base_url(request, app_config)
+        return await emby_gateway_module._forward_to_emby(
+            request,
+            app_config,
+            path,
+            emby_base_url=emby_url,
+            proxy_base_url=proxy_base_url,
+        )
+    except HTTPException:
+        raise
     except InputValidationError:
         raise
     except URLValidationError as e:
