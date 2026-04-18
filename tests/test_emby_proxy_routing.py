@@ -781,6 +781,34 @@ def test_get_playback_info_when_emby_override_header_present_then_prefers_reques
     assert _FakeEmbyProxyService.last_init["emby_base_url"] == "https://alt.emby.example:8920"
 
 
+def test_get_playback_info_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_emby_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097", url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.emby.EmbyProxyService",
+            new=Mock(side_effect=AssertionError("should reject invalid Emby override before proxy service init")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/items/item123/PlaybackInfo",
+            params={"user_id": "user123"},
+            headers={
+                "X-Emby-Token": "emby-api-key",
+                "X-Emby-Server-Url": "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
 def test_get_playback_info_when_endpoint_emby_url_is_empty_then_falls_back_to_emby_config_url():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1236,6 +1264,34 @@ def test_get_item_when_native_authorization_header_present_then_uses_emby_auth_c
     assert response.json() == {"item_id": "item123", "user_id": "user123", "source": "proxy"}
     assert mock_emby_proxy_service_cls.call_args.kwargs["api_key"] == "native-emby-api-key"
     mock_emby_proxy_service.proxy_items_request.assert_awaited_once_with(item_id="item123", user_id="user123")
+
+
+def test_get_item_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_emby_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.example:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.emby.EmbyProxyService",
+            new=Mock(side_effect=AssertionError("should reject invalid Emby override before proxy service init")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/items/item123",
+            params={"UserId": "user123"},
+            headers={
+                "X-MediaBrowser-Token": "legacy-emby-api-key",
+                "X-Emby-Server-Url": "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
 
 
 def test_get_item_when_request_token_missing_then_falls_back_to_configured_emby_api_key():
@@ -1817,6 +1873,35 @@ def test_stream_video_when_media_source_id_is_not_file_id_then_resolves_item_med
     mock_proxy_stream.assert_awaited_once()
 
 
+def test_stream_video_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_emby_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097", url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.emby.EmbyProxyService",
+            new=Mock(side_effect=AssertionError("should reject invalid Emby override before proxy service init")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/videos/item123/stream",
+            params={"media_source_id": "media_source_1"},
+            headers={
+                "X-Emby-Token": "emby-api-key",
+                "X-Emby-Server-Url": "not-a-url",
+            },
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
 def test_stream_video_when_container_suffix_requested_then_handles_locally():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -2033,6 +2118,34 @@ def test_get_master_playlist_when_media_source_id_is_not_file_id_then_resolves_i
     mock_emby_proxy_service.resolve_media_source_file_id.assert_awaited_once_with(
         item_id="item123", media_source_id="media_source_1"
     )
+
+
+def test_get_master_playlist_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_emby_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[],
+        emby=SimpleNamespace(proxy_base_url="http://proxy.example:18097", url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.emby.EmbyProxyService",
+            new=Mock(side_effect=AssertionError("should reject invalid Emby override before proxy service init")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/videos/item123/master.m3u8",
+            params={"MediaSourceId": "media_source_1"},
+            headers={
+                "X-Emby-Token": "emby-api-key",
+                "X-Emby-Server-Url": "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
 
 
 def test_get_master_playlist_when_native_videos_path_used_then_handles_locally():
