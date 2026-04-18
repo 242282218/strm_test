@@ -1402,6 +1402,35 @@ def test_proxy_emby_request_when_head_and_endpoint_url_empty_then_reuses_gateway
     assert mock_forward.await_args.args[2] == "System/Info/Public"
 
 
+def test_proxy_emby_request_when_proxy_override_header_present_then_passes_proxy_base_url_to_gateway_forwarder():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.internal:18097"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(
+                return_value=Response(
+                    content=b'{"ok":true}',
+                    status_code=200,
+                    media_type="application/json",
+                )
+            ),
+        ) as mock_forward,
+    ):
+        response = client.get(
+            "/api/emby/System/Info/Public",
+            headers={"X-Proxy-Server-Url": "https://public.proxy.example"},
+        )
+
+    assert response.status_code == 200
+    assert mock_forward.await_args.kwargs["proxy_base_url"] == "https://public.proxy.example"
+
+
 def test_proxy_emby_request_when_emby_override_header_uses_blocked_hostname_then_returns_400():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1521,6 +1550,35 @@ def test_proxy_router_emby_request_when_emby_override_header_present_then_valida
 
     assert response.status_code == 200
     mock_validate.assert_called_once_with("https://alt.emby.example:8920/base")
+
+
+def test_proxy_router_emby_request_when_proxy_override_header_present_then_passes_proxy_base_url_to_gateway_forwarder():
+    client = _build_proxy_client()
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096", proxy_base_url="http://proxy.internal:18097"),
+    )
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(
+                return_value=Response(
+                    content=b'{"ok":true}',
+                    status_code=200,
+                    media_type="application/json",
+                )
+            ),
+        ) as mock_forward,
+    ):
+        response = client.get(
+            "/api/proxy/emby/System/Info/Public",
+            headers={"X-Proxy-Server-Url": "https://public.proxy.example"},
+        )
+
+    assert response.status_code == 200
+    assert mock_forward.await_args.kwargs["proxy_base_url"] == "https://public.proxy.example"
 
 
 def test_proxy_router_emby_request_when_emby_override_header_uses_blocked_hostname_then_returns_400():
