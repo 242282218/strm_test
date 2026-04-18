@@ -488,18 +488,17 @@ class TestConfigFileIntegration:
         mock_security.require_api_key = True
         mock_config.security = mock_security
 
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("app.core.auth_middleware.get_config_service") as mock_get_config:
-                mock_service = MagicMock()
-                mock_service.get_config.return_value = mock_config
-                mock_get_config.return_value = mock_service
+        with patch.dict(os.environ, {}, clear=True), patch("app.core.auth_middleware.get_config_service") as mock_get_config:
+            mock_service = MagicMock()
+            mock_service.get_config.return_value = mock_config
+            mock_get_config.return_value = mock_service
 
-                client = TestClient(app)
-                response = client.get(
-                    "/api/protected",
-                    headers={"X-API-Key": "config-api-key"}
-                )
-                assert response.status_code == 200
+            client = TestClient(app)
+            response = client.get(
+                "/api/protected",
+                headers={"X-API-Key": "config-api-key"}
+            )
+            assert response.status_code == 200
 
     def test_configured_proxy_base_url_allows_emby_paths_on_non_default_port(self):
         """Configured proxy_base_url should mark matching Emby paths as public."""
@@ -520,16 +519,17 @@ class TestConfigFileIntegration:
         mock_config.security = mock_security
         mock_config.emby = mock_emby
 
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("app.core.auth_middleware.get_config_service") as mock_get_config:
-                mock_service = MagicMock()
-                mock_service.get_config.return_value = mock_config
-                mock_get_config.return_value = mock_service
+        with patch.dict(os.environ, {}, clear=True), patch(
+            "app.core.emby_proxy_request.get_config_service"
+        ) as mock_get_config:
+            mock_service = MagicMock()
+            mock_service.get_config.return_value = mock_config
+            mock_get_config.return_value = mock_service
 
-                client = TestClient(app)
-                response = client.get(
-                    "/emby/system/info/public",
-                    headers={"host": "proxy.example:19097"}
-                )
-                assert response.status_code == 200
-                assert response.json() == {"ok": True}
+            client = TestClient(app)
+            response = client.get(
+                "/emby/system/info/public",
+                headers={"host": "proxy.example:19097"}
+            )
+            assert response.status_code == 200
+            assert response.json() == {"ok": True}

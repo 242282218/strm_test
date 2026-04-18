@@ -10,100 +10,18 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Callable
-from urllib.parse import urlparse
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.auth_contract import resolve_auth_configuration
+from app.core.emby_proxy_request import is_dedicated_emby_proxy_request as _is_dedicated_emby_proxy_request
 from app.core.logging import get_logger
 from app.services.config_service import get_config_service
 
 
 logger = get_logger(__name__)
-
-# Dedicated Emby proxy default port
-_DEDICATED_PROXY_PORT = 18097
-
-
-def _parse_host_port(url_or_host: str, scheme_hint: str = "http") -> tuple[str, int]:
-    text = (url_or_host or "").strip()
-    if not text:
-        return "", 0
-    if "://" not in text:
-        text = f"{scheme_hint}://{text}"
-    parsed = urlparse(text)
-    host = (parsed.hostname or "").lower()
-    if not host:
-        return "", 0
-    if parsed.port:
-        return host, parsed.port
-    return host, 443 if parsed.scheme == "https" else 80
-
-
-def _request_host_port(request: Request) -> tuple[str, int]:
-    host_header = (request.headers.get("host") or "").strip()
-    if host_header:
-        host, port = _parse_host_port(host_header, request.url.scheme)
-        if host:
-            return host, port
-    if request.url.hostname:
-        host = request.url.hostname.lower()
-        if request.url.port:
-            return host, request.url.port
-        return host, 443 if request.url.scheme == "https" else 80
-    return "", 0
-
-
-def _is_emby_proxy_path(path: str) -> bool:
-    normalized = (path or "").strip() or "/"
-    if normalized == "/":
-        return True
-
-    lowered = normalized.lower()
-    allowed_prefixes = (
-        "/emby",
-        "/items",
-        "/users",
-        "/videos",
-        "/audio",
-        "/system",
-        "/sessions",
-        "/embywebsocket",
-    )
-    if lowered.startswith(allowed_prefixes):
-        return True
-
-    api_emby_prefixes = tuple(f"/api/emby{prefix}" for prefix in allowed_prefixes if prefix != "/emby")
-    return lowered.startswith(api_emby_prefixes)
-
-
-
-def _is_dedicated_emby_proxy_request(request: Request) -> bool:
-    """Detect whether this request arrives via the dedicated Emby proxy entrance."""
-    if not _is_emby_proxy_path(request.url.path):
-        return False
-
-    req_host, req_port = _request_host_port(request)
-    if not req_host:
-        return False
-
-    # Fallback: dedicated proxy default port.
-    if req_port == _DEDICATED_PROXY_PORT:
-        return True
-
-    try:
-        cfg = get_config_service().get_config()
-        emby_cfg = getattr(cfg, "emby", None)
-        configured_proxy = (getattr(emby_cfg, "proxy_base_url", "") or "").strip()
-        if not configured_proxy:
-            return False
-        proxy_host, proxy_port = _parse_host_port(configured_proxy, request.url.scheme)
-        return req_host == proxy_host and req_port == proxy_port
-    except Exception as exc:
-        logger.debug(f"Failed to resolve dedicated emby proxy config for auth check: {exc}")
-        return False
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
