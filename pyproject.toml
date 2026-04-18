@@ -1,0 +1,219 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quark-strm"
+version = "0.1.0"
+description = "Quark STRM Media Management System"
+requires-python = ">=3.11"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "DevOps Team" }
+]
+keywords = ["fastapi", "media", "strm", "quark"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+# =============================================================================
+# Ruff Configuration - Fast Python Linter
+# =============================================================================
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    "migrations",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "DTZ",    # flake8-datetimez
+    "T10",    # flake8-debugger
+    "EXE",    # flake8-executable
+    "ISC",    # flake8-implicit-str-concat
+    "ICN",    # flake8-import-conventions
+    "G",      # flake8-logging-format
+    "INP",    # flake8-no-pep420
+    "PIE",    # flake8-pie
+    "PYI",    # flake8-pyi
+    "PT",     # flake8-pytest-style
+    "Q",      # flake8-quotes
+    "RSE",    # flake8-raise
+    "RET",    # flake8-return
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib
+    "ERA",    # eradicate
+    "PL",     # Pylint
+    "TRY",    # tryceratops
+    "RUF",    # Ruff-specific rules
+]
+ignore = [
+    "E501",     # line too long (handled by formatter)
+    "B008",     # do not perform function calls in argument defaults
+    "B904",     # raise without from inside except
+    "PLR0913",  # too many arguments
+    "PLR2004",  # magic value comparison
+    "TRY003",   # long exception messages
+    "ARG001",   # unused function argument
+    "ARG002",   # unused method argument
+    "PT011",    # pytest.raises too broad
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "PLR2004", "S101"]
+"app/api/*" = ["ARG001"]
+"migrations/*" = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "core", "services", "models", "schemas"]
+force-single-line = false
+lines-after-imports = 2
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# =============================================================================
+# Coverage Configuration
+# =============================================================================
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "@abstractmethod",
+]
+precision = 2
+show_missing = true
+skip_covered = true
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# =============================================================================
+# MyPy Configuration - Static Type Checker
+# =============================================================================
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+check_untyped_defs = true
+strict_optional = true
+show_error_codes = true
+show_column_numbers = true
+show_error_context = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "uvicorn.*",
+    "aiohttp.*",
+    "httpx.*",
+    "apscheduler.*",
+    "cachetools.*",
+    "loguru.*",
+    "pydantic.*",
+    "pydantic_settings.*",
+    "sqlalchemy.*",
+    "aiosqlite.*",
+    "yaml.*",
+    "lxml.*",
+    "matplotlib.*",
+    "psutil.*",
+    "tenacity.*",
+    "orjson.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# =============================================================================
+# Bandit Configuration - Security Linter
+# =============================================================================
+[tool.bandit]
+exclude_dirs = ["tests", "migrations"]
+skips = ["B101", "B601"]
+
+# =============================================================================
+# Black Configuration (if used as alternative to Ruff format)
+# =============================================================================
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+    | \.mypy_cache
+    | \.pytest_cache
+    | \.ruff_cache
+    | \.venv
+    | __pycache__
+    | node_modules
+    | migrations
+)/
+'''
