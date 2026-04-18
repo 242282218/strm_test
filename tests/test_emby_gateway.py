@@ -355,6 +355,35 @@ def test_gateway_playbackinfo_when_emby_override_header_present_then_prefers_hea
     assert _FakeEmbyProxyService.last_init["emby_base_url"] == "https://alt.emby.example:8920"
 
 
+def test_gateway_playbackinfo_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
+        patch(
+            "app.api.emby_gateway.EmbyProxyService",
+            new=Mock(side_effect=AssertionError("should reject invalid Emby override before proxy service init")),
+        ),
+    ):
+        response = client.get(
+            "/Items/item123/PlaybackInfo",
+            params={
+                "UserId": "user123",
+                "MediaSourceId": "media123",
+                "api_key": "emby-api-key",
+            },
+            headers={
+                "host": "proxy.example:18097",
+                "X-Emby-Server-Url": "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
 def test_gateway_forward_when_emby_override_header_uses_blocked_hostname_then_returns_400():
     client = _build_client()
     app_config = _mock_config()
@@ -371,6 +400,29 @@ def test_gateway_forward_when_emby_override_header_uses_blocked_hostname_then_re
             headers={
                 "host": "proxy.example:18097",
                 "X-Emby-Server-Url": "http://localhost:8096",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
+def test_gateway_forward_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._get_forward_client",
+            new=AsyncMock(side_effect=AssertionError("should reject invalid Emby override before upstream request")),
+        ),
+    ):
+        response = client.get(
+            "/System/Info/Public",
+            headers={
+                "host": "proxy.example:18097",
+                "X-Emby-Server-Url": "not-a-url",
             },
         )
 
@@ -883,6 +935,28 @@ async def test_gateway_websocket_when_emby_override_header_uses_blocked_hostname
         patch(
             "app.api.emby_gateway.websockets.connect",
             new=AsyncMock(side_effect=AssertionError("should reject blocked Emby override before websocket dial")),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 0
+    assert ws.closed_codes == [1008]
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_emby_override_header_is_invalid_then_closes_before_accept():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        headers={"X-Emby-Server-Url": "not-a-url"},
+    )
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(side_effect=AssertionError("should reject invalid Emby override before websocket dial")),
         ),
     ):
         await emby_gateway_module.emby_gateway_websocket(ws)

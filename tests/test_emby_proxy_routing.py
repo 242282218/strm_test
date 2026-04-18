@@ -1499,6 +1499,29 @@ def test_proxy_emby_request_when_emby_override_header_uses_blocked_hostname_then
     assert response.json() == {"detail": "Invalid Emby server URL"}
 
 
+def test_proxy_emby_request_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_emby_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should reject invalid Emby override before forwarding")),
+        ),
+    ):
+        response = client.get(
+            "/api/emby/System/Info/Public",
+            headers={"X-Emby-Server-Url": "not-a-url"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
 def test_proxy_emby_request_when_emby_override_header_present_then_validates_override_url_once():
     client = _build_emby_client()
     app_config = SimpleNamespace(
@@ -1690,6 +1713,29 @@ def test_proxy_router_emby_request_when_emby_override_header_uses_blocked_hostna
         response = client.get(
             "/api/proxy/emby/System/Info/Public",
             headers={"X-Emby-Server-Url": "http://localhost:8096"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+
+
+def test_proxy_router_emby_request_when_emby_override_header_is_invalid_then_returns_400():
+    client = _build_proxy_client(raise_server_exceptions=False)
+    app_config = SimpleNamespace(
+        endpoints=[SimpleNamespace(emby_url="")],
+        emby=SimpleNamespace(url="http://emby.example:8096"),
+    )
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway._forward_to_emby",
+            new=AsyncMock(side_effect=AssertionError("should reject invalid Emby override before forwarding")),
+        ),
+    ):
+        response = client.get(
+            "/api/proxy/emby/System/Info/Public",
+            headers={"X-Emby-Server-Url": "not-a-url"},
         )
 
     assert response.status_code == 400
