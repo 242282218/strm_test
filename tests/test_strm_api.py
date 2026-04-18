@@ -429,6 +429,38 @@ class TestStrmScanBaseUrl:
                                 mock_strm_service.assert_called_once()
                                 assert mock_strm_service.call_args.kwargs["base_url"] == "https://public.proxy.example"
 
+    def test_scan_with_invalid_proxy_override_header_then_returns_400(self, app, mock_cookie):
+        """测试非法请求头代理覆盖地址返回固定 400"""
+        mock_config = MagicMock()
+        mock_emby = MagicMock()
+        mock_emby.proxy_base_url = "http://configured.proxy:18097"
+        mock_config.emby = mock_emby
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
+                with patch(
+                    "app.api.strm.StrmService",
+                    side_effect=AssertionError("should reject invalid proxy override before service init"),
+                ):
+                    with patch("app.api.strm.Database", side_effect=AssertionError("should not open database on invalid input")):
+                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
+                            with patch("app.api.strm.get_config_service") as mock_get_config_service:
+                                mock_get_config_service.return_value.get_config.return_value = mock_config
+                                client = TestClient(app, raise_server_exceptions=False)
+                                response = client.post(
+                                    "/api/strm/scan",
+                                    params={
+                                        "remote_path": "/videos",
+                                        "local_path": tmpdir,
+                                    },
+                                    headers={
+                                        "X-Proxy-Server-Url": "not-a-url",
+                                    },
+                                )
+
+                                assert response.status_code == 400
+                                assert response.json() == {"detail": "Invalid proxy server URL"}
+
     def test_scan_with_default_base_url(self, app, mock_cookie):
         """测试默认 Base URL"""
         mock_service = AsyncMock()

@@ -62,6 +62,8 @@ async def scan_directory(
             "failed": result.get("failed_count", 0),
             "total": result.get("total_files", 0),
         }
+    except HTTPException:
+        raise
     except InputValidationError:
         raise
     except Exception as e:
