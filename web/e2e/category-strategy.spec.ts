@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { navigateAndWait, collectApiErrors } from './helpers'
+import { navigateAndWait, collectApiErrors, waitForPageReady } from './helpers'
 
 test.describe('二级分类策略 /settings/category-strategy', () => {
   test('页面加载：标题、保存按钮可见', async ({ page }) => {
@@ -34,8 +34,10 @@ test.describe('二级分类策略 /settings/category-strategy', () => {
       const previewBtn = page.getByTestId('category-strategy-preview-button')
       if (await previewBtn.count() > 0) {
         await previewBtn.click()
-        // 等待预览结果（tag 或空状态）
-        await page.waitForTimeout(2000)
+        await waitForPageReady(page)
+        await expect(page.locator('.preview-result, [data-testid="category-strategy-preview"] .el-empty').first()).toBeVisible({
+          timeout: 10_000
+        })
       }
     }
   })

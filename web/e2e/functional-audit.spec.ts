@@ -3,29 +3,23 @@
  * 不是"看得见"就算通过，而是"点完后没报错、跳转正确、弹窗正常"才算通过。
  */
 import { test, expect, type Page } from '@playwright/test'
-import { getPageRoot, navigateAndWait } from './helpers'
+import { collectApiErrors, getPageRoot, navigateAndWait, waitForPageReady } from './helpers'
 
 // 收集页面上所有 API 错误和控制台错误
 function setupErrorCollectors(page: Page) {
-  const apiErrors: { url: string; status: number; body?: string }[] = []
-  const consoleErrors: string[] = []
+  const apiErrors = collectApiErrors(page)
   const uncaughtErrors: string[] = []
 
-  page.on('response', async (resp) => {
-    if (resp.url().includes('/api/') && resp.status() >= 400) {
-      let body = ''
-      try { body = await resp.text() } catch {}
-      apiErrors.push({ url: resp.url(), status: resp.status(), body })
-    }
-  })
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text())
-  })
   page.on('pageerror', (err) => {
     uncaughtErrors.push(err.message)
   })
 
-  return { apiErrors, consoleErrors, uncaughtErrors }
+  return { apiErrors, uncaughtErrors }
+}
+
+async function waitForAuditSettled(page: Page) {
+  await waitForPageReady(page)
+  await page.waitForLoadState('networkidle', { timeout: 2000 }).catch(() => {})
 }
 
 // ============================================================
@@ -74,7 +68,7 @@ test.describe('Dashboard 快捷操作按钮', () => {
     const btn = getPageRoot(page, '.dashboard').getByRole('button', { name: '刷新数据' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    await page.waitForTimeout(2000)
+    await waitForAuditSettled(page)
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
   })
@@ -88,8 +82,7 @@ test.describe('Dashboard 快捷操作按钮', () => {
   })
 
   test('清空缓存 按钮触发消息', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/dashboard')
     const btn = page.getByRole('button', { name: '清空缓存' })
     if (await btn.count() > 0) {
       await btn.click()
@@ -129,7 +122,7 @@ test.describe('Tasks 页面按钮功能', () => {
     const btn = getPageRoot(page, '.tasks-page').getByRole('button', { name: '刷新队列' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    await page.waitForTimeout(2000)
+    await waitForAuditSettled(page)
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
   })
@@ -144,7 +137,7 @@ test.describe('Tasks 页面按钮功能', () => {
       const option = page.locator('.el-select-dropdown__item').first()
       if (await option.count() > 0) {
         await option.click()
-        await page.waitForTimeout(1500)
+        await waitForAuditSettled(page)
       }
     }
     const serverErrors = apiErrors.filter(e => e.status >= 500)
@@ -156,7 +149,7 @@ test.describe('Tasks 页面按钮功能', () => {
     const resetBtn = getPageRoot(page, '.tasks-page').locator('.filter-panel').getByRole('button', { name: '重置' })
     if (await resetBtn.count() > 0) {
       await resetBtn.click()
-      await page.waitForTimeout(1000)
+      await waitForAuditSettled(page)
     }
   })
 })
@@ -184,20 +177,18 @@ test.describe('刮削目录按钮功能', () => {
 
   test('查询按钮触发请求', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/scrape-pathes')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/scrape-pathes')
     const queryBtn = page.getByRole('button', { name: '查询' })
     if (await queryBtn.count() > 0) {
       await queryBtn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
   })
 
   test('重置按钮清空筛选', async ({ page }) => {
-    await page.goto('/scrape-pathes')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/scrape-pathes')
     const resetBtn = page.getByRole('button', { name: '重置' })
     if (await resetBtn.count() > 0) {
       await resetBtn.click()
@@ -211,12 +202,11 @@ test.describe('刮削目录按钮功能', () => {
 test.describe('刮削记录按钮功能', () => {
   test('查询按钮不报 500', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/scrape-records')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/scrape-records')
     const queryBtn = page.getByRole('button', { name: '查询' })
     if (await queryBtn.count() > 0) {
       await queryBtn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
@@ -229,27 +219,25 @@ test.describe('刮削记录按钮功能', () => {
 test.describe('分类策略按钮功能', () => {
   test('保存策略按钮不报 500', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/settings/category-strategy')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/settings/category-strategy')
     const saveBtn = page.getByRole('button', { name: '保存策略' })
     await expect(saveBtn).toBeVisible({ timeout: 10_000 })
     await saveBtn.click()
-    await page.waitForTimeout(2000)
+    await waitForAuditSettled(page)
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
   })
 
   test('执行预览：输入文件名后点击预览', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/settings/category-strategy')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/settings/category-strategy')
     const input = page.getByPlaceholder('示例：Naruto.S01E01.1080p.mkv')
     if (await input.count() > 0) {
       await input.fill('Naruto.S01E01.1080p.mkv')
       const previewBtn = page.getByRole('button', { name: '执行预览' })
       if (await previewBtn.count() > 0) {
         await previewBtn.click()
-        await page.waitForTimeout(2000)
+        await waitForAuditSettled(page)
       }
     }
     expect(uncaughtErrors).toHaveLength(0)
@@ -262,38 +250,35 @@ test.describe('分类策略按钮功能', () => {
 test.describe('Emby 监控按钮功能', () => {
   test('刷新数据不报 500', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/emby-monitor')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/emby-monitor')
     const btn = page.getByRole('button', { name: '刷新数据' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     // 按钮可能在初始加载中处于 loading 状态，等它变为可用
     await expect(btn).toBeEnabled({ timeout: 20_000 })
     await btn.click()
-    await page.waitForTimeout(2000)
+    await waitForAuditSettled(page)
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
   })
 
   test('触发刷新按钮可点击', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/emby-monitor')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/emby-monitor')
     const btn = page.getByRole('button', { name: '触发刷新' })
     if (await btn.count() > 0) {
       await btn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
 
   test('触发同步按钮可点击', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/emby-monitor')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/emby-monitor')
     const btn = page.getByRole('button', { name: '触发同步' })
     if (await btn.count() > 0) {
       await btn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
@@ -305,24 +290,22 @@ test.describe('Emby 监控按钮功能', () => {
 test.describe('系统配置按钮功能', () => {
   test('保存按钮触发请求', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/config')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/config')
     const saveBtn = page.getByRole('button', { name: '保存' }).first()
     if (await saveBtn.count() > 0) {
       await saveBtn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
 
   test('重置按钮不崩溃', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/config')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/config')
     const resetBtn = page.getByRole('button', { name: '重置' })
     if (await resetBtn.count() > 0) {
       await resetBtn.click()
-      await page.waitForTimeout(1000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
@@ -334,12 +317,12 @@ test.describe('系统配置按钮功能', () => {
 test.describe('搜索页面功能', () => {
   test('输入关键词后搜索不报错', async ({ page }) => {
     const { apiErrors, uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/search')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/search')
     const input = page.locator('input[type="text"]').first()
     await input.fill('测试')
     await input.press('Enter')
-    await page.waitForTimeout(3000)
+    await waitForAuditSettled(page)
+    await expect(page.locator('.results-section, .search-empty-shell').first()).toBeVisible({ timeout: 10_000 })
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
     expect(uncaughtErrors).toHaveLength(0)
@@ -352,41 +335,35 @@ test.describe('搜索页面功能', () => {
 test.describe('智能重命名按钮功能', () => {
   test('本地/云端模式切换不崩溃', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/smart-rename')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/smart-rename')
     const radioGroup = page.locator('.el-radio-group').first()
     if (await radioGroup.count() > 0) {
       const buttons = radioGroup.locator('.el-radio-button')
       if (await buttons.count() > 1) {
         await buttons.last().click()
-        await page.waitForTimeout(500)
+        await waitForAuditSettled(page)
         await buttons.first().click()
-        await page.waitForTimeout(500)
+        await waitForAuditSettled(page)
       }
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
 
-  test('重置按钮不崩溃', async ({ page }) => {
-    const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/smart-rename')
-    await page.waitForLoadState('domcontentloaded')
+  test('重置按钮在无预览时保持禁用', async ({ page }) => {
+    await navigateAndWait(page, '/smart-rename')
     const resetBtn = page.getByRole('button', { name: '重置' })
     if (await resetBtn.count() > 0) {
-      await resetBtn.click()
-      await page.waitForTimeout(1000)
+      await expect(resetBtn).toBeDisabled()
     }
-    expect(uncaughtErrors).toHaveLength(0)
   })
 
   test('AI 连通性测试按钮', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/smart-rename')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/smart-rename')
     const btn = page.getByRole('button', { name: 'AI 连通性测试' })
     if (await btn.count() > 0) {
       await btn.click()
-      await page.waitForTimeout(3000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
@@ -398,30 +375,27 @@ test.describe('智能重命名按钮功能', () => {
 test.describe('代理服务按钮功能', () => {
   test('清除缓存按钮触发请求', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/proxy-service')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/proxy-service')
     const btn = page.getByRole('button', { name: '清除缓存' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    await page.waitForTimeout(2000)
+    await waitForAuditSettled(page)
     expect(uncaughtErrors).toHaveLength(0)
   })
 
   test('添加文件夹/文件按钮可点击', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/proxy-service')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/proxy-service')
     const btn = page.getByRole('button', { name: '添加文件夹/文件' })
     if (await btn.count() > 0) {
       await btn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
 
   test('生成 STRM 按钮（disabled 状态验证）', async ({ page }) => {
-    await page.goto('/proxy-service')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/proxy-service')
     const btn = page.getByRole('button', { name: '生成 STRM' })
     if (await btn.count() > 0) {
       // 未选路径时按钮应 disabled
@@ -436,12 +410,11 @@ test.describe('代理服务按钮功能', () => {
 test.describe('WebDAV 按钮功能', () => {
   test('保存配置按钮触发请求', async ({ page }) => {
     const { apiErrors, uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/webdav')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/webdav')
     const btn = page.getByRole('button', { name: '保存配置' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    await page.waitForTimeout(2000)
+    await waitForAuditSettled(page)
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
     expect(uncaughtErrors).toHaveLength(0)
@@ -449,12 +422,11 @@ test.describe('WebDAV 按钮功能', () => {
 
   test('刷新按钮不崩溃', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/webdav')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/webdav')
     const btn = page.getByRole('button', { name: '刷新' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
-    await page.waitForTimeout(1000)
+    await waitForAuditSettled(page)
     expect(uncaughtErrors).toHaveLength(0)
   })
 })
@@ -465,24 +437,22 @@ test.describe('WebDAV 按钮功能', () => {
 test.describe('通知配置按钮功能', () => {
   test('保存配置按钮触发请求', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/notifications')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/notifications')
     const saveBtn = page.getByRole('button', { name: /保存/ }).first()
     if (await saveBtn.count() > 0) {
       await saveBtn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
 
   test('发送测试按钮触发请求', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/notifications')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/notifications')
     const testBtn = page.getByRole('button', { name: '发送测试' })
     if (await testBtn.count() > 0) {
       await testBtn.click()
-      await page.waitForTimeout(3000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
@@ -494,12 +464,11 @@ test.describe('通知配置按钮功能', () => {
 test.describe('通知历史按钮功能', () => {
   test('查询按钮不报 500', async ({ page }) => {
     const { apiErrors } = setupErrorCollectors(page)
-    await page.goto('/notifications/history')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/notifications/history')
     const queryBtn = page.getByRole('button', { name: '查询' })
     if (await queryBtn.count() > 0) {
       await queryBtn.click()
-      await page.waitForTimeout(2000)
+      await waitForAuditSettled(page)
     }
     const serverErrors = apiErrors.filter(e => e.status >= 500)
     expect(serverErrors).toHaveLength(0)
@@ -507,12 +476,11 @@ test.describe('通知历史按钮功能', () => {
 
   test('重置按钮不崩溃', async ({ page }) => {
     const { uncaughtErrors } = setupErrorCollectors(page)
-    await page.goto('/notifications/history')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/notifications/history')
     const resetBtn = page.getByRole('button', { name: '重置' })
     if (await resetBtn.count() > 0) {
       await resetBtn.click()
-      await page.waitForTimeout(1000)
+      await waitForAuditSettled(page)
     }
     expect(uncaughtErrors).toHaveLength(0)
   })
@@ -530,8 +498,7 @@ test.describe('侧边栏导航功能', () => {
 
   for (const { name, url } of navItems) {
     test(`菜单项 "${name}" 点击跳转正确`, async ({ page }) => {
-      await page.goto('/dashboard')
-      await page.waitForLoadState('domcontentloaded')
+      await navigateAndWait(page, '/dashboard')
       const menuItem = page.getByRole('menuitem', { name })
       await menuItem.click()
       await page.waitForURL(url, { timeout: 5000 })
@@ -544,8 +511,7 @@ test.describe('侧边栏导航功能', () => {
 // ============================================================
 test.describe('用户下拉菜单功能', () => {
   test('系统设置跳转到 /config', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/dashboard')
     // 点击用户头像区域
     const userTrigger = page.locator('.user-info')
     if (await userTrigger.count() > 0) {
@@ -558,8 +524,7 @@ test.describe('用户下拉菜单功能', () => {
   })
 
   test('退出登录弹出确认框', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/dashboard')
     const userTrigger = page.locator('.user-info')
     if (await userTrigger.count() > 0) {
       await userTrigger.click()
@@ -579,8 +544,7 @@ test.describe('用户下拉菜单功能', () => {
 // ============================================================
 test.describe('404 页面按钮功能', () => {
   test('返回首页按钮跳转到 /dashboard', async ({ page }) => {
-    await page.goto('/nonexistent-route-xyz')
-    await page.waitForLoadState('domcontentloaded')
+    await navigateAndWait(page, '/nonexistent-route-xyz')
     const btn = page.getByRole('button', { name: '返回首页' })
     await expect(btn).toBeVisible({ timeout: 10_000 })
     await btn.click()
