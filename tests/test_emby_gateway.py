@@ -1712,6 +1712,53 @@ async def test_forward_to_emby_when_proxy_override_header_present_then_rewrites_
 
 
 @pytest.mark.asyncio
+async def test_forward_to_emby_when_emby_override_header_uses_uppercase_scheme_then_still_rewrites_location_to_proxy_base_url():
+    app_config = _mock_config()
+    fake_upstream = httpx.Response(
+        status_code=302,
+        headers={
+            "content-type": "text/html",
+            "location": "https://alt.emby.example:8920/base/web/index.html",
+        },
+        content=b"",
+    )
+    fake_client = SimpleNamespace(
+        request=AsyncMock(return_value=fake_upstream),
+        is_closed=False,
+    )
+    fake_pool = SimpleNamespace(get_client=AsyncMock(return_value=fake_client))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/web/index.html",
+        "raw_path": b"/web/index.html",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"proxy.internal:18097"),
+            (b"x-emby-server-url", b"HTTPS://alt.emby.example:8920/base"),
+            (b"x-proxy-server-url", b"https://public.proxy.example"),
+        ],
+        "client": ("127.0.0.1", 12345),
+        "server": ("proxy.internal", 18097),
+    }
+
+    with (
+        patch("app.api.emby_gateway.get_http_pool_sync", new=Mock(return_value=fake_pool)),
+        patch.object(emby_gateway_module, "_forward_pool", None),
+        patch.object(emby_gateway_module, "_forward_client", None),
+    ):
+        request = emby_gateway_module.Request(scope)
+        response = await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://public.proxy.example/web/index.html"
+
+
+@pytest.mark.asyncio
 async def test_forward_to_emby_when_emby_override_header_present_then_targets_override_upstream_url():
     app_config = _mock_config()
     fake_upstream = httpx.Response(

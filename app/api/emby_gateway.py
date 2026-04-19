@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import httpx
 import websockets
@@ -148,6 +148,31 @@ def _rewrite_location(location: str, emby_base_url: str, proxy_base_url: str) ->
         return location
 
     normalized_emby = emby_base_url.rstrip("/")
+    parsed_location = urlsplit(location)
+    parsed_emby = urlsplit(normalized_emby)
+    emby_path = parsed_emby.path.rstrip("/")
+    location_matches_emby_origin = (
+        bool(parsed_location.scheme)
+        and bool(parsed_location.hostname)
+        and parsed_location.scheme.lower() == parsed_emby.scheme.lower()
+        and (parsed_location.hostname or "").lower() == (parsed_emby.hostname or "").lower()
+        and parsed_location.port == parsed_emby.port
+    )
+    if location_matches_emby_origin:
+        location_path = parsed_location.path or ""
+        if not emby_path or location_path == emby_path or location_path.startswith(f"{emby_path}/"):
+            rewritten_path = location_path[len(emby_path):] if emby_path else location_path
+            parsed_proxy = urlsplit(proxy_base_url.rstrip("/"))
+            return urlunsplit(
+                (
+                    parsed_proxy.scheme,
+                    parsed_proxy.netloc,
+                    f"{parsed_proxy.path.rstrip('/')}{rewritten_path}",
+                    parsed_location.query,
+                    parsed_location.fragment,
+                )
+            )
+
     if location.startswith(normalized_emby):
         return f"{proxy_base_url}{location[len(normalized_emby):]}"
     return location
