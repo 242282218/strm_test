@@ -1321,6 +1321,33 @@ async def test_gateway_websocket_when_client_disconnects_with_close_code_then_pr
 
 
 @pytest.mark.asyncio
+async def test_gateway_websocket_when_client_sends_text_frame_then_proxies_text_upstream():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        incoming_messages=[
+            {"type": "websocket.receive", "bytes": None, "text": "hello upstream"},
+            {"type": "websocket.disconnect", "code": 1000},
+        ],
+    )
+    upstream_ws = _FakeUpstreamWebSocket(block_reads=True)
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert upstream_ws.sent_messages == ["hello upstream"]
+
+
+@pytest.mark.asyncio
 async def test_gateway_websocket_when_client_sends_binary_frame_then_proxies_bytes_upstream():
     ws = _FakeWebSocketClient(
         "proxy.example:18097",
@@ -1345,6 +1372,48 @@ async def test_gateway_websocket_when_client_sends_binary_frame_then_proxies_byt
     assert ws.accepted == 1
     assert ws.closed_codes == [None]
     assert upstream_ws.sent_messages == [b"\x01\x02"]
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_upstream_sends_text_frame_then_proxies_text_to_client():
+    ws = _FakeWebSocketClient("proxy.example:18097", block_reads=True)
+    upstream_ws = _FakeUpstreamWebSocket(incoming_messages=["hello client"])
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert ws.sent_text_messages == ["hello client"]
+    assert ws.sent_bytes_messages == []
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_upstream_sends_binary_frame_then_proxies_bytes_to_client():
+    ws = _FakeWebSocketClient("proxy.example:18097", block_reads=True)
+    upstream_ws = _FakeUpstreamWebSocket(incoming_messages=[b"\x03\x04"])
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert ws.sent_text_messages == []
+    assert ws.sent_bytes_messages == [b"\x03\x04"]
 
 
 @pytest.mark.asyncio
