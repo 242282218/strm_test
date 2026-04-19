@@ -480,6 +480,37 @@ async def test_playback_info_hook_when_non_web_client_and_remote_source_then_rew
 
 
 @pytest.mark.asyncio
+async def test_playback_info_hook_when_remote_source_uses_uppercase_scheme_then_still_rewrites_to_proxy_redirect():
+    emby_client = AsyncMock()
+    emby_client.get_playback_info = AsyncMock(
+        return_value={
+            "MediaSources": [
+                {
+                    "Id": "media_source_1",
+                    "Path": "HTTPS://example.com/api/proxy/stream/file123",
+                    "IsRemote": True,
+                    "DirectStreamUrl": "/Videos/77/stream.mkv",
+                    "SupportsTranscoding": True,
+                    "TranscodingUrl": "/Videos/77/master.m3u8",
+                }
+            ]
+        }
+    )
+
+    hook = PlaybackInfoHook(
+        emby_client=emby_client,
+        quark_service=AsyncMock(),
+        proxy_base_url="http://proxy.example:18097",
+    )
+
+    result = await hook.hook_playback_info(item_id="item1", user_id="user1", is_web_client=False)
+
+    media_source = result["MediaSources"][0]
+    assert media_source["DirectStreamUrl"] == "http://proxy.example:18097/api/proxy/redirect/file123?Static=true"
+    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+
+
+@pytest.mark.asyncio
 async def test_playback_info_hook_when_remote_transcoding_query_present_then_rewrites_to_local_master_playlist():
     emby_client = AsyncMock()
     emby_client.get_playback_info = AsyncMock(

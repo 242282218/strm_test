@@ -282,12 +282,13 @@ class PlaybackInfoHook:
         Returns:
             是否是本地媒体
         """
+        normalized_path = path.lower()
         # 检查是否是STRM文件
-        if path.lower().endswith(".strm"):
+        if normalized_path.endswith(".strm"):
             return False
 
         # 检查是否是http/https协议
-        if path.startswith("http://") or path.startswith("https://"):
+        if normalized_path.startswith("http://") or normalized_path.startswith("https://"):
             return False
 
         # 其他情况认为是本地媒体
