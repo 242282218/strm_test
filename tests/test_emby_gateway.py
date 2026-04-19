@@ -166,6 +166,7 @@ class _FakeUpstreamWebSocket:
         *,
         incoming_messages: list[str | bytes] | None = None,
         close_exception: BaseException | None = None,
+        send_exception: BaseException | None = None,
         block_reads: bool = False,
         subprotocol: str | None = None,
     ) -> None:
@@ -178,9 +179,18 @@ class _FakeUpstreamWebSocket:
         self.subprotocol = subprotocol
         self._incoming_messages = list(incoming_messages or [])
         self._close_exception = close_exception
+        self._send_exception = send_exception
         self._block_reads = block_reads
 
     async def send(self, message: str | bytes) -> None:
+        if self._send_exception is not None:
+            for close_frame in (getattr(self._send_exception, "rcvd", None), getattr(self._send_exception, "sent", None)):
+                if close_frame is not None and getattr(close_frame, "code", None) is not None:
+                    self.close_code = int(close_frame.code)
+                    self.close_reason = getattr(close_frame, "reason", "") or None
+                    break
+            self.closed = True
+            raise self._send_exception
         self.sent_messages.append(message)
 
     def __aiter__(self):
@@ -1318,6 +1328,40 @@ async def test_gateway_websocket_when_client_disconnects_with_close_code_then_pr
     assert ws.accepted == 1
     assert upstream_ws.closed is True
     assert upstream_ws.closed_codes == [1001]
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_upstream_closes_during_client_send_then_propagates_close_code_to_client():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        incoming_messages=[
+            {"type": "websocket.receive", "bytes": None, "text": "hello upstream"},
+        ],
+    )
+    app_config = _mock_config()
+    upstream_ws = _FakeUpstreamWebSocket(
+        send_exception=ConnectionClosedOK(
+            Close(code=1001, reason="going away"),
+            None,
+            None,
+        ),
+        block_reads=True,
+    )
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [1001]
+    assert upstream_ws.sent_messages == []
+    assert upstream_ws.closed is True
 
 
 @pytest.mark.asyncio

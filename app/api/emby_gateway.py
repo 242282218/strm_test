@@ -475,7 +475,7 @@ async def emby_gateway_websocket(ws: WebSocket):
         )
         await ws.accept(subprotocol=getattr(upstream_ws, "subprotocol", None))
 
-        async def _client_to_upstream():
+        async def _client_to_upstream() -> tuple[int | None, int | None]:
             try:
                 while True:
                     data = await _receive_ws_client_message(ws)
@@ -483,12 +483,14 @@ async def emby_gateway_websocket(ws: WebSocket):
             except WebSocketDisconnect as exc:
                 code = getattr(exc, "code", None)
                 if code is None:
-                    return None
-                return int(code)
+                    return None, None
+                return int(code), None
+            except websockets.exceptions.ConnectionClosed as exc:
+                return None, _resolve_upstream_ws_close_code(exc, upstream_ws)
 
-            return None
+            return None, None
 
-        async def _upstream_to_client():
+        async def _upstream_to_client() -> tuple[int | None, int | None]:
             try:
                 async for message in upstream_ws:
                     if isinstance(message, str):
@@ -496,9 +498,9 @@ async def emby_gateway_websocket(ws: WebSocket):
                     else:
                         await ws.send_bytes(message)
             except websockets.exceptions.ConnectionClosed as exc:
-                return _resolve_upstream_ws_close_code(exc, upstream_ws)
+                return None, _resolve_upstream_ws_close_code(exc, upstream_ws)
 
-            return _resolve_upstream_ws_close_code(None, upstream_ws)
+            return None, _resolve_upstream_ws_close_code(None, upstream_ws)
 
         # Run both relay directions concurrently; when either ends, cancel the other.
         client_to_upstream_task = asyncio.create_task(_client_to_upstream())
@@ -510,11 +512,11 @@ async def emby_gateway_websocket(ws: WebSocket):
         for task in done:
             if task.cancelled():
                 continue
-            result = task.result()
-            if task is client_to_upstream_task:
-                upstream_close_code = result
-            elif result is not None:
-                client_close_code = result
+            result_upstream_close_code, result_client_close_code = task.result()
+            if result_upstream_close_code is not None:
+                upstream_close_code = result_upstream_close_code
+            if result_client_close_code is not None:
+                client_close_code = result_client_close_code
         for task in pending:
             task.cancel()
 
