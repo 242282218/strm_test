@@ -181,6 +181,103 @@ def test_gateway_when_proxy_base_url_empty_and_port_18097_then_enables_gateway()
     assert "emby-home" in response.text
 
 
+@pytest.mark.parametrize(
+    ("request_path", "forward_path"),
+    [
+        ("/", ""),
+        ("/System/Info/Public", "System/Info/Public"),
+    ],
+)
+def test_gateway_when_override_headers_present_then_passes_resolved_urls_to_forwarder(
+    request_path: str,
+    forward_path: str,
+):
+    client = _build_client()
+    app_config = _mock_config()
+    mock_forward = AsyncMock(return_value=Response(content="emby-home", media_type="text/html"))
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway._forward_to_emby", new=mock_forward),
+    ):
+        response = client.get(
+            request_path,
+            headers={
+                "host": "proxy.example:18097",
+                "X-Emby-Server-Url": "https://alt.emby.example:8920/base",
+                "X-Proxy-Server-Url": "https://public.proxy.example/base",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "emby-home" in response.text
+    assert mock_forward.await_args.args[2] == forward_path
+    assert mock_forward.await_args.kwargs == {
+        "emby_base_url": "https://alt.emby.example:8920/base",
+        "proxy_base_url": "https://public.proxy.example/base",
+    }
+
+
+@pytest.mark.parametrize(
+    ("request_path", "header_name", "detail"),
+    [
+        ("/", "X-Emby-Server-Url", "Invalid Emby server URL"),
+        ("/", "X-Proxy-Server-Url", "Invalid proxy server URL"),
+        ("/System/Info/Public", "X-Emby-Server-Url", "Invalid Emby server URL"),
+        ("/System/Info/Public", "X-Proxy-Server-Url", "Invalid proxy server URL"),
+    ],
+)
+def test_gateway_when_override_header_is_invalid_then_returns_400_before_forward_stub(
+    request_path: str,
+    header_name: str,
+    detail: str,
+):
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+    mock_forward = AsyncMock(return_value=Response(content="unexpected-forward", media_type="text/plain"))
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway._forward_to_emby", new=mock_forward),
+    ):
+        response = client.get(
+            request_path,
+            headers={
+                "host": "proxy.example:18097",
+                header_name: "not-a-url",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": detail}
+    mock_forward.assert_not_awaited()
+
+
+@pytest.mark.parametrize("request_path", ["/", "/System/Info/Public"])
+def test_gateway_when_emby_override_header_uses_blocked_hostname_then_returns_400_before_forward_stub(
+    request_path: str,
+):
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+    mock_forward = AsyncMock(return_value=Response(content="unexpected-forward", media_type="text/plain"))
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway._forward_to_emby", new=mock_forward),
+    ):
+        response = client.get(
+            request_path,
+            headers={
+                "host": "proxy.example:18097",
+                "X-Emby-Server-Url": "http://localhost:8096",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Emby server URL"}
+    mock_forward.assert_not_awaited()
+
+
 def test_gateway_playbackinfo_when_dedicated_proxy_host_then_uses_hook_proxy():
     client = _build_client()
     app_config = _mock_config()

@@ -341,7 +341,15 @@ async def _handle_gateway_request(request: Request, path: str) -> Response:
             item_id = validate_identifier(master_match.group("item_id"), "item_id")
             return await _handle_emby_style_master_playlist(request, item_id)
 
-    return await _forward_to_emby(request, app_config, path)
+    emby_base_url = _resolve_emby_base_url(request, app_config)
+    proxy_base_url = _resolve_requested_proxy_base_url(request, app_config)
+    return await _forward_to_emby(
+        request,
+        app_config,
+        path,
+        emby_base_url=emby_base_url,
+        proxy_base_url=proxy_base_url,
+    )
 
 
 # ------------------------------------------------------------------
