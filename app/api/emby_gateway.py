@@ -397,6 +397,17 @@ def _build_ws_extra_headers(client_ws: WebSocket) -> list[tuple[str, str]]:
     return extra
 
 
+def _extract_ws_requested_subprotocols(client_ws: WebSocket) -> list[str]:
+    """Keep client-requested subprotocol order for the upstream handshake."""
+    values: list[str] = []
+    for key, value in client_ws.headers.items():
+        if key.lower() != "sec-websocket-protocol":
+            continue
+        values.extend(part.strip() for part in value.split(","))
+
+    return [value for value in values if value]
+
+
 def _resolve_upstream_ws_close_code(
     exc: websockets.exceptions.ConnectionClosed | None,
     upstream_ws,
@@ -443,20 +454,26 @@ async def emby_gateway_websocket(ws: WebSocket):
         await ws.close(code=1008)
         return
     extra_headers = _build_ws_extra_headers(ws)
-
-    await ws.accept()
+    requested_subprotocols = _extract_ws_requested_subprotocols(ws)
 
     upstream_ws = None
     upstream_close_code: int | None = None
     client_close_code: int | None = None
     try:
+        connect_kwargs = {
+            "additional_headers": extra_headers,
+            "ping_interval": 20,
+            "ping_timeout": 20,
+            "close_timeout": 5,
+        }
+        if requested_subprotocols:
+            connect_kwargs["subprotocols"] = requested_subprotocols
+
         upstream_ws = await websockets.connect(
             target_url,
-            additional_headers=extra_headers,
-            ping_interval=20,
-            ping_timeout=20,
-            close_timeout=5,
+            **connect_kwargs,
         )
+        await ws.accept(subprotocol=getattr(upstream_ws, "subprotocol", None))
 
         async def _client_to_upstream():
             try:

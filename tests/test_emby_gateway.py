@@ -121,14 +121,16 @@ class _FakeWebSocketClient:
             query=query,
         )
         self.accepted = 0
+        self.accepted_subprotocols: list[str | None] = []
         self.closed_codes: list[int | None] = []
         self.sent_text_messages: list[str] = []
         self.sent_bytes_messages: list[bytes] = []
         self._incoming_messages = list(incoming_messages or [{"type": "websocket.disconnect", "code": 1000}])
         self._block_reads = block_reads
 
-    async def accept(self) -> None:
+    async def accept(self, subprotocol: str | None = None) -> None:
         self.accepted += 1
+        self.accepted_subprotocols.append(subprotocol)
 
     async def close(self, code: int | None = None) -> None:
         self.closed_codes.append(code)
@@ -165,6 +167,7 @@ class _FakeUpstreamWebSocket:
         incoming_messages: list[str | bytes] | None = None,
         close_exception: BaseException | None = None,
         block_reads: bool = False,
+        subprotocol: str | None = None,
     ) -> None:
         self.closed = False
         self.closed_codes: list[int | None] = []
@@ -172,6 +175,7 @@ class _FakeUpstreamWebSocket:
         self.sent_messages: list[str | bytes] = []
         self.close_code: int | None = None
         self.close_reason: str | None = None
+        self.subprotocol = subprotocol
         self._incoming_messages = list(incoming_messages or [])
         self._close_exception = close_exception
         self._block_reads = block_reads
@@ -1146,6 +1150,29 @@ async def test_gateway_websocket_when_client_headers_present_then_forwards_filte
     assert extra_headers["X-Request-Id"] == "req-1"
     assert "Connection" not in extra_headers
     assert "Sec-WebSocket-Protocol" not in extra_headers
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_subprotocols_requested_then_forwards_them_upstream_and_accepts_selected_protocol():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        headers={"Sec-WebSocket-Protocol": "chat, json"},
+    )
+    upstream_ws = _FakeUpstreamWebSocket(subprotocol="json")
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ) as mock_connect,
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert mock_connect.await_args.kwargs["subprotocols"] == ["chat", "json"]
+    assert ws.accepted_subprotocols == ["json"]
 
 
 @pytest.mark.asyncio
