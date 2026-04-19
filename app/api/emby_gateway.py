@@ -388,6 +388,22 @@ def _build_ws_extra_headers(client_ws: WebSocket) -> list[tuple[str, str]]:
     return extra
 
 
+async def _receive_ws_client_message(client_ws: WebSocket) -> str | bytes:
+    message = await client_ws.receive()
+    if message["type"] == "websocket.disconnect":
+        raise WebSocketDisconnect(code=int(message.get("code", 1000)))
+
+    text = message.get("text")
+    if text is not None:
+        return str(text)
+
+    payload = message.get("bytes")
+    if payload is not None:
+        return bytes(payload)
+
+    return ""
+
+
 @router.websocket("/embywebsocket")
 async def emby_gateway_websocket(ws: WebSocket):
     """Transparently proxy Emby WebSocket connections to upstream server."""
@@ -419,7 +435,7 @@ async def emby_gateway_websocket(ws: WebSocket):
         async def _client_to_upstream():
             try:
                 while True:
-                    data = await ws.receive_text()
+                    data = await _receive_ws_client_message(ws)
                     await upstream_ws.send(data)
             except WebSocketDisconnect:
                 pass

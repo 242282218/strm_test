@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -84,7 +85,13 @@ def _mock_config(proxy_base_url: str = "http://proxy.example:18097"):
 
 
 class _FakeWebSocketClient:
-    def __init__(self, host: str, query: str = "", headers: dict[str, str] | None = None):
+    def __init__(
+        self,
+        host: str,
+        query: str = "",
+        headers: dict[str, str] | None = None,
+        incoming_messages: list[dict[str, object]] | None = None,
+    ):
         hostname, _, raw_port = host.partition(":")
         self.headers = {
             "host": host,
@@ -101,6 +108,7 @@ class _FakeWebSocketClient:
         self.closed_codes: list[int | None] = []
         self.sent_text_messages: list[str] = []
         self.sent_bytes_messages: list[bytes] = []
+        self._incoming_messages = list(incoming_messages or [{"type": "websocket.disconnect", "code": 1000}])
 
     async def accept(self) -> None:
         self.accepted += 1
@@ -108,9 +116,18 @@ class _FakeWebSocketClient:
     async def close(self, code: int | None = None) -> None:
         self.closed_codes.append(code)
 
-    @staticmethod
-    async def receive_text() -> str:
-        raise WebSocketDisconnect(code=1000)
+    async def receive(self) -> dict[str, object]:
+        if self._incoming_messages:
+            return self._incoming_messages.pop(0)
+        return {"type": "websocket.disconnect", "code": 1000}
+
+    async def receive_text(self) -> str:
+        message = await self.receive()
+        if message["type"] == "websocket.disconnect":
+            raise WebSocketDisconnect(code=int(message.get("code", 1000)))
+        if message.get("text") is None:
+            raise AssertionError("binary websocket frames should not use receive_text")
+        return str(message["text"])
 
     async def send_text(self, message: str) -> None:
         self.sent_text_messages.append(message)
@@ -120,17 +137,23 @@ class _FakeWebSocketClient:
 
 
 class _FakeUpstreamWebSocket:
-    def __init__(self) -> None:
+    def __init__(self, *, block_reads: bool = False) -> None:
         self.closed = False
-        self.sent_messages: list[str] = []
+        self.sent_messages: list[str | bytes] = []
+        self._block_reads = block_reads
 
-    async def send(self, message: str) -> None:
+    async def send(self, message: str | bytes) -> None:
         self.sent_messages.append(message)
 
     def __aiter__(self):
         return self
 
     async def __anext__(self) -> str:
+        if self._block_reads:
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                raise StopAsyncIteration from None
         raise StopAsyncIteration
 
     async def close(self) -> None:
@@ -1111,6 +1134,33 @@ async def test_gateway_websocket_when_proxy_override_header_is_invalid_then_clos
 
     assert ws.accepted == 0
     assert ws.closed_codes == [1008]
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_client_sends_binary_frame_then_proxies_bytes_upstream():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        incoming_messages=[
+            {"type": "websocket.receive", "bytes": b"\x01\x02", "text": None},
+            {"type": "websocket.disconnect", "code": 1000},
+        ],
+    )
+    upstream_ws = _FakeUpstreamWebSocket(block_reads=True)
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert upstream_ws.sent_messages == [b"\x01\x02"]
 
 
 @pytest.mark.asyncio
