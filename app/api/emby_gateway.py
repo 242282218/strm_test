@@ -29,6 +29,7 @@ from app.api.emby import (
     _resolve_requested_client_name,
     _resolve_requested_device_name,
     _resolve_requested_proxy_base_url,
+    _normalize_proxy_base_url_candidate,
     get_master_playlist,
     stream_video,
 )
@@ -397,6 +398,7 @@ async def emby_gateway_websocket(ws: WebSocket):
 
     try:
         target_url = _build_ws_target_url(app_config, ws)
+        _normalize_proxy_base_url_candidate(ws.headers.get("X-Proxy-Server-Url"))
     except HTTPException:
         await ws.close(code=1008)
         return

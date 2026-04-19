@@ -166,6 +166,17 @@ def _resolve_requested_emby_api_key(request: Request, app_config, auth_context: 
     return ""
 
 
+def _normalize_proxy_base_url_candidate(candidate: str | None) -> str:
+    text = str(candidate or "").strip().rstrip("/")
+    if not text:
+        return ""
+    try:
+        validate_http_url(text, "proxy_base_url")
+    except InputValidationError as exc:
+        raise HTTPException(status_code=400, detail="Invalid proxy server URL") from exc
+    return text
+
+
 def _resolve_requested_proxy_base_url(request: Request, app_config) -> str:
     candidates = [
         request.headers.get("X-Proxy-Server-Url"),
@@ -177,21 +188,13 @@ def _resolve_requested_proxy_base_url(request: Request, app_config) -> str:
     candidates.append(str(request.base_url).rstrip("/"))
 
     for candidate in candidates:
-        text = str(candidate or "").strip().rstrip("/")
+        text = _normalize_proxy_base_url_candidate(candidate)
         if not text:
             continue
-        try:
-            validate_http_url(text, "proxy_base_url")
-        except InputValidationError as exc:
-            raise HTTPException(status_code=400, detail="Invalid proxy server URL") from exc
         return text
 
     fallback_proxy_base_url = "http://localhost:8000"
-    try:
-        validate_http_url(fallback_proxy_base_url, "proxy_base_url")
-    except InputValidationError as exc:
-        raise HTTPException(status_code=400, detail="Invalid proxy server URL") from exc
-    return fallback_proxy_base_url
+    return _normalize_proxy_base_url_candidate(fallback_proxy_base_url)
 
 
 async def _resolve_media_source_file_id_for_request(

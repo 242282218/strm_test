@@ -1092,6 +1092,28 @@ async def test_gateway_websocket_when_emby_override_header_is_invalid_then_close
 
 
 @pytest.mark.asyncio
+async def test_gateway_websocket_when_proxy_override_header_is_invalid_then_closes_before_accept():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        headers={"X-Proxy-Server-Url": "not-a-url"},
+    )
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(side_effect=AssertionError("should reject invalid proxy override before websocket dial")),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 0
+    assert ws.closed_codes == [1008]
+
+
+@pytest.mark.asyncio
 async def test_gateway_websocket_when_proxy_base_url_empty_and_port_18097_then_accepts_and_proxies_upstream():
     ws = _FakeWebSocketClient("127.0.0.1:18097", query="api_key=emby-api-key")
     upstream_ws = _FakeUpstreamWebSocket()
