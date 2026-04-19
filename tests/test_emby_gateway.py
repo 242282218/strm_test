@@ -84,6 +84,19 @@ def _mock_config(proxy_base_url: str = "http://proxy.example:18097"):
     )
 
 
+def _safe_url_port_from_host(host: str) -> int:
+    _, _, raw_port = host.partition(":")
+    if not raw_port:
+        return 80
+    if not raw_port.isdigit():
+        return 80
+
+    port = int(raw_port)
+    if 0 <= port <= 65535:
+        return port
+    return 80
+
+
 class _FakeWebSocketClient:
     def __init__(
         self,
@@ -101,7 +114,7 @@ class _FakeWebSocketClient:
         self.url = SimpleNamespace(
             scheme="ws",
             hostname=hostname,
-            port=int(raw_port) if raw_port else 80,
+            port=_safe_url_port_from_host(host),
             query=query,
         )
         self.accepted = 0
@@ -185,6 +198,23 @@ def test_gateway_when_non_dedicated_host_then_returns_404():
         response = client.get("/", headers={"host": "localhost:8000"})
 
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("host_header", ["proxy.example:notaport", "proxy.example:99999"])
+def test_gateway_when_host_header_uses_invalid_port_then_returns_404_without_500(host_header: str):
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+    mock_forward = AsyncMock(return_value=Response(content="unexpected-forward", media_type="text/plain"))
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway._forward_to_emby", new=mock_forward),
+    ):
+        response = client.get("/", headers={"host": host_header})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found"}
+    mock_forward.assert_not_awaited()
 
 
 def test_gateway_when_proxy_base_url_empty_and_port_18097_then_enables_gateway():
@@ -952,6 +982,25 @@ async def test_gateway_websocket_when_non_dedicated_host_then_closes_before_acce
         patch(
             "app.api.emby_gateway.websockets.connect",
             new=AsyncMock(side_effect=AssertionError("should not connect upstream")),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 0
+    assert ws.closed_codes == [1008]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("host_header", ["proxy.example:notaport", "proxy.example:99999"])
+async def test_gateway_websocket_when_host_header_uses_invalid_port_then_closes_before_accept(host_header: str):
+    ws = _FakeWebSocketClient(host_header)
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(side_effect=AssertionError("should reject invalid host port before websocket dial")),
         ),
     ):
         await emby_gateway_module.emby_gateway_websocket(ws)

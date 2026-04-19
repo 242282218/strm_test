@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from fastapi import Request
 
 from app.core.emby_proxy_request import is_dedicated_emby_proxy_request, is_emby_proxy_path
@@ -63,3 +64,10 @@ def test_dedicated_proxy_request_when_config_lookup_fails_then_false() -> None:
         result = is_dedicated_emby_proxy_request(request)
 
     assert result is False
+
+
+@pytest.mark.parametrize("host", ["proxy.example:notaport", "proxy.example:99999"])
+def test_dedicated_proxy_request_when_host_port_is_invalid_then_false(host: str) -> None:
+    request = build_request("/emby/system/info/public", host)
+
+    assert is_dedicated_emby_proxy_request(request) is False

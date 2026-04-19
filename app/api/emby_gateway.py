@@ -91,8 +91,12 @@ def _parse_host_port(url_or_host: str, scheme_hint: str = "http") -> tuple[str, 
     host = (parsed.hostname or "").lower()
     if not host:
         return "", 0
-    if parsed.port:
-        return host, parsed.port
+    try:
+        port = parsed.port
+    except ValueError:
+        return "", 0
+    if port:
+        return host, port
     return host, 443 if parsed.scheme == "https" else 80
 
 
@@ -102,11 +106,16 @@ def _request_host_port(connection: HTTPConnection) -> tuple[str, int]:
         host, port = _parse_host_port(host_header, connection.url.scheme)
         if host:
             return host, port
+        return "", 0
 
     if connection.url.hostname:
         host = connection.url.hostname.lower()
-        if connection.url.port:
-            return host, connection.url.port
+        try:
+            port = connection.url.port
+        except ValueError:
+            return "", 0
+        if port:
+            return host, port
         return host, 443 if connection.url.scheme == "https" else 80
 
     return "", 0
