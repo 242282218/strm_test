@@ -397,6 +397,21 @@ def _build_ws_extra_headers(client_ws: WebSocket) -> list[tuple[str, str]]:
     return extra
 
 
+def _resolve_upstream_ws_close_code(
+    exc: websockets.exceptions.ConnectionClosed | None,
+    upstream_ws,
+) -> int | None:
+    for close_frame in (getattr(exc, "rcvd", None), getattr(exc, "sent", None)):
+        code = getattr(close_frame, "code", None)
+        if code is not None:
+            return int(code)
+
+    code = getattr(upstream_ws, "close_code", None)
+    if code is None:
+        return None
+    return int(code)
+
+
 async def _receive_ws_client_message(client_ws: WebSocket) -> str | bytes:
     message = await client_ws.receive()
     if message["type"] == "websocket.disconnect":
@@ -432,6 +447,7 @@ async def emby_gateway_websocket(ws: WebSocket):
     await ws.accept()
 
     upstream_ws = None
+    client_close_code: int | None = None
     try:
         upstream_ws = await websockets.connect(
             target_url,
@@ -447,7 +463,9 @@ async def emby_gateway_websocket(ws: WebSocket):
                     data = await _receive_ws_client_message(ws)
                     await upstream_ws.send(data)
             except WebSocketDisconnect:
-                pass
+                return None
+
+            return None
 
         async def _upstream_to_client():
             try:
@@ -456,8 +474,10 @@ async def emby_gateway_websocket(ws: WebSocket):
                         await ws.send_text(message)
                     else:
                         await ws.send_bytes(message)
-            except websockets.exceptions.ConnectionClosed:
-                pass
+            except websockets.exceptions.ConnectionClosed as exc:
+                return _resolve_upstream_ws_close_code(exc, upstream_ws)
+
+            return _resolve_upstream_ws_close_code(None, upstream_ws)
 
         # Run both relay directions concurrently; when either ends, cancel the other.
         done, pending = await asyncio.wait(
@@ -465,6 +485,12 @@ async def emby_gateway_websocket(ws: WebSocket):
              asyncio.create_task(_upstream_to_client())],
             return_when=asyncio.FIRST_COMPLETED,
         )
+        for task in done:
+            if task.cancelled():
+                continue
+            result = task.result()
+            if result is not None:
+                client_close_code = result
         for task in pending:
             task.cancel()
 
@@ -474,7 +500,10 @@ async def emby_gateway_websocket(ws: WebSocket):
         if upstream_ws and not upstream_ws.closed:
             await upstream_ws.close()
         try:
-            await ws.close()
+            if client_close_code is None:
+                await ws.close()
+            else:
+                await ws.close(code=client_close_code)
         except Exception:
             pass
 

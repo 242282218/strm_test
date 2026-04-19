@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
+from websockets.exceptions import ConnectionClosedOK
+from websockets.frames import Close
 from fastapi import FastAPI, HTTPException, WebSocketDisconnect
 from fastapi.responses import Response
 from fastapi.testclient import TestClient
@@ -104,6 +106,7 @@ class _FakeWebSocketClient:
         query: str = "",
         headers: dict[str, str] | None = None,
         incoming_messages: list[dict[str, object]] | None = None,
+        block_reads: bool = False,
     ):
         hostname, _, raw_port = host.partition(":")
         self.headers = {
@@ -122,6 +125,7 @@ class _FakeWebSocketClient:
         self.sent_text_messages: list[str] = []
         self.sent_bytes_messages: list[bytes] = []
         self._incoming_messages = list(incoming_messages or [{"type": "websocket.disconnect", "code": 1000}])
+        self._block_reads = block_reads
 
     async def accept(self) -> None:
         self.accepted += 1
@@ -132,6 +136,11 @@ class _FakeWebSocketClient:
     async def receive(self) -> dict[str, object]:
         if self._incoming_messages:
             return self._incoming_messages.pop(0)
+        if self._block_reads:
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                raise
         return {"type": "websocket.disconnect", "code": 1000}
 
     async def receive_text(self) -> str:
@@ -150,9 +159,19 @@ class _FakeWebSocketClient:
 
 
 class _FakeUpstreamWebSocket:
-    def __init__(self, *, block_reads: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        incoming_messages: list[str | bytes] | None = None,
+        close_exception: BaseException | None = None,
+        block_reads: bool = False,
+    ) -> None:
         self.closed = False
         self.sent_messages: list[str | bytes] = []
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
+        self._incoming_messages = list(incoming_messages or [])
+        self._close_exception = close_exception
         self._block_reads = block_reads
 
     async def send(self, message: str | bytes) -> None:
@@ -162,6 +181,15 @@ class _FakeUpstreamWebSocket:
         return self
 
     async def __anext__(self) -> str:
+        if self._incoming_messages:
+            return self._incoming_messages.pop(0)
+        if self._close_exception is not None:
+            for close_frame in (getattr(self._close_exception, "rcvd", None), getattr(self._close_exception, "sent", None)):
+                if close_frame is not None and getattr(close_frame, "code", None) is not None:
+                    self.close_code = int(close_frame.code)
+                    self.close_reason = getattr(close_frame, "reason", "") or None
+                    break
+            raise self._close_exception
         if self._block_reads:
             try:
                 await asyncio.Future()
@@ -1183,6 +1211,32 @@ async def test_gateway_websocket_when_proxy_override_header_is_invalid_then_clos
 
     assert ws.accepted == 0
     assert ws.closed_codes == [1008]
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_upstream_closes_with_code_then_propagates_close_code_to_client():
+    ws = _FakeWebSocketClient("proxy.example:18097", block_reads=True)
+    app_config = _mock_config()
+    upstream_ws = _FakeUpstreamWebSocket(
+        close_exception=ConnectionClosedOK(
+            Close(code=1001, reason="going away"),
+            None,
+            None,
+        )
+    )
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [1001]
+    assert upstream_ws.closed is True
 
 
 @pytest.mark.asyncio
