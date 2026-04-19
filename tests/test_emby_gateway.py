@@ -1120,6 +1120,23 @@ def test_build_ws_extra_headers_when_handshake_headers_present_then_filters_rese
     assert ("x-request-id", "req-1") in headers
 
 
+def test_build_ws_extra_headers_when_internal_override_headers_present_then_does_not_forward_them():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        headers={
+            "x-emby-server-url": "https://alt.emby.example:8920/base",
+            "x-proxy-server-url": "https://public.proxy.example/base",
+            "x-request-id": "req-1",
+        },
+    )
+
+    headers = emby_gateway_module._build_ws_extra_headers(ws)
+
+    assert ("x-emby-server-url", "https://alt.emby.example:8920/base") not in headers
+    assert ("x-proxy-server-url", "https://public.proxy.example/base") not in headers
+    assert ("x-request-id", "req-1") in headers
+
+
 def test_build_response_headers_when_conflicting_headers_then_strip_and_rewrite_location():
     upstream_headers = httpx.Headers(
         {
@@ -1313,6 +1330,35 @@ def test_build_forward_headers_when_accept_encoding_then_force_identity():
     assert "host" not in lowered
     assert headers["Accept-Encoding"] == "identity"
     assert headers["user-agent"] == "test-agent"
+
+
+def test_build_forward_headers_when_internal_override_headers_present_then_does_not_forward_them():
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/web/index.html",
+        "raw_path": b"/web/index.html",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"proxy.example:18097"),
+            (b"x-emby-server-url", b"https://alt.emby.example:8920/base"),
+            (b"x-proxy-server-url", b"https://public.proxy.example/base"),
+            (b"x-request-id", b"req-1"),
+        ],
+        "client": ("127.0.0.1", 12345),
+        "server": ("proxy.example", 18097),
+    }
+    request = Request(scope)
+
+    headers = emby_gateway_module._build_forward_headers(request)
+
+    lowered = {k.lower() for k in headers}
+    assert "x-emby-server-url" not in lowered
+    assert "x-proxy-server-url" not in lowered
+    assert headers["x-request-id"] == "req-1"
 
 
 @pytest.mark.asyncio

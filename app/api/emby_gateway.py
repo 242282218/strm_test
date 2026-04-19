@@ -67,6 +67,10 @@ _HOP_BY_HOP_HEADERS = {
     "transfer-encoding",
     "upgrade",
 }
+_INTERNAL_PROXY_CONTROL_HEADERS = {
+    "x-emby-server-url",
+    "x-proxy-server-url",
+}
 _FORWARDED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 _NO_BODY_METHODS = {"GET", "HEAD", "OPTIONS"}
 _forward_pool = None
@@ -143,7 +147,7 @@ def _build_forward_headers(request: Request) -> dict[str, str]:
     headers: dict[str, str] = {}
     for key, value in request.headers.items():
         lowered = key.lower()
-        if lowered == "host" or lowered in _HOP_BY_HOP_HEADERS:
+        if lowered == "host" or lowered in _HOP_BY_HOP_HEADERS or lowered in _INTERNAL_PROXY_CONTROL_HEADERS:
             continue
         # Avoid upstream compression ambiguity. httpx may decode compressed
         # payloads while preserving upstream headers, which can break clients.
@@ -377,7 +381,7 @@ def _build_ws_extra_headers(client_ws: WebSocket) -> list[tuple[str, str]]:
     """Forward non-hop-by-hop headers from the client to upstream."""
     extra: list[tuple[str, str]] = []
     for key, value in client_ws.headers.items():
-        if key.lower() in _WS_FORWARD_HEADERS_SKIP:
+        if key.lower() in _WS_FORWARD_HEADERS_SKIP or key.lower() in _INTERNAL_PROXY_CONTROL_HEADERS:
             continue
         extra.append((key, value))
     return extra
