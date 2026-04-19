@@ -76,7 +76,7 @@ class PlaybackInfoHook:
             try:
                 if playback_request is not None:
                     request_payload = dict(playback_request)
-                    if "DeviceProfile" not in request_payload:
+                    if not request_payload.get("DeviceProfile"):
                         request_payload.update(self.emby_client._get_default_device_profile())
                     if media_source_id and not request_payload.get("MediaSourceId") and not request_payload.get(
                         "media_source_id"

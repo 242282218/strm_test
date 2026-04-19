@@ -230,6 +230,53 @@ async def test_playback_info_hook_when_post_request_payload_provided_then_uses_p
 
 
 @pytest.mark.asyncio
+async def test_playback_info_hook_when_post_request_payload_has_null_device_profile_then_backfills_default_profile():
+    emby_client = AsyncMock()
+    emby_client.get_playback_info = AsyncMock()
+    emby_client.post_playback_info = AsyncMock(
+        return_value={
+            "MediaSources": [
+                {
+                    "Id": "media_source_1",
+                    "Path": "http://example.com/api/proxy/stream/file123",
+                    "IsRemote": True,
+                }
+            ]
+        }
+    )
+    emby_client._get_default_device_profile = Mock(return_value={"DeviceProfile": {"Name": "Android TV default"}})
+
+    hook = PlaybackInfoHook(
+        emby_client=emby_client,
+        quark_service=AsyncMock(),
+        proxy_base_url="http://proxy.example:18097",
+    )
+    playback_request = {
+        "UserId": "user1",
+        "DeviceProfile": None,
+    }
+
+    await hook.hook_playback_info(
+        item_id="item1",
+        user_id="user1",
+        media_source_id="media_source_1",
+        playback_request=playback_request,
+    )
+
+    emby_client._get_default_device_profile.assert_called_once_with()
+    emby_client.post_playback_info.assert_awaited_once_with(
+        item_id="item1",
+        user_id="user1",
+        device_profile={
+            "UserId": "user1",
+            "DeviceProfile": {"Name": "Android TV default"},
+            "MediaSourceId": "media_source_1",
+        },
+    )
+    emby_client.get_playback_info.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_playback_info_hook_when_playback_info_fails_for_local_media_then_reraises():
     emby_client = AsyncMock()
     emby_client.get_playback_info = AsyncMock(side_effect=TimeoutError("playback info timeout"))
