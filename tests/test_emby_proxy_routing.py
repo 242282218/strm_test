@@ -277,6 +277,46 @@ async def test_playback_info_hook_when_post_request_payload_has_null_device_prof
 
 
 @pytest.mark.asyncio
+async def test_playback_info_hook_when_post_request_payload_uses_legacy_media_source_id_then_backfills_canonical_field():
+    emby_client = AsyncMock()
+    emby_client.get_playback_info = AsyncMock()
+    emby_client.post_playback_info = AsyncMock(
+        return_value={
+            "MediaSources": [
+                {
+                    "Id": "media_source_1",
+                    "Path": "http://example.com/api/proxy/stream/file123",
+                    "IsRemote": True,
+                }
+            ]
+        }
+    )
+
+    hook = PlaybackInfoHook(
+        emby_client=emby_client,
+        quark_service=AsyncMock(),
+        proxy_base_url="http://proxy.example:18097",
+    )
+    playback_request = {
+        "UserId": "user1",
+        "media_source_id": "media_source_1",
+        "DeviceProfile": {"Name": "Android TV"},
+    }
+
+    await hook.hook_playback_info(
+        item_id="item1",
+        user_id="user1",
+        media_source_id="media_source_1",
+        playback_request=playback_request,
+    )
+
+    posted_payload = emby_client.post_playback_info.await_args.kwargs["device_profile"]
+    assert posted_payload.get("MediaSourceId") == "media_source_1"
+    assert posted_payload["DeviceProfile"] == {"Name": "Android TV"}
+    emby_client.get_playback_info.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_playback_info_hook_when_playback_info_fails_for_local_media_then_reraises():
     emby_client = AsyncMock()
     emby_client.get_playback_info = AsyncMock(side_effect=TimeoutError("playback info timeout"))
