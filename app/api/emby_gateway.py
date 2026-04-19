@@ -447,6 +447,7 @@ async def emby_gateway_websocket(ws: WebSocket):
     await ws.accept()
 
     upstream_ws = None
+    upstream_close_code: int | None = None
     client_close_code: int | None = None
     try:
         upstream_ws = await websockets.connect(
@@ -462,8 +463,11 @@ async def emby_gateway_websocket(ws: WebSocket):
                 while True:
                     data = await _receive_ws_client_message(ws)
                     await upstream_ws.send(data)
-            except WebSocketDisconnect:
-                return None
+            except WebSocketDisconnect as exc:
+                code = getattr(exc, "code", None)
+                if code is None:
+                    return None
+                return int(code)
 
             return None
 
@@ -480,16 +484,19 @@ async def emby_gateway_websocket(ws: WebSocket):
             return _resolve_upstream_ws_close_code(None, upstream_ws)
 
         # Run both relay directions concurrently; when either ends, cancel the other.
+        client_to_upstream_task = asyncio.create_task(_client_to_upstream())
+        upstream_to_client_task = asyncio.create_task(_upstream_to_client())
         done, pending = await asyncio.wait(
-            [asyncio.create_task(_client_to_upstream()),
-             asyncio.create_task(_upstream_to_client())],
+            [client_to_upstream_task, upstream_to_client_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
         for task in done:
             if task.cancelled():
                 continue
             result = task.result()
-            if result is not None:
+            if task is client_to_upstream_task:
+                upstream_close_code = result
+            elif result is not None:
                 client_close_code = result
         for task in pending:
             task.cancel()
@@ -498,7 +505,10 @@ async def emby_gateway_websocket(ws: WebSocket):
         logger.debug(f"WebSocket proxy error: {exc}")
     finally:
         if upstream_ws and not upstream_ws.closed:
-            await upstream_ws.close()
+            if upstream_close_code is None:
+                await upstream_ws.close()
+            else:
+                await upstream_ws.close(code=upstream_close_code)
         try:
             if client_close_code is None:
                 await ws.close()

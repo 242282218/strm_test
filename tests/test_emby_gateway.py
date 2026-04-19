@@ -167,6 +167,8 @@ class _FakeUpstreamWebSocket:
         block_reads: bool = False,
     ) -> None:
         self.closed = False
+        self.closed_codes: list[int | None] = []
+        self.closed_reasons: list[str | None] = []
         self.sent_messages: list[str | bytes] = []
         self.close_code: int | None = None
         self.close_reason: str | None = None
@@ -197,8 +199,10 @@ class _FakeUpstreamWebSocket:
                 raise StopAsyncIteration from None
         raise StopAsyncIteration
 
-    async def close(self) -> None:
+    async def close(self, code: int | None = None, reason: str | None = None) -> None:
         self.closed = True
+        self.closed_codes.append(code)
+        self.closed_reasons.append(reason)
 
 
 def test_gateway_root_when_dedicated_proxy_host_then_forwards_to_emby():
@@ -1263,6 +1267,30 @@ async def test_gateway_websocket_when_upstream_closes_with_code_then_propagates_
     assert ws.accepted == 1
     assert ws.closed_codes == [1001]
     assert upstream_ws.closed is True
+
+
+@pytest.mark.asyncio
+async def test_gateway_websocket_when_client_disconnects_with_close_code_then_propagates_close_code_upstream():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        incoming_messages=[{"type": "websocket.disconnect", "code": 1001}],
+    )
+    app_config = _mock_config()
+    upstream_ws = _FakeUpstreamWebSocket(block_reads=True)
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert upstream_ws.closed is True
+    assert upstream_ws.closed_codes == [1001]
 
 
 @pytest.mark.asyncio
