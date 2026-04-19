@@ -334,6 +334,32 @@ def test_gateway_when_override_header_is_invalid_then_returns_400_before_forward
     mock_forward.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    ("status_code", "detail"),
+    [
+        (502, "Failed to proxy Emby request"),
+        (504, "Emby upstream timeout"),
+    ],
+)
+def test_gateway_when_forwarder_raises_upstream_http_exception_then_route_preserves_status_and_detail(
+    status_code: int,
+    detail: str,
+):
+    client = _build_client(raise_server_exceptions=False)
+    app_config = _mock_config()
+    mock_forward = AsyncMock(side_effect=HTTPException(status_code=status_code, detail=detail))
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch("app.api.emby_gateway._forward_to_emby", new=mock_forward),
+    ):
+        response = client.get("/System/Info/Public", headers={"host": "proxy.example:18097"})
+
+    assert response.status_code == status_code
+    assert response.json() == {"detail": detail}
+    mock_forward.assert_awaited_once()
+
+
 @pytest.mark.parametrize("request_path", ["/", "/System/Info/Public"])
 def test_gateway_when_emby_override_header_uses_blocked_hostname_then_returns_400_before_forward_stub(
     request_path: str,
