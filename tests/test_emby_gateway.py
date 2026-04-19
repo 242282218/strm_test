@@ -1128,6 +1128,31 @@ async def test_gateway_websocket_when_emby_override_header_present_then_targets_
 
 
 @pytest.mark.asyncio
+async def test_gateway_websocket_when_emby_override_header_uses_uppercase_scheme_then_still_targets_wss_upstream():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key&device=pytest",
+        headers={"X-Emby-Server-Url": "HTTPS://alt.emby.example:8920/base"},
+    )
+    upstream_ws = _FakeUpstreamWebSocket()
+    app_config = _mock_config()
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ) as mock_connect,
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert upstream_ws.closed is True
+    assert mock_connect.await_args.args[0] == "wss://alt.emby.example:8920/base/embywebsocket?api_key=emby-api-key&device=pytest"
+
+
+@pytest.mark.asyncio
 async def test_gateway_websocket_when_client_headers_present_then_forwards_filtered_headers_to_upstream():
     ws = _FakeWebSocketClient(
         "proxy.example:18097",

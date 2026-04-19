@@ -379,7 +379,9 @@ def _build_ws_target_url(app_config, client_ws: WebSocket) -> str:
     """Build the upstream Emby WebSocket URL from the incoming request."""
     emby_base_url = _resolve_emby_base_url(client_ws, app_config)
     # http(s) → ws(s)
-    ws_base = emby_base_url.replace("https://", "wss://").replace("http://", "ws://")
+    parsed_emby_url = urlparse(emby_base_url)
+    ws_scheme = "wss" if parsed_emby_url.scheme.lower() == "https" else "ws"
+    ws_base = parsed_emby_url._replace(scheme=ws_scheme).geturl().rstrip("/")
     query_string = str(client_ws.url.query)
     path = "embywebsocket"
     if query_string:
