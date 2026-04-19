@@ -1331,6 +1331,33 @@ async def test_gateway_websocket_when_client_disconnects_with_close_code_then_pr
 
 
 @pytest.mark.asyncio
+async def test_gateway_websocket_when_client_disconnects_without_close_code_then_treats_it_as_normal_close_path():
+    ws = _FakeWebSocketClient(
+        "proxy.example:18097",
+        query="api_key=emby-api-key",
+        incoming_messages=[{"type": "websocket.disconnect", "code": None}],
+    )
+    app_config = _mock_config()
+    upstream_ws = _FakeUpstreamWebSocket(block_reads=True)
+
+    with (
+        patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
+        patch(
+            "app.api.emby_gateway.websockets.connect",
+            new=AsyncMock(return_value=upstream_ws),
+        ),
+        patch("app.api.emby_gateway.logger.debug") as mock_debug,
+    ):
+        await emby_gateway_module.emby_gateway_websocket(ws)
+
+    assert ws.accepted == 1
+    assert ws.closed_codes == [None]
+    assert upstream_ws.closed is True
+    assert upstream_ws.closed_codes == [None]
+    mock_debug.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_gateway_websocket_when_upstream_closes_during_client_send_then_propagates_close_code_to_client():
     ws = _FakeWebSocketClient(
         "proxy.example:18097",

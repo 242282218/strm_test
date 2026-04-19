@@ -423,10 +423,19 @@ def _resolve_upstream_ws_close_code(
     return int(code)
 
 
+def _normalize_ws_close_code(code: object) -> int | None:
+    if code is None:
+        return None
+    try:
+        return int(code)
+    except (TypeError, ValueError):
+        return None
+
+
 async def _receive_ws_client_message(client_ws: WebSocket) -> str | bytes:
     message = await client_ws.receive()
     if message["type"] == "websocket.disconnect":
-        raise WebSocketDisconnect(code=int(message.get("code", 1000)))
+        raise WebSocketDisconnect(code=_normalize_ws_close_code(message.get("code", 1000)))
 
     text = message.get("text")
     if text is not None:
@@ -481,10 +490,10 @@ async def emby_gateway_websocket(ws: WebSocket):
                     data = await _receive_ws_client_message(ws)
                     await upstream_ws.send(data)
             except WebSocketDisconnect as exc:
-                code = getattr(exc, "code", None)
+                code = _normalize_ws_close_code(getattr(exc, "code", None))
                 if code is None:
                     return None, None
-                return int(code), None
+                return code, None
             except websockets.exceptions.ConnectionClosed as exc:
                 return None, _resolve_upstream_ws_close_code(exc, upstream_ws)
 
