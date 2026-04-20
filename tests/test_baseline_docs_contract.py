@@ -82,6 +82,7 @@ def test_docs_index_points_to_current_execution_entry_docs() -> None:
 
     for path_hint in (
         "architecture/current-state.md",
+        "architecture/core-truth-source-boundaries.md",
         "development/codex-working-agreement.md",
         "development/compatibility-inventory.md",
         "plans/2026-04-20-codex-project-audit-optimization-plan.md",
