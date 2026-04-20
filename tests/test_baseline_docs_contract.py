@@ -9,6 +9,8 @@ CURRENT_STATE_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "current-state
 COMPATIBILITY_DOC_PATH = PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md"
 CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md"
 DEVELOPMENT_README_PATH = PROJECT_ROOT / "docs" / "development" / "README.md"
+API_DOC_PATH = PROJECT_ROOT / "docs" / "api" / "README.md"
+OPS_DOC_PATH = PROJECT_ROOT / "docs" / "operations" / "README.md"
 WEB_README_PATH = PROJECT_ROOT / "web" / "README.md"
 PLAN_DOC_PATH = PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md"
 CORE_BOUNDARIES_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md"
@@ -225,6 +227,35 @@ def test_development_and_web_readmes_match_current_command_contract() -> None:
     assert "pnpm run test:e2e" in web_document
     assert "web/package-lock.json" in web_document
     assert "npm run dev -- --host ... --port ..." in web_document
+
+
+def test_api_and_operations_entry_docs_have_sync_dates_and_resolvable_links() -> None:
+    for path, path_hints in (
+        (
+            API_DOC_PATH,
+            ("app/api/", "app/api/v1/", "app/config/application.py"),
+        ),
+        (
+            OPS_DOC_PATH,
+            (
+                "Dockerfile",
+                "docker-compose.yml",
+                ".github/workflows/docker-deploy-test.yml",
+                ".github/workflows/docker-publish.yml",
+                "web/",
+            ),
+        ),
+    ):
+        document = path.read_text(encoding="utf-8")
+
+        assert "**最后同步**: 2026-04-20" in document
+
+        for hint in path_hints:
+            assert hint in document
+
+        for relative_target in _iter_relative_markdown_links(document):
+            resolved_path = (path.parent / relative_target).resolve()
+            assert resolved_path.exists(), f"{path.relative_to(PROJECT_ROOT).as_posix()} link target missing: {relative_target}"
 
 
 def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:

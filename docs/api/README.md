@@ -1,5 +1,8 @@
 # API 文档
 
+**最后同步**: 2026-04-20
+**对应代码目录**: `app/api/`、`app/api/v1/`、`app/config/application.py`
+
 ## 概述
 
 quark_strm 提供 RESTful API 接口，所有接口返回统一的 JSON 响应格式。

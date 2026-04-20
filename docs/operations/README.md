@@ -1,5 +1,8 @@
 # 运维文档
 
+**最后同步**: 2026-04-20
+**对应代码目录**: `Dockerfile`、`docker-compose.yml`、`.github/workflows/docker-deploy-test.yml`、`.github/workflows/docker-publish.yml`、`web/`
+
 ## 部署指南
 
 ### Docker 部署（推荐）
