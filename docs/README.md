@@ -2,6 +2,8 @@
 
 本目录包含 quark_strm 项目的所有文档。
 
+**最后同步**: 2026-04-20
+
 ## 📁 目录结构
 
 - **guides/** - 使用指南
@@ -28,5 +30,6 @@
 ## 当前执行入口
 
 - `architecture/current-state.md` - 当前后端/前端入口、CI 真相源和大文件热点基线
+- `development/codex-working-agreement.md` - 给 Codex/维护者的固定执行入口、范围边界和最小验证基线
 - `development/compatibility-inventory.md` - 前端根级 wrapper 清单、状态和退役条件
 - `plans/2026-04-20-codex-project-audit-optimization-plan.md` - 本轮审查结论与分阶段优化路线

@@ -4,6 +4,7 @@
 
 ## 当前执行入口
 
+- [`codex-working-agreement.md`](./codex-working-agreement.md) - 给 Codex/维护者的固定执行入口与最小验证基线
 - [`compatibility-inventory.md`](./compatibility-inventory.md) - 前端根级 wrapper 清单、状态与删除条件
 - [`../architecture/current-state.md`](../architecture/current-state.md) - 当前后端/前端/CI 基线与热点分布
 

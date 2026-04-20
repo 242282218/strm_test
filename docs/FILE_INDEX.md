@@ -227,6 +227,7 @@ quark_strm/
   - `current-state.md` - 当前后端/前端入口、CI 真相源与大文件热点基线
 - `development/` - 开发文档
   - `README.md` - 开发文档入口
+  - `codex-working-agreement.md` - Codex 固定执行入口、范围边界与最小验证基线
   - `compatibility-inventory.md` - 前端 wrapper 清单、状态与退役条件
   - `development_plan.md` - 开发方案
   - `history.md` - 历史指令记录

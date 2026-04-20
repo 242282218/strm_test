@@ -3,8 +3,10 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DOCS_INDEX_PATH = PROJECT_ROOT / "docs" / "README.md"
 CURRENT_STATE_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "current-state.md"
 COMPATIBILITY_DOC_PATH = PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md"
+CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md"
 
 
 def _iter_feature_wrappers() -> Iterator[str]:
@@ -50,6 +52,20 @@ def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
         assert count_hint in document
 
 
+def test_docs_index_points_to_current_execution_entry_docs() -> None:
+    document = DOCS_INDEX_PATH.read_text(encoding="utf-8")
+
+    assert "**最后同步**: 2026-04-20" in document
+
+    for path_hint in (
+        "architecture/current-state.md",
+        "development/codex-working-agreement.md",
+        "development/compatibility-inventory.md",
+        "plans/2026-04-20-codex-project-audit-optimization-plan.md",
+    ):
+        assert path_hint in document
+
+
 def test_compatibility_inventory_lists_all_current_feature_wrappers() -> None:
     document = COMPATIBILITY_DOC_PATH.read_text(encoding="utf-8")
 
@@ -62,3 +78,29 @@ def test_compatibility_inventory_lists_all_current_feature_wrappers() -> None:
     assert "web/src/api/fileManager.ts" in document
     assert "camelCase 导入全部删除" in document
     assert "module-aliases.spec.ts" in document
+
+
+def test_codex_working_agreement_points_to_current_truth_sources() -> None:
+    document = CODEX_WORKING_AGREEMENT_PATH.read_text(encoding="utf-8")
+
+    for path_hint in (
+        "current-state.md",
+        "compatibility-inventory.md",
+        "docs/api/README.md",
+        "docs/operations/README.md",
+        "app/api/v1/*",
+        "web/src/features/<domain>/",
+        "web/src/features/config/*",
+        "docs/architecture/README.md",
+    ):
+        assert path_hint in document
+
+    for command_hint in (
+        ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_baseline_docs_contract.py tests/test_file_index_contract.py -q",
+        ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_ci_workflow.py tests/test_pytest_workflow_coverage_gate.py tests/test_deployment_contract.py -q",
+        ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_api_docs_contract.py tests/test_api_v1_routes.py tests/test_main_entrypoint.py -q",
+        "pnpm run lint --fix",
+        "pnpm run type-check",
+        "pnpm exec vitest run",
+    ):
+        assert command_hint in document
