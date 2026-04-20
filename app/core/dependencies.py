@@ -17,7 +17,6 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.auth_contract import resolve_expected_api_key
-from app.core.config_manager import get_config
 from app.core.db import get_db
 from app.core.env_aliases import QUARK_COOKIE_ENV_PRIORITY, get_env_override
 from app.core.logging import get_logger
@@ -28,7 +27,6 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
-config = get_config()
 
 
 # ==================== 服务容器初始化 ====================
@@ -183,6 +181,16 @@ def _get_security_config():
     return None, _is_testing_environment()
 
 
+def _get_runtime_quark_config():
+    try:
+        from app.services.config_service import get_config_service
+
+        return getattr(get_config_service().get_config(), "quark", None)
+    except Exception as exc:
+        logger.warning(f"Failed to read quark config: {exc}")
+        return None
+
+
 def _get_configured_api_key() -> str | None:
     """Read configured API key from security config."""
     config_key, _ = _get_security_config()
@@ -234,7 +242,9 @@ async def get_quark_cookie(cookie: str = None) -> str:
     - 测试环境下默认使用占位 cookie，避免因未配置导致 400
     - 生产环境请在 config.yaml 或环境变量中设置真实 cookie
     """
-    cookie = cookie or get_env_override(*QUARK_COOKIE_ENV_PRIORITY) or config.get_quark_cookie()
+    runtime_quark = _get_runtime_quark_config()
+    configured_cookie = str(getattr(runtime_quark, "cookie", "") or "").strip()
+    cookie = cookie or get_env_override(*QUARK_COOKIE_ENV_PRIORITY) or configured_cookie
 
     # 测试兜底：如果仍然为空，使用占位 cookie 以通过单元测试
     if not cookie:
@@ -255,7 +265,9 @@ async def get_only_video_flag(only_video: bool = None) -> bool:
         only_video布尔值
     """
     if only_video is None:
-        only_video = config.get_quark_only_video()
+        runtime_quark = _get_runtime_quark_config()
+        runtime_only_video = getattr(runtime_quark, "only_video", None)
+        only_video = True if runtime_only_video is None else bool(runtime_only_video)
 
     return only_video
 
@@ -270,7 +282,9 @@ async def get_root_id(root_id: str = None) -> str:
     Returns:
         根目录ID
     """
-    root_id = root_id or config.get_quark_root_id()
+    runtime_quark = _get_runtime_quark_config()
+    configured_root_id = str(getattr(runtime_quark, "root_id", "") or "").strip()
+    root_id = root_id or configured_root_id or "0"
     return root_id
 
 

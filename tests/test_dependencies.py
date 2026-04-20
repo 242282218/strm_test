@@ -551,6 +551,44 @@ class TestWithMockService:
         restore_service(CacheService)
 
 
+@pytest.mark.asyncio
+async def test_get_quark_cookie_prefers_env_override_over_runtime_config(monkeypatch):
+    monkeypatch.setattr(dependencies, "_get_runtime_quark_config", lambda: SimpleNamespace(cookie="config-cookie"))
+    monkeypatch.setattr(dependencies, "get_env_override", lambda *_args: "env-cookie")
+
+    assert await dependencies.get_quark_cookie() == "env-cookie"
+
+
+@pytest.mark.asyncio
+async def test_get_quark_cookie_uses_runtime_config_when_env_missing(monkeypatch):
+    monkeypatch.setattr(dependencies, "_get_runtime_quark_config", lambda: SimpleNamespace(cookie="config-cookie"))
+    monkeypatch.setattr(dependencies, "get_env_override", lambda *_args: None)
+
+    assert await dependencies.get_quark_cookie() == "config-cookie"
+
+
+@pytest.mark.asyncio
+async def test_get_quark_cookie_falls_back_to_placeholder_when_runtime_config_missing(monkeypatch):
+    monkeypatch.setattr(dependencies, "_get_runtime_quark_config", lambda: None)
+    monkeypatch.setattr(dependencies, "get_env_override", lambda *_args: None)
+
+    assert await dependencies.get_quark_cookie() == "test_cookie"
+
+
+@pytest.mark.asyncio
+async def test_get_only_video_flag_uses_runtime_config(monkeypatch):
+    monkeypatch.setattr(dependencies, "_get_runtime_quark_config", lambda: SimpleNamespace(only_video=False))
+
+    assert await dependencies.get_only_video_flag() is False
+
+
+@pytest.mark.asyncio
+async def test_get_root_id_uses_runtime_config(monkeypatch):
+    monkeypatch.setattr(dependencies, "_get_runtime_quark_config", lambda: SimpleNamespace(root_id="root-42"))
+
+    assert await dependencies.get_root_id() == "root-42"
+
+
 # ==================== pytest fixtures ====================
 
 @pytest.fixture
