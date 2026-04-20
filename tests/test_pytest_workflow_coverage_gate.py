@@ -4,6 +4,9 @@ from pathlib import Path
 
 PROJECT_WORKFLOW_DIR = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 ROOT_WORKFLOW_DIR = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+COVERAGE_SOURCE_PATTERN = re.compile(
+    r"COVERAGE_FAIL_UNDER:\s*\$\{\{\s*vars\.QUARK_STRM_COVERAGE_FAIL_UNDER\s*\|\|\s*'(?P<value>\d+)'\s*\}\}"
+)
 
 
 def resolve_workflow_path(filename: str) -> Path:
@@ -18,6 +21,6 @@ def test_pytest_workflow_coverage_threshold_not_below_66() -> None:
 
     assert "--cov-fail-under=${{ env.COVERAGE_FAIL_UNDER }}" in workflow
 
-    match = re.search(r"COVERAGE_FAIL_UNDER:\s*\"?(?P<value>\d+)\"?", workflow)
+    match = COVERAGE_SOURCE_PATTERN.search(workflow)
     assert match is not None
     assert int(match.group("value")) >= 66

@@ -23,7 +23,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  COVERAGE_FAIL_UNDER: "66"
+  COVERAGE_FAIL_UNDER: ${{ vars.QUARK_STRM_COVERAGE_FAIL_UNDER || '66' }}
 
 jobs:
   tests:
