@@ -10,6 +10,7 @@ CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-wo
 DEVELOPMENT_README_PATH = PROJECT_ROOT / "docs" / "development" / "README.md"
 WEB_README_PATH = PROJECT_ROOT / "web" / "README.md"
 PLAN_DOC_PATH = PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md"
+CORE_BOUNDARIES_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md"
 WRAPPER_DIRS = {
     "views": PROJECT_ROOT / "web" / "src" / "views",
     "api": PROJECT_ROOT / "web" / "src" / "api",
@@ -57,6 +58,7 @@ def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
         "web/playwright.config.ts",
         "vars.QUARK_STRM_COVERAGE_FAIL_UNDER",
         "docs/development/compatibility-inventory.md",
+        "core-truth-source-boundaries.md",
         "app/config/settings.py",
         "web/src/features/rename/views/RenameView.vue",
         "web/src/features/config/views/ConfigView.vue",
@@ -168,6 +170,7 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
     for hint in (
         "执行进度快照（2026-04-20 更新）",
         "docs/architecture/current-state.md",
+        "docs/architecture/core-truth-source-boundaries.md",
         "docs/development/compatibility-inventory.md",
         "docs/development/codex-working-agreement.md",
         "web/package-lock.json",
@@ -175,5 +178,26 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "web/src/features/config/*",
         "npm run dev",
         "pnpm run ...",
+    ):
+        assert hint in document
+
+
+def test_core_truth_source_boundary_doc_tracks_phase3_entrypoints() -> None:
+    document = CORE_BOUNDARIES_DOC_PATH.read_text(encoding="utf-8")
+
+    for hint in (
+        "**最后校验**: 2026-04-20",
+        "app/core/db.py",
+        "app/core/database.py",
+        "app/core/db_utils.py",
+        "app/core/error_codes.py",
+        "app/core/exceptions.py",
+        "app/core/exception_handler.py",
+        "app/config/settings.py",
+        "app/services/config_service.py",
+        "tests/test_db.py",
+        "tests/test_db_pool.py",
+        "tests/test_system_config_api.py",
+        "tests/test_encryption.py",
     ):
         assert hint in document

@@ -225,6 +225,7 @@ quark_strm/
 - `architecture/` - 架构文档
   - `README.md` - 架构总览入口
   - `current-state.md` - 当前后端/前端入口、CI 真相源与大文件热点基线
+  - `core-truth-source-boundaries.md` - `config/db/exception` 当前职责边界与 Phase 3 进入说明
 - `development/` - 开发文档
   - `README.md` - 开发文档入口
   - `codex-working-agreement.md` - Codex 固定执行入口、范围边界与最小验证基线

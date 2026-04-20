@@ -15,6 +15,7 @@ def test_file_index_tracks_current_core_and_runtime_structure() -> None:
         "target/",
         "tmp_wheel/",
         "current-state.md",
+        "core-truth-source-boundaries.md",
         "codex-working-agreement.md",
         "compatibility-inventory.md",
         "2026-04-20-codex-project-audit-optimization-plan.md",

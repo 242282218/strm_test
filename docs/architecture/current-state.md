@@ -89,4 +89,5 @@
 
 - `web/src/features/config/*` 当前已有大量未提交修改，本轮不直接深入该切片。
 - `app/api/v1` 已是对外 canonical path 层，但内部仍依赖 legacy router 复用，不能误判为“已经彻底完成 API 分层”。
+- 进入 Phase 3 前，先看 [`core-truth-source-boundaries.md`](./core-truth-source-boundaries.md)；当前 `config/db/exception` 仍应按“`db.py` 主入口 + `database.py` 兼容层 + `db_utils.py` 工具层 / `error_codes.py` 错误码 / `exceptions.py` 领域异常 / `exception_handler.py` HTTP 响应层”理解。
 - 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再进入更深层的拆分或删兼容层。

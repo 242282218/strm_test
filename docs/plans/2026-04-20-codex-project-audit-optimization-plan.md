@@ -46,6 +46,7 @@
 ### 当前执行入口
 
 - `docs/architecture/current-state.md`：当前后端/前端/CI 基线和热点分布。
+- `docs/architecture/core-truth-source-boundaries.md`：`config/db/exception` 当前职责边界和 Phase 3 进入说明。
 - `docs/development/compatibility-inventory.md`：前端 wrapper 清单、状态与退役条件。
 - `docs/development/codex-working-agreement.md`：当前 truth-source、避让区域和最小验证基线。
 
