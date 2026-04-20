@@ -77,6 +77,7 @@ def _build_client(*, raise_server_exceptions: bool = True) -> TestClient:
 def _mock_config(proxy_base_url: str = "http://proxy.example:18097"):
     return SimpleNamespace(
         endpoints=[],
+        quark=SimpleNamespace(cookie="quark-cookie"),
         emby=SimpleNamespace(
             enabled=True,
             url="http://emby.example:18096",
@@ -409,7 +410,6 @@ def test_gateway_playbackinfo_when_dedicated_proxy_host_then_uses_hook_proxy():
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
     ):
         response = client.get(
@@ -438,7 +438,6 @@ def test_gateway_playbackinfo_when_header_and_query_api_keys_conflict_then_prefe
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
     ):
         response = client.get(
@@ -462,7 +461,6 @@ def test_gateway_playbackinfo_when_native_authorization_header_present_then_uses
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
     ):
         response = client.get(
@@ -498,7 +496,6 @@ def test_gateway_playbackinfo_when_proxy_override_header_present_then_prefers_he
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
     ):
         response = client.get(
@@ -527,7 +524,6 @@ def test_gateway_playbackinfo_when_proxy_override_header_is_invalid_then_returns
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch(
             "app.api.emby_gateway.EmbyProxyService",
             new=Mock(side_effect=AssertionError("should reject invalid proxy override before proxy service init")),
@@ -556,7 +552,6 @@ def test_gateway_playbackinfo_when_emby_override_header_present_then_prefers_hea
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
     ):
         response = client.get(
@@ -583,7 +578,6 @@ def test_gateway_playbackinfo_when_emby_override_header_is_invalid_then_returns_
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch(
             "app.api.emby_gateway.EmbyProxyService",
             new=Mock(side_effect=AssertionError("should reject invalid Emby override before proxy service init")),
@@ -675,7 +669,6 @@ def test_gateway_playbackinfo_when_prefixed_lowercase_path_used_then_still_uses_
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
         patch(
             "app.api.emby_gateway._forward_to_emby",
@@ -707,7 +700,6 @@ def test_gateway_playbackinfo_when_web_headers_present_then_forwards_web_client_
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
     ):
         response = client.get(
@@ -740,7 +732,6 @@ def test_gateway_playbackinfo_when_post_body_uses_emby_contract_then_intercepts_
 
     with (
         patch("app.api.emby_gateway.config_service.get_config", return_value=app_config),
-        patch("app.api.emby_gateway.config.get_quark_cookie", return_value="quark-cookie"),
         patch("app.api.emby_gateway.EmbyProxyService", _FakeEmbyProxyService),
         patch(
             "app.api.emby_gateway._forward_to_emby",

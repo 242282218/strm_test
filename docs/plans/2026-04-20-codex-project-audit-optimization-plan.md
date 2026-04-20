@@ -42,6 +42,7 @@
 - `app/api/strm.py` 与 `app/api/dashboard.py` 已移除对 `Database(resolve_db_path())` 兼容层 caller 的依赖，`resolve_db_path` 调用方也已回收到 `app.core.db`；当前 `app/` 层显式 `Database(...)` caller 已清零，并由 `tests/test_db_path_contract.py` 阻止重新引入 `app.core.database` import。
 - `app/api/tmdb.py` 已移除对 `ConfigManager` 的运行态直连，TMDB API key 统一通过 `get_config_service()` 读取，并由 `tests/test_tmdb_api.py` + `tests/test_db_path_contract.py` 锁定 canonical `tmdb.api_key` 优先、legacy `api_keys.tmdb_api_key` 回退与 API 层 import 护栏。
 - `app/api/stable_stream.py` 已移除 `get_config()` 全局实例，Quark cookie 改为请求时通过 `get_config_service()` 读取，并由 `tests/test_stable_stream_route.py` + `tests/test_db_path_contract.py` 锁定稳定播放入口的配置读取与 module-specific import 护栏。
+- `app/api/emby_gateway.py` 的 PlaybackInfo hook 已移除 `get_config()` cookie 读取，专用 Emby 网关改为直接复用 `app_config.quark.cookie`，并由 `tests/test_emby_gateway.py` + `tests/test_db_path_contract.py` 锁定网关回放入口与 module-specific import 护栏。
 - `app/core/dependencies.py` 的 Quark 依赖 helper（`get_quark_cookie()` / `get_only_video_flag()` / `get_root_id()`）已移除 `get_config()` 全局实例，统一通过 `get_config_service()` 读取运行态配置，并由 `tests/test_dependencies.py` + `tests/test_db_path_contract.py` 锁定依赖层行为与 module-specific import 护栏。
 
 ### 当前剩余边界
@@ -71,13 +72,13 @@
 | Phase 0 | 已完成 | `current-state.md`、`compatibility-inventory.md`、`codex-working-agreement.md` 与对应 contract 已落地。 |
 | Phase 1 | 已完成 | CI 门禁、coverage 真相源、运行产物边界与 `.gitignore` 已收敛。 |
 | Phase 2 | 部分完成 | canonical path 映射表已补齐，但 `app/api/v1/*` 仍未完全摆脱 legacy 实现复用。 |
-| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理、TMDB / stable-stream API 与 `core/dependencies.py` 运行态 caller 收口与 import guard 已补，但基础设施代码尚未进入实质拆分。 |
+| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理、TMDB / stable-stream / Emby gateway API 与 `core/dependencies.py` 运行态 caller 收口与 import guard 已补，但基础设施代码尚未进入实质拆分。 |
 | Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
 | Phase 5 | 已完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/architecture/README.md`、`docs/guides/*.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新。 |
 | Phase 6 | 已完成 | 热点、wrapper、重复 endpoint 类型、入口链接漂移，以及 `scripts/continuous_optimize.py` 的输入输出/skip 规则都已有 contract。 |
 | Iteration 1 | 已完成 | 已完成 CI 门禁与 `.gitignore` 收敛。 |
 | Iteration 2 | 已完成到映射表层 | 已完成 API canonical path 设计与映射表，尚未进入 v1-only 实现树。 |
-| Iteration 3 | 已完成到边界文档 / caller 收敛层 | 已完成 `config/db/exception` 入口边界文档化、STRM API 的无效 `Database` 兼容层实例化清理，以及 TMDB / stable-stream API 与依赖层 Quark helper 的配置兼容 caller 收口；尚未进入基础设施重构。 |
+| Iteration 3 | 已完成到边界文档 / caller 收敛层 | 已完成 `config/db/exception` 入口边界文档化、STRM API 的无效 `Database` 兼容层实例化清理，以及 TMDB / stable-stream / Emby gateway API 与依赖层 Quark helper 的配置兼容 caller 收口；尚未进入基础设施重构。 |
 | Iteration 4 | 部分完成 | 已完成 `file-manager` 子项，`config` / `rename` 拆分仍待后续在干净切片推进。 |
 | Iteration 5 | 已完成 | 核心索引、入口文档、`architecture/guides` 目录索引与 contract test 已落地。 |
 | Iteration 6 | 已完成 | 持续优化护栏已覆盖热点、wrapper、重复类型、链接漂移，以及持续优化脚本输入输出/skip 语义。 |

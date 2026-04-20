@@ -99,6 +99,7 @@
 - `app/api/strm.py` 与 `app/api/dashboard.py` 都已不再依赖 `Database` 兼容层 caller；当前 `app/` 层显式 `Database(...)` 调用已清零，并由 `tests/test_db_path_contract.py` 锁定。
 - `app/api/tmdb.py` 已不再直接 import `ConfigManager`；TMDB API key 读取统一走 `get_config_service()`，并由 `tests/test_tmdb_api.py` + `tests/test_db_path_contract.py` 锁定 canonical `tmdb.api_key` 优先、legacy `api_keys.tmdb_api_key` 回退和 API 层 import 护栏。
 - `app/api/stable_stream.py` 也已移除 `get_config()` 全局实例；Quark cookie 改为请求时通过 `get_config_service()` 读取，并由 `tests/test_stable_stream_route.py` + `tests/test_db_path_contract.py` 锁定。
+- `app/api/emby_gateway.py` 的 PlaybackInfo hook 也已移除 `get_config()` cookie 读取；专用 Emby 网关现在直接复用 `app_config.quark.cookie`，并由 `tests/test_emby_gateway.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/core/dependencies.py` 的 `get_quark_cookie()`、`get_only_video_flag()`、`get_root_id()` 也已移除 `get_config()` 全局实例；当前 Quark 依赖 helper 统一走 `get_config_service()`，并由 `tests/test_dependencies.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py` 仍保留 `get_config()` 兼容读取，所以 Phase 3 现在是“caller 持续收口中”，不是“配置兼容层已退役”。
 - 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再进入更深层的拆分或删兼容层。

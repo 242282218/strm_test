@@ -38,7 +38,6 @@ from app.services.playbackinfo_hook import (
     LOCAL_PLAYBACK_PROXY_QUERY_VALUE,
 )
 
-from app.core.config_manager import get_config
 from app.core.http_pool import ClientType, get_http_pool_sync
 from app.core.logging import get_logger
 from app.core.validators import validate_identifier
@@ -49,7 +48,6 @@ from app.services.emby_proxy_service import EmbyProxyService
 logger = get_logger(__name__)
 router = APIRouter(tags=["EmbyGateway"])
 
-config = get_config()
 config_service = get_config_service()
 
 _PLAYBACKINFO_RE = re.compile(r"^(?:emby/)?Items/(?P<item_id>[^/]+)/PlaybackInfo/?$", re.IGNORECASE)
@@ -247,7 +245,7 @@ async def _proxy_playback_info(request: Request, app_config, item_id: str) -> Re
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing API key")
 
-    cookie = config.get_quark_cookie()
+    cookie = str(getattr(getattr(app_config, "quark", None), "cookie", "") or "").strip()
     if not cookie:
         raise HTTPException(status_code=400, detail="Cookie not configured")
 

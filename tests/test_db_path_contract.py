@@ -7,6 +7,7 @@ from app.core.db import resolve_db_path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATABASE_COMPAT_PATH = PROJECT_ROOT / "app" / "core" / "database.py"
 DEPENDENCIES_CORE_PATH = PROJECT_ROOT / "app" / "core" / "dependencies.py"
+EMBY_GATEWAY_API_PATH = PROJECT_ROOT / "app" / "api" / "emby_gateway.py"
 STABLE_STREAM_API_PATH = PROJECT_ROOT / "app" / "api" / "stable_stream.py"
 DATABASE_COMPAT_IMPORT_PATTERN = re.compile(r"^\s*(?:from\s+app\.core\.database\s+import|import\s+app\.core\.database\b)", re.MULTILINE)
 CONFIG_MANAGER_IMPORT_PATTERN = re.compile(
@@ -70,5 +71,11 @@ def test_stable_stream_api_avoids_config_manager_getter_import() -> None:
 
 def test_dependencies_core_avoids_config_manager_getter_import() -> None:
     document = DEPENDENCIES_CORE_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_emby_gateway_api_avoids_config_manager_getter_import() -> None:
+    document = EMBY_GATEWAY_API_PATH.read_text(encoding="utf-8")
 
     assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
