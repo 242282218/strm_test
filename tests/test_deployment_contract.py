@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE_PATH = PROJECT_ROOT / "Dockerfile"
 COMPOSE_PATH = PROJECT_ROOT / "docker-compose.yml"
 ENV_EXAMPLE_PATH = PROJECT_ROOT / ".env.example"
+GITIGNORE_PATH = PROJECT_ROOT / ".gitignore"
 OPS_DOC_PATH = PROJECT_ROOT / "docs" / "operations" / "README.md"
 DOCKER_DEPLOY_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "docker-deploy-test.yml"
 DOCKER_PUBLISH_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "docker-publish.yml"
@@ -77,6 +78,37 @@ def test_operations_doc_matches_bootstrap_contract() -> None:
     assert "`/ready`" in document
     assert "CONFIG_PATH=/app/config.yaml" in document
     assert "SMART_MEDIA_SECURITY_API_KEY" in document
+
+
+def test_gitignore_and_operations_doc_cover_local_runtime_artifacts() -> None:
+    ignore_file = GITIGNORE_PATH.read_text(encoding="utf-8")
+    document = OPS_DOC_PATH.read_text(encoding="utf-8")
+
+    for pattern in (
+        ".coverage*",
+        "cache/",
+        "output/",
+        "target/",
+        "tmp_wheel/",
+        ".claude/",
+        "playwright-report/",
+        "test-results/",
+    ):
+        assert pattern in ignore_file
+
+    for path_hint in (
+        "`logs/`",
+        "`strm/`",
+        "`cache/`",
+        "`output/`",
+        "`target/`",
+        "`tmp_wheel/`",
+        "`web/playwright-report/`",
+        "`web/test-results/`",
+        "`.coverage*`",
+        "`.claude/`",
+    ):
+        assert path_hint in document
 
 
 def test_docker_workflows_deploy_the_intended_image() -> None:

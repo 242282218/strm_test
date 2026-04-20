@@ -67,6 +67,25 @@ docker compose up -d
 
 容器内始终通过 `CONFIG_PATH=/app/config.yaml` 读取配置，敏感值优先使用 `.env` 覆盖 `config.yaml`。认证密钥推荐使用 `SMART_MEDIA_SECURITY_API_KEY`；历史别名 `SMART_MEDIA_API_KEY` 与 `API_KEY` 仅保留兼容。
 
+#### 本地运行产物目录约定
+
+以下路径属于本地运行、测试或打包产物，应固定留在仓库内的约定位置，并保持未跟踪状态：
+
+| 路径 | 用途 |
+|------|------|
+| `logs/` | 后端运行日志 |
+| `strm/` | 生成的 `.strm` 输出 |
+| `cache/` | 本地缓存数据库与中间缓存 |
+| `output/` | 手工验证、诊断与临时导出产物 |
+| `target/` | 持续优化脚本与覆盖率临时产物 |
+| `tmp_wheel/` | 本地打包 wheel 临时目录 |
+| `web/playwright-report/` | Playwright HTML 报告 |
+| `web/test-results/` | Playwright 测试结果 |
+| `.coverage*` | 本地覆盖率文件 |
+| `.claude/` | 本地代理/工具状态目录 |
+
+新增本地脚本或验证流程时，优先复用以上边界；如必须引入新产物目录，需同步更新 `.gitignore` 与本文档。
+
 ### 源码部署
 
 #### 后端部署
