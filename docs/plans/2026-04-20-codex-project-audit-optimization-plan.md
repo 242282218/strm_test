@@ -39,7 +39,7 @@
 - `scripts/continuous_optimize.py` 的默认输入旋钮、报告输出落点、skip 规则与 `STOP_CONTINUOUS_LOOP` 停止语义，已回写到 `docs/development/codex-working-agreement.md` 并由 `tests/test_continuous_optimize_contract.py` 锁定。
 - 监控入口已收口到 `docs/monitoring/README.md`，明确当前真实已落地资产是仓库根 `prometheus.yml` 与 `docs/monitoring/grafana-dashboard.json`，不再把 `prometheus-rules.yml` / `alerting/alertmanager.yml` 误写成现有文件。
 - `docs/architecture/README.md`、`docs/guides/README.md` 与 `docs/guides/startup_guide.md` 已补齐最后同步、对应代码目录、执行入口和前端命令真相源，不再保留静态总述式目录索引漂移。
-- `app/api/strm.py` 与 `app/api/dashboard.py` 已移除对 `Database(resolve_db_path())` 兼容层 caller 的依赖，`resolve_db_path` 调用方也已回收到 `app.core.db`；当前 `app/` 层显式 `Database(...)` caller 已清零。
+- `app/api/strm.py` 与 `app/api/dashboard.py` 已移除对 `Database(resolve_db_path())` 兼容层 caller 的依赖，`resolve_db_path` 调用方也已回收到 `app.core.db`；当前 `app/` 层显式 `Database(...)` caller 已清零，并由 `tests/test_db_path_contract.py` 阻止重新引入 `app.core.database` import。
 
 ### 当前剩余边界
 
@@ -67,7 +67,7 @@
 | Phase 0 | 已完成 | `current-state.md`、`compatibility-inventory.md`、`codex-working-agreement.md` 与对应 contract 已落地。 |
 | Phase 1 | 已完成 | CI 门禁、coverage 真相源、运行产物边界与 `.gitignore` 已收敛。 |
 | Phase 2 | 部分完成 | canonical path 映射表已补齐，但 `app/api/v1/*` 仍未完全摆脱 legacy 实现复用。 |
-| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract 与首批 caller-level 收敛已补，但基础设施代码尚未进入实质拆分。 |
+| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理与 import guard 已补，但基础设施代码尚未进入实质拆分。 |
 | Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
 | Phase 5 | 已完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/architecture/README.md`、`docs/guides/*.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新。 |
 | Phase 6 | 已完成 | 热点、wrapper、重复 endpoint 类型、入口链接漂移，以及 `scripts/continuous_optimize.py` 的输入输出/skip 规则都已有 contract。 |

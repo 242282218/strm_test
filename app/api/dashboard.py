@@ -10,7 +10,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import or_
 
-from app.core.config_manager import get_config
 from app.core.db import get_db_session
 from app.core.logging import get_logger
 from app.models.strm_record import StrmRecord
@@ -26,8 +25,6 @@ router = APIRouter(prefix="/api/dashboard", tags=["仪表盘"])
 # 全局实例
 _task_scheduler: TaskScheduler = None
 _link_cache: LinkCache = None
-config = get_config()
-config_service = get_config_service()
 
 TASK_TYPE_LABELS = {
     "strm_generation": "生成 STRM",
@@ -90,7 +87,8 @@ async def get_dashboard_stats() -> dict[str, Any]:
         recent_tasks = get_recent_tasks(get_platform_tasks(limit=5))
 
         # 5. 服务状态
-        services = get_services_status(scheduler_status, cache_stats)
+        app_config = get_config_service().get_config()
+        services = get_services_status(scheduler_status, cache_stats, app_config)
 
         # 6. 文件类型分布
         file_type_distribution = calculate_file_types(strm_files)
@@ -270,7 +268,7 @@ def build_task_trends(tasks: list[Any], days: int) -> tuple[list[str], list[int]
     return dates, success_data, failed_data
 
 
-def get_services_status(task_status: dict, cache_stats: dict) -> list[dict[str, str]]:
+def get_services_status(task_status: dict, cache_stats: dict, app_config: Any) -> list[dict[str, str]]:
     """
     获取服务状态列表
 
@@ -285,7 +283,7 @@ def get_services_status(task_status: dict, cache_stats: dict) -> list[dict[str, 
         {"name": "API服务", "status": "running"},
         {"name": "任务调度器", "status": "running" if task_status.get("running") else "stopped"},
         {"name": "缓存服务", "status": "running" if cache_stats.get("running") else "stopped"},
-        {"name": "Emby代理", "status": "running" if config.get_quark_cookie() else "stopped"},
+        {"name": "Emby代理", "status": "running" if getattr(getattr(app_config, "quark", None), "cookie", "") else "stopped"},
     ]
     return services
 

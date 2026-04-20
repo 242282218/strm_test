@@ -128,14 +128,9 @@ def test_get_recent_tasks_returns_empty_on_error() -> None:
     assert dashboard.get_recent_tasks([BrokenTask()]) == []
 
 
-def test_get_services_status_reflects_cookie_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    class ConfigWithCookie:
-        @staticmethod
-        def get_quark_cookie() -> str:
-            return "cookie"
-
-    monkeypatch.setattr(dashboard, "config", ConfigWithCookie())
-    services = dashboard.get_services_status({"running": True}, {"running": False})
+def test_get_services_status_reflects_cookie_state() -> None:
+    app_config = SimpleNamespace(quark=SimpleNamespace(cookie="cookie"))
+    services = dashboard.get_services_status({"running": True}, {"running": False}, app_config)
 
     assert services == [
         {"name": "API服务", "status": "running"},
@@ -172,6 +167,11 @@ async def test_get_dashboard_stats_success(monkeypatch: pytest.MonkeyPatch) -> N
         dashboard,
         "get_strm_files",
         lambda: [{"file_name": "a.mkv"}, {"file_name": "b.mp4"}, {"name": "noext"}],
+    )
+    monkeypatch.setattr(
+        dashboard,
+        "get_config_service",
+        lambda: SimpleNamespace(get_config=lambda: SimpleNamespace(quark=SimpleNamespace(cookie="cookie"))),
     )
 
     async def _get_scheduler() -> FakeScheduler:
