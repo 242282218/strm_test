@@ -9,6 +9,7 @@ COMPATIBILITY_DOC_PATH = PROJECT_ROOT / "docs" / "development" / "compatibility-
 CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md"
 DEVELOPMENT_README_PATH = PROJECT_ROOT / "docs" / "development" / "README.md"
 WEB_README_PATH = PROJECT_ROOT / "web" / "README.md"
+PLAN_DOC_PATH = PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md"
 
 
 def _iter_feature_wrappers() -> Iterator[str]:
@@ -134,3 +135,20 @@ def test_development_and_web_readmes_match_current_command_contract() -> None:
     assert "pnpm run test:e2e" in web_document
     assert "web/package-lock.json" in web_document
     assert "npm run dev -- --host ... --port ..." in web_document
+
+
+def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
+    document = PLAN_DOC_PATH.read_text(encoding="utf-8")
+
+    for hint in (
+        "执行进度快照（2026-04-20 更新）",
+        "docs/architecture/current-state.md",
+        "docs/development/compatibility-inventory.md",
+        "docs/development/codex-working-agreement.md",
+        "web/package-lock.json",
+        "app/api/v1",
+        "web/src/features/config/*",
+        "npm run dev",
+        "pnpm run ...",
+    ):
+        assert hint in document
