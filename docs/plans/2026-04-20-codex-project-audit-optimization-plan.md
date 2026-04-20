@@ -45,10 +45,39 @@
 
 ### 当前执行入口
 
-- `docs/architecture/current-state.md`：当前后端/前端/CI 基线和热点分布。
-- `docs/architecture/core-truth-source-boundaries.md`：`config/db/exception` 当前职责边界和 Phase 3 进入说明。
-- `docs/development/compatibility-inventory.md`：前端 wrapper 清单、状态与退役条件。
-- `docs/development/codex-working-agreement.md`：当前 truth-source、避让区域和最小验证基线。
+- [`docs/architecture/current-state.md`](../architecture/current-state.md)：当前后端/前端/CI 基线和热点分布。
+- [`docs/architecture/core-truth-source-boundaries.md`](../architecture/core-truth-source-boundaries.md)：`config/db/exception` 当前职责边界和 Phase 3 进入说明。
+- [`docs/development/compatibility-inventory.md`](../development/compatibility-inventory.md)：前端 wrapper 清单、状态与退役条件。
+- [`docs/development/codex-working-agreement.md`](../development/codex-working-agreement.md)：当前 truth-source、避让区域和最小验证基线。
+
+### Phase / Iteration 状态总览
+
+下文 Phase 与 Iteration 正文保留原始路线图，当前完成状态以上方快照与本节为准。
+
+| 区块 | 当前状态 | 说明 |
+| --- | --- | --- |
+| Phase 0 | 已完成 | `current-state.md`、`compatibility-inventory.md`、`codex-working-agreement.md` 与对应 contract 已落地。 |
+| Phase 1 | 已完成 | CI 门禁、coverage 真相源、运行产物边界与 `.gitignore` 已收敛。 |
+| Phase 2 | 部分完成 | canonical path 映射表已补齐，但 `app/api/v1/*` 仍未完全摆脱 legacy 实现复用。 |
+| Phase 3 | 部分完成 | `config/db/exception` 边界文档与 `resolve_db_path()` contract 已补，但基础设施代码尚未进入实质拆分。 |
+| Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
+| Phase 5 | 大部分完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新；`docs/architecture/README.md`、`docs/guides/README.md` 仍因脏工作树暂不扩散修改。 |
+| Phase 6 | 部分完成 | wrapper 数量、重复 endpoint 类型与入口链接漂移已有 contract，`scripts/continuous_optimize.py` 的输入输出/skip 规则仍待补。 |
+| Iteration 1 | 已完成 | 已完成 CI 门禁与 `.gitignore` 收敛。 |
+| Iteration 2 | 已完成到映射表层 | 已完成 API canonical path 设计与映射表，尚未进入 v1-only 实现树。 |
+| Iteration 3 | 已完成到边界文档层 | 已完成 `config/db/exception` 入口边界文档化，尚未进入基础设施重构。 |
+| Iteration 4 | 部分完成 | 已完成 `file-manager` 子项，`config` / `rename` 拆分仍待后续在干净切片推进。 |
+| Iteration 5 | 大部分完成 | 核心索引、入口文档与 contract test 基本落地，剩余 `architecture/guides` README 待脏改动边界明确。 |
+| Iteration 6 | 部分完成 | 持续优化护栏已覆盖热点、wrapper、重复类型与链接漂移，持续优化脚本 contract 仍缺失。 |
+
+### 首批执行清单状态
+
+1. `[已完成]` 收敛 `.github/workflows/ci.yml` 和 `quark_strm/.github/workflows/*.yml` 的质量门禁。
+2. `[已完成]` 补齐 `quark_strm/.gitignore`，清除运行产物噪音来源。
+3. `[已完成]` 产出 API canonical path 映射表。
+4. `[已完成]` 清理前端 `file-manager` 双 API 类型定义。
+5. `[未开始]` 拆 `ConfigView.vue` 的状态/动作层。
+6. `[已完成]` 刷新 `docs/FILE_INDEX.md` 与 `docs/operations/README.md`。
 
 ### 当前推荐后续顺序
 

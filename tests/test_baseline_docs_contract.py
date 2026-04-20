@@ -61,6 +61,7 @@ EXECUTION_ENTRY_DOCS_WITH_LINKS = (
     CURRENT_STATE_DOC_PATH,
     DEVELOPMENT_README_PATH,
     CODEX_WORKING_AGREEMENT_PATH,
+    PLAN_DOC_PATH,
 )
 
 
@@ -323,6 +324,17 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "docs/architecture/core-truth-source-boundaries.md",
         "docs/development/compatibility-inventory.md",
         "docs/development/codex-working-agreement.md",
+        "Phase / Iteration 状态总览",
+        "Phase 0 | 已完成",
+        "Phase 5 | 大部分完成",
+        "Iteration 1 | 已完成",
+        "Iteration 6 | 部分完成",
+        "首批执行清单状态",
+        "`[已完成]` 收敛 `.github/workflows/ci.yml`",
+        "`[未开始]` 拆 `ConfigView.vue` 的状态/动作层。",
+        "下文 Phase 与 Iteration 正文保留原始路线图",
+        "../architecture/current-state.md",
+        "../development/codex-working-agreement.md",
         "web/package-lock.json",
         "app/api/v1",
         "web/src/features/config/*",
