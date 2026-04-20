@@ -89,9 +89,9 @@
 - `app/core/exceptions.py` 和 `app/core/exception_handler.py` 不是重复模块：前者定义异常语义，后者定义 HTTP 响应表现。
 - `app/config/settings.py` 虽然过大，但当前确实还是配置 schema 真相源；如果不先明确这一点，后续很容易把新字段散落到别处。
 - `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py`、`app/api/proxy.py`、`app/api/emby.py` 与 `app/core/dependencies.py` 已不再走 `config_manager` compatibility path，但 `app/api/quark.py` 仍保留 `get_config()` 兼容读取，不能误判为 API 层已经彻底退掉 `config_manager`。
-- `app/services/token_monitor.py` 与 `app/services/webdav_fallback.py` 已不再直接 import `get_config()`；当前 Quark cookie 和 WebDAV fallback 配置统一走 `get_config_service()`，并保留最小 helper 作为测试 patch 点。
-- service/core 层当前仍有 11 个 `config_manager` compatibility caller：`app/core/path_security.py`、`app/services/ai_connectivity_service.py`、`app/services/emby_proxy_service.py`、`app/services/integrations/emby.py`、`app/services/link_resolver.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/storage/quark.py`、`app/services/unified_ai_service.py`；它们只是“剩余清单已明确”，不是“已经收口完成”。
-- `tests/test_db_path_contract.py` 已锁定 “API 只剩 `app/api/quark.py` + token_monitor/webdav_fallback 不得回退 + service/core 剩余 11 个 caller” 这个 Phase 3 现状。后续若继续收口，必须同步更新 inventory 和文档，不能让新 caller 悄悄扩散。
+- `app/services/token_monitor.py`、`app/services/webdav_fallback.py` 与 `app/core/path_security.py` 已不再直接 import `ConfigManager` / `get_config()`；当前 Quark cookie、WebDAV fallback 配置和允许目录补充读取统一走 `get_config_service()`，并保留最小 helper 作为测试 patch 点。
+- service/core 层当前仍有 10 个 `config_manager` compatibility caller：`app/services/ai_connectivity_service.py`、`app/services/emby_proxy_service.py`、`app/services/integrations/emby.py`、`app/services/link_resolver.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/storage/quark.py`、`app/services/unified_ai_service.py`；它们只是“剩余清单已明确”，不是“已经收口完成”。
+- `tests/test_db_path_contract.py` 已锁定 “API 只剩 `app/api/quark.py` + path_security/token_monitor/webdav_fallback 不得回退 + service/core 剩余 10 个 caller” 这个 Phase 3 现状。后续若继续收口，必须同步更新 inventory 和文档，不能让新 caller 悄悄扩散。
 
 ## 5. 推荐验证锚点
 

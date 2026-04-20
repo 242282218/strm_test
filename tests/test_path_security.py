@@ -1,6 +1,4 @@
 import os
-import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -12,15 +10,7 @@ def test_get_allowed_directories_appends_config_local_directory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     extra_dir = tmp_path / "media"
-
-    class DummyConfigManager:
-        def get(self, key: str, default):
-            if key == "endpoints":
-                return [{"dirs": [{"local_directory": str(extra_dir)}]}]
-            return default
-
-    fake_module = types.SimpleNamespace(ConfigManager=DummyConfigManager)
-    monkeypatch.setitem(sys.modules, "app.core.config_manager", fake_module)
+    monkeypatch.setattr(path_security, "get_configured_local_directory", lambda: str(extra_dir))
 
     allowed = path_security.get_allowed_directories()
 
@@ -30,13 +20,8 @@ def test_get_allowed_directories_appends_config_local_directory(
 def test_get_allowed_directories_falls_back_to_default_on_config_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class BadConfigManager:
-        def __init__(self) -> None:
-            raise RuntimeError("config load failed")
-
     warnings: list[str] = []
-    fake_module = types.SimpleNamespace(ConfigManager=BadConfigManager)
-    monkeypatch.setitem(sys.modules, "app.core.config_manager", fake_module)
+    monkeypatch.setattr(path_security, "get_configured_local_directory", lambda: (_ for _ in ()).throw(RuntimeError("config load failed")))
     monkeypatch.setattr(path_security.logger, "warning", lambda msg: warnings.append(msg))
 
     allowed = path_security.get_allowed_directories()

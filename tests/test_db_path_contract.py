@@ -11,11 +11,11 @@ EMBY_GATEWAY_API_PATH = PROJECT_ROOT / "app" / "api" / "emby_gateway.py"
 STABLE_STREAM_API_PATH = PROJECT_ROOT / "app" / "api" / "stable_stream.py"
 PROXY_API_PATH = PROJECT_ROOT / "app" / "api" / "proxy.py"
 EMBY_API_PATH = PROJECT_ROOT / "app" / "api" / "emby.py"
+PATH_SECURITY_CORE_PATH = PROJECT_ROOT / "app" / "core" / "path_security.py"
 TOKEN_MONITOR_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "token_monitor.py"
 WEBDAV_FALLBACK_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "webdav_fallback.py"
 API_CONFIG_MANAGER_GETTER_INVENTORY = ["app/api/quark.py"]
 SERVICE_CORE_CONFIG_MANAGER_COMPAT_INVENTORY = [
-    "app/core/path_security.py",
     "app/services/ai_connectivity_service.py",
     "app/services/emby_proxy_service.py",
     "app/services/integrations/emby.py",
@@ -134,6 +134,13 @@ def test_proxy_api_avoids_config_manager_getter_import() -> None:
 def test_emby_api_avoids_config_manager_getter_import() -> None:
     document = EMBY_API_PATH.read_text(encoding="utf-8")
 
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_path_security_core_avoids_direct_config_manager_imports() -> None:
+    document = PATH_SECURITY_CORE_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_IMPORT_PATTERN.search(document) is None
     assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
 
 
