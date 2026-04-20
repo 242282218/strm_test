@@ -40,11 +40,13 @@
 - 监控入口已收口到 `docs/monitoring/README.md`，明确当前真实已落地资产是仓库根 `prometheus.yml` 与 `docs/monitoring/grafana-dashboard.json`，不再把 `prometheus-rules.yml` / `alerting/alertmanager.yml` 误写成现有文件。
 - `docs/architecture/README.md`、`docs/guides/README.md` 与 `docs/guides/startup_guide.md` 已补齐最后同步、对应代码目录、执行入口和前端命令真相源，不再保留静态总述式目录索引漂移。
 - `app/api/strm.py` 与 `app/api/dashboard.py` 已移除对 `Database(resolve_db_path())` 兼容层 caller 的依赖，`resolve_db_path` 调用方也已回收到 `app.core.db`；当前 `app/` 层显式 `Database(...)` caller 已清零，并由 `tests/test_db_path_contract.py` 阻止重新引入 `app.core.database` import。
+- `app/api/tmdb.py` 已移除对 `ConfigManager` 的运行态直连，TMDB API key 统一通过 `get_config_service()` 读取，并由 `tests/test_tmdb_api.py` + `tests/test_db_path_contract.py` 锁定 canonical `tmdb.api_key` 优先、legacy `api_keys.tmdb_api_key` 回退与 API 层 import 护栏。
 
 ### 当前剩余边界
 
 - `web/src/features/config/*` 仍是已有大量未提交修改的脏切片，除非是极小 blast radius 的真相源修正，否则不要继续深改。
 - `app/api/v1/*` 虽然已经是 public canonical path 层，但内部仍复用部分 legacy router；不能把当前状态误写成“v1-only 实现树已完成”。
+- `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py`、`app/api/stable_stream.py` 仍保留 `get_config()` 兼容读取；当前只能说 API 层已开始收口运行态配置 caller，不能误写成 `config_manager` 已彻底退出 API 层。
 - 前端安装层仍未完成 `pnpm-lock.yaml` 迁移；当前正确表述是“CI 装依赖用 `npm ci`，本地脚本执行默认 `pnpm run ...`”，而不是简单把所有地方都替换成 `pnpm install --frozen-lockfile`。
 - 监控目录当前还没有 `prometheus-rules.yml` 与 `alerting/alertmanager.yml`；后续若补告警能力，应先提交真实资产文件，再更新索引与 contract test。
 
@@ -67,13 +69,13 @@
 | Phase 0 | 已完成 | `current-state.md`、`compatibility-inventory.md`、`codex-working-agreement.md` 与对应 contract 已落地。 |
 | Phase 1 | 已完成 | CI 门禁、coverage 真相源、运行产物边界与 `.gitignore` 已收敛。 |
 | Phase 2 | 部分完成 | canonical path 映射表已补齐，但 `app/api/v1/*` 仍未完全摆脱 legacy 实现复用。 |
-| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理与 import guard 已补，但基础设施代码尚未进入实质拆分。 |
+| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理、TMDB API 运行态 caller 收口与 import guard 已补，但基础设施代码尚未进入实质拆分。 |
 | Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
 | Phase 5 | 已完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/architecture/README.md`、`docs/guides/*.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新。 |
 | Phase 6 | 已完成 | 热点、wrapper、重复 endpoint 类型、入口链接漂移，以及 `scripts/continuous_optimize.py` 的输入输出/skip 规则都已有 contract。 |
 | Iteration 1 | 已完成 | 已完成 CI 门禁与 `.gitignore` 收敛。 |
 | Iteration 2 | 已完成到映射表层 | 已完成 API canonical path 设计与映射表，尚未进入 v1-only 实现树。 |
-| Iteration 3 | 已完成到边界文档 / caller 收敛层 | 已完成 `config/db/exception` 入口边界文档化，并清掉 STRM API 的无效 `Database` 兼容层实例化；尚未进入基础设施重构。 |
+| Iteration 3 | 已完成到边界文档 / caller 收敛层 | 已完成 `config/db/exception` 入口边界文档化、STRM API 的无效 `Database` 兼容层实例化清理，以及 TMDB API 的 `ConfigManager` 直连收口；尚未进入基础设施重构。 |
 | Iteration 4 | 部分完成 | 已完成 `file-manager` 子项，`config` / `rename` 拆分仍待后续在干净切片推进。 |
 | Iteration 5 | 已完成 | 核心索引、入口文档、`architecture/guides` 目录索引与 contract test 已落地。 |
 | Iteration 6 | 已完成 | 持续优化护栏已覆盖热点、wrapper、重复类型、链接漂移，以及持续优化脚本输入输出/skip 语义。 |

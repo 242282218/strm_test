@@ -72,13 +72,15 @@
 
 - 当前是运行时配置 facade。
 - `get_config_service()` 提供单例入口，内部还承载了加载、保存、watcher、回滚、回调通知等多职责。
+- `app/api/tmdb.py` 已作为 API 层首个运行态配置 caller 收口到这里，TMDB key 读取顺序固定为 `tmdb.api_key` 优先、`api_keys.tmdb_api_key` 回退。
 - 这意味着它是运行时入口，但还不是理想的单一职责设计。
 
 当前建议：
 
 1. 运行时读写配置优先通过 `get_config_service()`，不要新写一套旁路。
-2. schema、环境变量归一化问题优先回到 `settings.py` 解决。
-3. watcher/rollback/notification 的进一步拆分应在后续收敛里做，不要先用 workaround 再叠一层。
+2. API 层如果只是读取运行态配置，直接取 `AppConfig` 字段，不要在 route 里实例化 `ConfigManager`。
+3. schema、环境变量归一化问题优先回到 `settings.py` 解决。
+4. watcher/rollback/notification 的进一步拆分应在后续收敛里做，不要先用 workaround 再叠一层。
 
 ## 4. 当前不要误判的点
 
@@ -86,11 +88,12 @@
 - `app/core/db_utils.py` 不是 engine/session 入口，它只是工具层。
 - `app/core/exceptions.py` 和 `app/core/exception_handler.py` 不是重复模块：前者定义异常语义，后者定义 HTTP 响应表现。
 - `app/config/settings.py` 虽然过大，但当前确实还是配置 schema 真相源；如果不先明确这一点，后续很容易把新字段散落到别处。
+- `app/api/tmdb.py` 已不再直连 `ConfigManager`，但 `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py`、`app/api/stable_stream.py` 等仍保留 `get_config()` 兼容读取，不能误判为 API 层已经完全退掉 `config_manager`。
 
 ## 5. 推荐验证锚点
 
 - 数据库/连接池相关：`tests/test_db.py`、`tests/test_db_pool.py`
-- 配置/API 相关：`tests/test_system_config_api.py`
+- 配置/API 相关：`tests/test_system_config_api.py`、`tests/test_tmdb_api.py`、`tests/test_db_path_contract.py`
 - 异常/安全相关：`tests/test_encryption.py`
 
 进入真正的 Phase 3 代码收敛前，应先以这份边界文档为入口，再决定哪些模块是“继续保留的 facade”，哪些才是应该下沉或删除的兼容层。

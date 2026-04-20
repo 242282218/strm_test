@@ -17,7 +17,7 @@ from app.services.tmdb_service import (
     TMDBEpisode
 )
 from app.services.cache_service import get_cache_service
-from app.core.config_manager import ConfigManager
+from app.services.config_service import get_config_service
 from app.core.logging import get_logger
 from app.core.dependencies import require_api_key
 
@@ -117,10 +117,20 @@ class EpisodeResponse(BaseModel):
     still_url: Optional[str] = None
 
 
+def _resolve_tmdb_api_key(app_config: object) -> str:
+    canonical_tmdb = getattr(getattr(app_config, "tmdb", None), "api_key", "")
+    if canonical_tmdb:
+        return str(canonical_tmdb).strip()
+
+    legacy_api_keys = getattr(app_config, "api_keys", None)
+    legacy_tmdb = getattr(legacy_api_keys, "tmdb_api_key", "")
+    return str(legacy_tmdb or "").strip()
+
+
 def _get_tmdb_service():
     """获取TMDB服务实例"""
-    config_manager = ConfigManager()
-    api_key = config_manager.get("api_keys.tmdb_api_key") or config_manager.get("tmdb.api_key")
+    app_config = get_config_service().get_config()
+    api_key = _resolve_tmdb_api_key(app_config)
     
     if not api_key:
         raise HTTPException(

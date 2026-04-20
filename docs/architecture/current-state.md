@@ -97,4 +97,6 @@
 - `app/api/v1` 已是对外 canonical path 层，但内部仍依赖 legacy router 复用，不能误判为“已经彻底完成 API 分层”。
 - 进入 Phase 3 前，先看 [`core-truth-source-boundaries.md`](./core-truth-source-boundaries.md)；当前 `config/db/exception` 仍应按“`db.py` 主入口 + `database.py` 兼容层 + `db_utils.py` 工具层 / `error_codes.py` 错误码 / `exceptions.py` 领域异常 / `exception_handler.py` HTTP 响应层”理解。
 - `app/api/strm.py` 与 `app/api/dashboard.py` 都已不再依赖 `Database` 兼容层 caller；当前 `app/` 层显式 `Database(...)` 调用已清零，并由 `tests/test_db_path_contract.py` 锁定。
+- `app/api/tmdb.py` 已不再直接 import `ConfigManager`；TMDB API key 读取统一走 `get_config_service()`，并由 `tests/test_tmdb_api.py` + `tests/test_db_path_contract.py` 锁定 canonical `tmdb.api_key` 优先、legacy `api_keys.tmdb_api_key` 回退和 API 层 import 护栏。
+- `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py`、`app/api/stable_stream.py` 仍保留 `get_config()` 兼容读取，所以 Phase 3 现在是“caller 持续收口中”，不是“配置兼容层已退役”。
 - 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再进入更深层的拆分或删兼容层。

@@ -7,6 +7,10 @@ from app.core.db import resolve_db_path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATABASE_COMPAT_PATH = PROJECT_ROOT / "app" / "core" / "database.py"
 DATABASE_COMPAT_IMPORT_PATTERN = re.compile(r"^\s*(?:from\s+app\.core\.database\s+import|import\s+app\.core\.database\b)", re.MULTILINE)
+CONFIG_MANAGER_IMPORT_PATTERN = re.compile(
+    r"^\s*from\s+app\.core\.config_manager\s+import\s+.*\bConfigManager\b",
+    re.MULTILINE,
+)
 
 
 def test_resolve_db_path_uses_current_working_directory_for_relative_paths(
@@ -36,6 +40,17 @@ def test_app_code_avoids_database_compatibility_imports() -> None:
 
         document = path.read_text(encoding="utf-8")
         if DATABASE_COMPAT_IMPORT_PATTERN.search(document):
+            offenders.append(path.relative_to(PROJECT_ROOT).as_posix())
+
+    assert offenders == []
+
+
+def test_api_code_avoids_direct_config_manager_imports() -> None:
+    offenders: list[str] = []
+
+    for path in (PROJECT_ROOT / "app" / "api").rglob("*.py"):
+        document = path.read_text(encoding="utf-8")
+        if CONFIG_MANAGER_IMPORT_PATTERN.search(document):
             offenders.append(path.relative_to(PROJECT_ROOT).as_posix())
 
     assert offenders == []
