@@ -50,7 +50,7 @@
 
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
-| `app/api/emby.py` | 1145 | Emby 路由仍是最大的单体 API 模块 |
+| `app/api/emby.py` | 1153 | Emby 路由仍是最大的单体 API 模块 |
 | `app/api/quark.py` | 1053 | 夸克入口仍聚合多类能力 |
 | `app/services/media/scrape.py` | 968 | 刮削流程与媒体领域逻辑耦合度高 |
 | `app/core/cache_manager.py` | 934 | 核心缓存协调入口仍偏重 |
@@ -58,7 +58,7 @@
 | `app/config/settings.py` | 862 | 配置 schema 仍集中在单文件 |
 | `app/services/media/smart_rename.py` | 850 | 智能重命名服务职责偏多 |
 | `app/api/scrape.py` | 820 | 刮削 API 仍较重 |
-| `app/api/proxy.py` | 765 | 代理路由仍是后端入口热点 |
+| `app/api/proxy.py` | 772 | 代理路由仍是后端入口热点 |
 | `app/services/security_audit_service.py` | 753 | 安全审计服务已形成新的大模块 |
 
 ### 前端热点（`web/src/`）
@@ -80,10 +80,10 @@
 
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
-| `tests/test_emby_proxy_routing.py` | 3396 | Emby 路由回归面极大，改动成本高 |
-| `tests/test_emby_gateway.py` | 2029 | Gateway 契约已形成大型保护网 |
+| `tests/test_emby_proxy_routing.py` | 3431 | Emby 路由回归面极大，改动成本高 |
+| `tests/test_emby_gateway.py` | 2020 | Gateway 契约已形成大型保护网 |
 | `tests/test_db.py` | 675 | 数据库真相源收敛时需优先关注 |
-| `tests/test_dependencies.py` | 573 | 依赖注入边界测试面在持续扩大 |
+| `tests/test_dependencies.py` | 611 | 依赖注入边界测试面在持续扩大 |
 | `tests/test_db_pool.py` | 550 | 数据库连接池回归面仍不小 |
 | `tests/test_lru_cache.py` | 546 | 缓存基础设施测试规模已接近数据库热点 |
 | `tests/test_strm_service.py` | 540 | STRM 服务回归面与 API 热点并行增长 |

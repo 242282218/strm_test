@@ -2,6 +2,8 @@ from collections.abc import Iterator
 from pathlib import Path
 import re
 
+from tests.contract_inventory import PHASE3_CONFIG_MANAGER_INVENTORY_HINTS, PHASE3_DOC_SNAPSHOT_DATE
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOCS_INDEX_PATH = PROJECT_ROOT / "docs" / "README.md"
@@ -152,9 +154,16 @@ def _assert_relative_links_resolve(path: Path) -> None:
         assert resolved_path.exists(), f"{path.relative_to(PROJECT_ROOT).as_posix()} link target missing: {relative_target}"
 
 
+def _assert_phase3_inventory_hints(document: str) -> None:
+    for path_hint in PHASE3_CONFIG_MANAGER_INVENTORY_HINTS:
+        assert path_hint in document
+
+
 def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
     document = CURRENT_STATE_DOC_PATH.read_text(encoding="utf-8")
     wrapper_counts = _feature_wrapper_counts()
+
+    assert f"**最后校验**: {PHASE3_DOC_SNAPSHOT_DATE}" in document
 
     for path_hint in (
         "app/config/application.py",
@@ -179,6 +188,8 @@ def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
         f"Store 包装：{wrapper_counts['stores']}",
     ):
         assert count_hint in document
+
+    _assert_phase3_inventory_hints(document)
 
 
 def test_current_state_hotspot_paths_exist_in_repo() -> None:
@@ -416,7 +427,7 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
     document = PLAN_DOC_PATH.read_text(encoding="utf-8")
 
     for hint in (
-        "执行进度快照（2026-04-20 更新）",
+        f"执行进度快照（{PHASE3_DOC_SNAPSHOT_DATE} 更新）",
         "docs/architecture/current-state.md",
         "docs/architecture/core-truth-source-boundaries.md",
         "docs/api/README.md",
@@ -455,6 +466,8 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
     ):
         assert hint in document
 
+    _assert_phase3_inventory_hints(document)
+
 
 def test_monitoring_doc_tracks_live_assets_and_links() -> None:
     document = MONITORING_DOC_PATH.read_text(encoding="utf-8")
@@ -482,7 +495,7 @@ def test_core_truth_source_boundary_doc_tracks_phase3_entrypoints() -> None:
     document = CORE_BOUNDARIES_DOC_PATH.read_text(encoding="utf-8")
 
     for hint in (
-        "**最后校验**: 2026-04-20",
+        f"**最后校验**: {PHASE3_DOC_SNAPSHOT_DATE}",
         "app/core/db.py",
         "app/core/database.py",
         "app/core/db_utils.py",
@@ -497,3 +510,5 @@ def test_core_truth_source_boundary_doc_tracks_phase3_entrypoints() -> None:
         "tests/test_encryption.py",
     ):
         assert hint in document
+
+    _assert_phase3_inventory_hints(document)

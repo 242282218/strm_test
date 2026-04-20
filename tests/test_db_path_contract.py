@@ -2,6 +2,10 @@ import re
 from pathlib import Path
 
 from app.core.db import resolve_db_path
+from tests.contract_inventory import (
+    API_CONFIG_MANAGER_GETTER_INVENTORY,
+    SERVICE_CORE_CONFIG_MANAGER_COMPAT_INVENTORY,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,15 +22,6 @@ WEBDAV_FALLBACK_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "webdav_fallb
 LINK_RESOLVER_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "link_resolver.py"
 QUARK_STORAGE_PROVIDER_PATH = PROJECT_ROOT / "app" / "services" / "storage" / "quark.py"
 EMBY_PROXY_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "emby_proxy_service.py"
-API_CONFIG_MANAGER_GETTER_INVENTORY = ["app/api/quark.py"]
-SERVICE_CORE_CONFIG_MANAGER_COMPAT_INVENTORY = [
-    "app/services/integrations/emby.py",
-    "app/services/media/organize.py",
-    "app/services/media/rename.py",
-    "app/services/media/smart_rename.py",
-    "app/services/media/strm_generator.py",
-    "app/services/unified_ai_service.py",
-]
 DATABASE_COMPAT_IMPORT_PATTERN = re.compile(r"^\s*(?:from\s+app\.core\.database\s+import|import\s+app\.core\.database\b)", re.MULTILINE)
 CONFIG_MANAGER_IMPORT_PATTERN = re.compile(
     r"^\s*from\s+app\.core\.config_manager\s+import\s+.*\bConfigManager\b",
