@@ -11,6 +11,7 @@
 - 当前 SQLAlchemy engine/session 的主入口。
 - `get_engine()`、`SessionLocal`、`get_db()`、`get_db_session()`、`init_db()` 都在这里。
 - 连接池类型切换、SQLite PRAGMA、连接池健康检查也集中在这里。
+- `resolve_db_path()` 当前对相对路径按当前工作目录解析，不会自动把数据库文件放进 `data/`。
 
 当前建议：
 
