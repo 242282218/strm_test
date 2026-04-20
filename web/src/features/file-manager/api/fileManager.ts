@@ -1,53 +1,63 @@
-import api from '@/api/index'
+import {
+  fileManagerApi,
+  type BrowseResponse,
+  type FileItem,
+  type FileOperationRequest,
+} from './file-manager'
 
-export interface FileItem {
-  id: string
-  name: string
-  path: string
-  type?: 'folder' | 'file'
-  file_type?: 'folder' | 'file'
-  size?: number
-  selected?: boolean
+type LegacyFileOperation = FileOperationRequest['action']
+type LegacyFileOperationParams = Record<string, unknown>
+
+function resolveLegacyPaths(params: LegacyFileOperationParams): string[] {
+  const paths = params.paths
+  if (Array.isArray(paths)) {
+    return paths.filter((value): value is string => typeof value === 'string')
+  }
+
+  const path = params.path
+  if (typeof path === 'string' && path.length > 0) {
+    return [path]
+  }
+
+  return []
 }
 
-export interface BrowseResponse {
-  items: FileItem[]
-  total: number
-  path: string
+function resolveLegacyStorage(params: LegacyFileOperationParams): FileOperationRequest['storage'] {
+  const storage = params.storage
+  if (storage === 'local' || storage === 'quark' || storage === 'alist' || storage === 'webdav') {
+    return storage
+  }
+
+  return 'quark'
 }
 
-interface DataEnvelope<T> {
-  data: T
+function buildLegacyOperationPayload(
+  operation: LegacyFileOperation,
+  params: LegacyFileOperationParams,
+): FileOperationRequest {
+  return {
+    action: operation,
+    storage: resolveLegacyStorage(params),
+    paths: resolveLegacyPaths(params),
+    target: typeof params.target === 'string' ? params.target : undefined,
+    new_name: typeof params.new_name === 'string' ? params.new_name : undefined,
+  }
 }
 
-/**
- * 浏览文件目录
- * @param path 目录路径
- * @param storage 存储类型，默认为夸克网盘
- */
 export const browseFiles = async (
   path: string = '/',
-  storage: string = 'quark'
+  storage: FileOperationRequest['storage'] = 'quark',
 ): Promise<BrowseResponse> => {
-  const res = await api.get<DataEnvelope<BrowseResponse>>('/files/browse', {
-    params: { path, storage }
-  })
-  return res.data
+  const response = await fileManagerApi.browse({ path, storage })
+  return response.data
 }
 
-/**
- * 执行文件操作
- * @param operation 操作类型
- * @param params 操作参数
- */
 export const fileOperation = async (
-  operation: 'rename' | 'move' | 'delete' | 'mkdir',
-  params: Record<string, unknown>
+  operation: LegacyFileOperation,
+  params: LegacyFileOperationParams,
 ): Promise<Record<string, unknown>> => {
-  const res = await api.post<DataEnvelope<Record<string, unknown>>, Record<string, unknown>>('/files/operation', {
-    operation,
-    ...params
-  })
-  return res.data
+  const response = await fileManagerApi.operation(buildLegacyOperationPayload(operation, params))
+  return response.data
 }
 
+export type { BrowseResponse, FileItem }

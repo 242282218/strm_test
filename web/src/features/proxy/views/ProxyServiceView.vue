@@ -414,6 +414,11 @@ import { scanDirectory } from '@/api/strm'
 import { browseFiles, type FileItem } from '@/api/fileManager'
 import type { FormInstance, FormRules } from 'element-plus'
 
+type BrowserFileItem = Pick<FileItem, 'id' | 'name' | 'path' | 'size'> & {
+  type: 'folder' | 'file'
+  selected: boolean
+}
+
 type HeroMetric = {
   label: string
   value: string
@@ -474,9 +479,9 @@ const strmResult = ref<{
 // 文件浏览器相关
 const fileBrowserVisible = ref(false)
 const currentPath = ref('/')
-const fileList = ref<FileItem[]>([])
+const fileList = ref<BrowserFileItem[]>([])
 const browsing = ref(false)
-const browserSelection = ref<FileItem[]>([])
+const browserSelection = ref<BrowserFileItem[]>([])
 
 const breadcrumbItems = computed(() => {
   const paths = currentPath.value.split('/').filter(Boolean)
@@ -659,8 +664,7 @@ const loadFileList = async () => {
       id: item.id,
       name: item.name,
       path: item.path,
-      // 后端返回 file_type，前端使用 type
-      type: item.file_type || item.type,
+      type: item.file_type === 'folder' ? 'folder' : 'file',
       size: item.size,
       selected: browserSelection.value.some(s => s.id === item.id)
     }))
@@ -692,7 +696,7 @@ const jumpToPath = (index: number) => {
 }
 
 // 处理整个卡片的点击（点击空白区域）
-const handleItemClick = (item: FileItem) => {
+const handleItemClick = (item: BrowserFileItem) => {
   if (item.type === 'folder') {
     currentPath.value = item.path
     loadFileList()
@@ -700,7 +704,7 @@ const handleItemClick = (item: FileItem) => {
 }
 
 // 处理内容区域的点击
-const handleContentClick = (item: FileItem) => {
+const handleContentClick = (item: BrowserFileItem) => {
   if (item.type === 'folder') {
     // 文件夹：进入目录
     currentPath.value = item.path
@@ -712,7 +716,7 @@ const handleContentClick = (item: FileItem) => {
   }
 }
 
-const toggleSelection = (item: FileItem, selected: boolean) => {
+const toggleSelection = (item: BrowserFileItem, selected: boolean) => {
   const index = browserSelection.value.findIndex(s => s.id === item.id)
   if (selected && index === -1) {
     browserSelection.value.push(item)
