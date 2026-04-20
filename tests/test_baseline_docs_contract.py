@@ -10,28 +10,44 @@ CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-wo
 DEVELOPMENT_README_PATH = PROJECT_ROOT / "docs" / "development" / "README.md"
 WEB_README_PATH = PROJECT_ROOT / "web" / "README.md"
 PLAN_DOC_PATH = PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md"
+WRAPPER_DIRS = {
+    "views": PROJECT_ROOT / "web" / "src" / "views",
+    "api": PROJECT_ROOT / "web" / "src" / "api",
+    "components": PROJECT_ROOT / "web" / "src" / "components",
+    "stores": PROJECT_ROOT / "web" / "src" / "stores",
+}
+FEATURE_MARKERS = ("@/features/", "../features/", "./features/")
 
 
 def _iter_feature_wrappers() -> Iterator[str]:
-    wrapper_dirs = (
-        PROJECT_ROOT / "web" / "src" / "views",
-        PROJECT_ROOT / "web" / "src" / "api",
-        PROJECT_ROOT / "web" / "src" / "components",
-        PROJECT_ROOT / "web" / "src" / "stores",
-    )
-    feature_markers = ("@/features/", "../features/", "./features/")
-
-    for wrapper_dir in wrapper_dirs:
+    for wrapper_dir in WRAPPER_DIRS.values():
         for path in sorted(wrapper_dir.iterdir()):
             if not path.is_file() or ".spec." in path.name:
                 continue
             content = path.read_text(encoding="utf-8")
-            if any(marker in content for marker in feature_markers):
+            if any(marker in content for marker in FEATURE_MARKERS):
                 yield path.relative_to(PROJECT_ROOT).as_posix()
+
+
+def _feature_wrapper_counts() -> dict[str, int]:
+    counts: dict[str, int] = {}
+
+    for category, wrapper_dir in WRAPPER_DIRS.items():
+        count = 0
+        for path in wrapper_dir.iterdir():
+            if not path.is_file() or ".spec." in path.name:
+                continue
+            content = path.read_text(encoding="utf-8")
+            if any(marker in content for marker in FEATURE_MARKERS):
+                count += 1
+        counts[category] = count
+
+    return counts
 
 
 def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
     document = CURRENT_STATE_DOC_PATH.read_text(encoding="utf-8")
+    wrapper_counts = _feature_wrapper_counts()
 
     for path_hint in (
         "app/config/application.py",
@@ -49,10 +65,10 @@ def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
         assert path_hint in document
 
     for count_hint in (
-        "视图包装：19",
-        "API 包装：15",
-        "组件包装：3",
-        "Store 包装：2",
+        f"视图包装：{wrapper_counts['views']}",
+        f"API 包装：{wrapper_counts['api']}",
+        f"组件包装：{wrapper_counts['components']}",
+        f"Store 包装：{wrapper_counts['stores']}",
     ):
         assert count_hint in document
 
@@ -73,9 +89,18 @@ def test_docs_index_points_to_current_execution_entry_docs() -> None:
 
 def test_compatibility_inventory_lists_all_current_feature_wrappers() -> None:
     document = COMPATIBILITY_DOC_PATH.read_text(encoding="utf-8")
+    wrapper_counts = _feature_wrapper_counts()
 
     for status_hint in ("wrapper-active", "wrapper-deprecated", "remove-after:"):
         assert status_hint in document
+
+    for count_hint in (
+        f"视图包装：{wrapper_counts['views']}",
+        f"API 包装：{wrapper_counts['api']}",
+        f"组件包装：{wrapper_counts['components']}",
+        f"Store 包装：{wrapper_counts['stores']}",
+    ):
+        assert count_hint in document
 
     for path in _iter_feature_wrappers():
         assert path in document
