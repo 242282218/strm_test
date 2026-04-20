@@ -17,7 +17,6 @@ from aiohttp.http_exceptions import LineTooLong
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
-from app.core.config_manager import get_config
 from app.core.dependencies import require_api_key
 from app.core.logging import get_logger
 from app.core.url_validator import URLValidationError, emby_validator, general_validator
@@ -45,11 +44,19 @@ router = APIRouter(
     tags=["代理服务"],
 )
 
-# 获取配置管理器
-config = get_config()
 config_service = get_config_service()
 playback_decision_service = PlaybackDecisionService()
 first_segment_cache_service = get_first_segment_cache_service()
+
+
+class _RuntimeQuarkConfigFacade:
+    @staticmethod
+    def get_quark_cookie() -> str:
+        app_config = config_service.get_config()
+        return str(getattr(getattr(app_config, "quark", None), "cookie", "") or "").strip()
+
+
+config = _RuntimeQuarkConfigFacade()
 
 # Playability probe cache (small TTL) to avoid repeated network checks.
 _probe_cache: dict[str, tuple[float, bool]] = {}

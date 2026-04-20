@@ -3117,6 +3117,41 @@ def test_stream_video_when_range_requested_then_returns_partial_content_headers(
     mock_proxy_stream.assert_awaited_once()
 
 
+def test_stream_video_reads_cookie_from_runtime_config_service():
+    client = _build_emby_client()
+    app_config = SimpleNamespace(
+        endpoints=[],
+        quark=SimpleNamespace(cookie="runtime-cookie"),
+        emby=SimpleNamespace(
+            url="http://emby.example:8096",
+            api_key="emby-key",
+            proxy_base_url="http://proxy.example:18097",
+        ),
+    )
+
+    with (
+        patch("app.api.emby.config_service.get_config", return_value=app_config),
+        patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
+        patch(
+            "app.api.emby.proxy_stream_by_file_id",
+            new=AsyncMock(return_value=Response(content=b"", status_code=200, media_type="video/mp4")),
+        ) as mock_proxy_stream,
+    ):
+        mock_emby_proxy_service = AsyncMock()
+        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(return_value="file123")
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
+        mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
+
+        response = client.get(
+            "/api/emby/videos/item123/stream",
+            params={"media_source_id": "media_source_1"},
+        )
+
+    assert response.status_code == 200
+    assert mock_emby_proxy_service_cls.call_args.kwargs["cookie"] == "runtime-cookie"
+    mock_proxy_stream.assert_awaited_once()
+
+
 def test_stream_video_when_head_requested_then_returns_seek_headers_without_body():
     client = _build_emby_client()
     app_config = SimpleNamespace(

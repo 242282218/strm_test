@@ -72,7 +72,7 @@
 
 - 当前是运行时配置 facade。
 - `get_config_service()` 提供单例入口，内部还承载了加载、保存、watcher、回滚、回调通知等多职责。
-- `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py` 与 `app/core/dependencies.py` 的 Quark helper 都已收口到这里；TMDB key 读取顺序固定为 `tmdb.api_key` 优先、`api_keys.tmdb_api_key` 回退，稳定播放入口、专用 Emby 网关与依赖注入层的 Quark cookie / only_video / root_id 也都改为运行时从 `AppConfig` 读取。
+- `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py`、`app/api/proxy.py`、`app/api/emby.py` 与 `app/core/dependencies.py` 的运行态配置 caller 都已收口到这里；TMDB key 读取顺序固定为 `tmdb.api_key` 优先、`api_keys.tmdb_api_key` 回退，稳定播放入口、专用 Emby 网关、代理入口、本地 Emby 入口与依赖注入层的 Quark cookie / only_video / root_id 也都改为运行时从 `AppConfig` 读取。
 - 这意味着它是运行时入口，但还不是理想的单一职责设计。
 
 当前建议：
@@ -88,7 +88,7 @@
 - `app/core/db_utils.py` 不是 engine/session 入口，它只是工具层。
 - `app/core/exceptions.py` 和 `app/core/exception_handler.py` 不是重复模块：前者定义异常语义，后者定义 HTTP 响应表现。
 - `app/config/settings.py` 虽然过大，但当前确实还是配置 schema 真相源；如果不先明确这一点，后续很容易把新字段散落到别处。
-- `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py` 与 `app/core/dependencies.py` 已不再走 `config_manager` compatibility path，但 `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py` 等仍保留 `get_config()` 兼容读取，不能误判为 API 层与依赖层已经完全退掉 `config_manager`。
+- `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py`、`app/api/proxy.py`、`app/api/emby.py` 与 `app/core/dependencies.py` 已不再走 `config_manager` compatibility path，但 `app/api/quark.py` 仍保留 `get_config()` 兼容读取，不能误判为 API 层已经彻底退掉 `config_manager`。
 
 ## 5. 推荐验证锚点
 

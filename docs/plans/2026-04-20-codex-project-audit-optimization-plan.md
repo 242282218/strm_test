@@ -44,12 +44,14 @@
 - `app/api/stable_stream.py` 已移除 `get_config()` 全局实例，Quark cookie 改为请求时通过 `get_config_service()` 读取，并由 `tests/test_stable_stream_route.py` + `tests/test_db_path_contract.py` 锁定稳定播放入口的配置读取与 module-specific import 护栏。
 - `app/api/emby_gateway.py` 的 PlaybackInfo hook 已移除 `get_config()` cookie 读取，专用 Emby 网关改为直接复用 `app_config.quark.cookie`，并由 `tests/test_emby_gateway.py` + `tests/test_db_path_contract.py` 锁定网关回放入口与 module-specific import 护栏。
 - `app/core/dependencies.py` 的 Quark 依赖 helper（`get_quark_cookie()` / `get_only_video_flag()` / `get_root_id()`）已移除 `get_config()` 全局实例，统一通过 `get_config_service()` 读取运行态配置，并由 `tests/test_dependencies.py` + `tests/test_db_path_contract.py` 锁定依赖层行为与 module-specific import 护栏。
+- `app/api/proxy.py` 已移除 `get_config()` 全局实例；代理流、302、转码和缓存入口的 Quark cookie 统一通过 `get_config_service()` facade 读取，并由 `tests/test_emby_proxy_routing.py` + `tests/test_proxy_stream_contract.py` + `tests/test_db_path_contract.py` 锁定运行态配置读取与 module-specific import 护栏。
+- `app/api/emby.py` 已移除 `get_config()` 全局实例；本地 PlaybackInfo / item / stream / master 入口的 Quark cookie 统一通过 `get_config_service()` facade 读取，并由 `tests/test_emby_proxy_routing.py` + `tests/test_db_path_contract.py` 锁定运行态配置读取与 module-specific import 护栏。
 
 ### 当前剩余边界
 
 - `web/src/features/config/*` 仍是已有大量未提交修改的脏切片，除非是极小 blast radius 的真相源修正，否则不要继续深改。
 - `app/api/v1/*` 虽然已经是 public canonical path 层，但内部仍复用部分 legacy router；不能把当前状态误写成“v1-only 实现树已完成”。
-- `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py` 仍保留 `get_config()` 兼容读取；当前只能说 API 层已开始收口运行态配置 caller，不能误写成 `config_manager` 已彻底退出 API 层。
+- `app/api/quark.py` 仍保留 `get_config()` 兼容读取；当前只能说 API 层已基本收口运行态配置 caller，不能误写成 `config_manager` 已彻底退出 API 层。
 - 前端安装层仍未完成 `pnpm-lock.yaml` 迁移；当前正确表述是“CI 装依赖用 `npm ci`，本地脚本执行默认 `pnpm run ...`”，而不是简单把所有地方都替换成 `pnpm install --frozen-lockfile`。
 - 监控目录当前还没有 `prometheus-rules.yml` 与 `alerting/alertmanager.yml`；后续若补告警能力，应先提交真实资产文件，再更新索引与 contract test。
 

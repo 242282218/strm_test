@@ -113,3 +113,65 @@ def test_stream_route_when_download_and_transcoding_are_both_unavailable_then_re
 
     assert response.status_code == 502
     assert response.json() == {"detail": "Failed to resolve stream URL"}
+
+
+def test_stream_route_reads_cookie_from_runtime_config_service():
+    client = _build_proxy_client()
+
+    class _FakeUpstreamResponse:
+        status = 200
+        headers = {
+            "Content-Type": "video/mp4",
+            "Content-Length": "16",
+            "Accept-Ranges": "bytes",
+        }
+
+        class _Content:
+            @staticmethod
+            async def iter_chunked(_size):
+                yield b"runtime-cookie-ok"
+
+        content = _Content()
+
+        def close(self):
+            return None
+
+    class _FakeAiohttpSession:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        async def get(self, url, headers=None, allow_redirects=True):
+            _ = url, headers, allow_redirects
+            return _FakeUpstreamResponse()
+
+        async def close(self):
+            return None
+
+    class _FakeRuntimeCookieQuarkService:
+        last_cookie = None
+
+        def __init__(self, cookie: str):
+            _FakeRuntimeCookieQuarkService.last_cookie = cookie
+
+        async def get_download_link(self, file_id: str):
+            return SimpleNamespace(url=f"https://download.example/{file_id}.mp4", headers={})
+
+        async def get_transcoding_link(self, file_id: str):
+            return SimpleNamespace(url=f"https://transcode.example/{file_id}.m3u8", headers={})
+
+        async def close(self):
+            return None
+
+    app_config = SimpleNamespace(quark=SimpleNamespace(cookie="runtime-cookie"))
+
+    with (
+        patch("app.api.proxy.config_service.get_config", return_value=app_config),
+        patch("app.api.proxy.QuarkService", _FakeRuntimeCookieQuarkService),
+        patch("app.services.quark_service.QuarkService", _FakeRuntimeCookieQuarkService),
+        patch("app.api.proxy.aiohttp.ClientSession", _FakeAiohttpSession),
+    ):
+        response = client.get("/api/proxy/stream/file123")
+
+    assert response.status_code == 200
+    assert _FakeRuntimeCookieQuarkService.last_cookie == "runtime-cookie"

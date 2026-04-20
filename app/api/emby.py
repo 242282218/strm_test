@@ -19,7 +19,6 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
-from app.core.config_manager import get_config
 from app.core.db import get_db
 from app.core.dependencies import require_api_key
 from app.core.logging import get_logger
@@ -47,7 +46,6 @@ from app.utils.emby_request import (
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/emby", tags=["Emby服务"])
 
-config = get_config()
 config_service = get_config_service()
 
 
@@ -61,6 +59,16 @@ _WEB_CLIENT_HINTS = (
     "safari",
     "browser",
 )
+
+
+class _RuntimeQuarkConfigFacade:
+    @staticmethod
+    def get_quark_cookie() -> str:
+        app_config = config_service.get_config()
+        return str(getattr(getattr(app_config, "quark", None), "cookie", "") or "").strip()
+
+
+config = _RuntimeQuarkConfigFacade()
 
 
 def _is_web_client_request(client_name: str | None, device_name: str | None, user_agent: str | None) -> bool:
