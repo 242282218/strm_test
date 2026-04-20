@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { browseFiles, fileOperation } from './fileManager'
+import legacyFileManagerSource from './fileManager.ts?raw'
 
 const fileManagerApiMocks = vi.hoisted(() => ({
   browse: vi.fn(),
@@ -77,5 +78,12 @@ describe('file manager legacy api wrapper', () => {
       new_name: 'Alpha (2024).mkv',
     })
     expect(result).toEqual({ affected: 1 })
+  })
+
+  it('keeps legacy wrapper free of duplicate endpoint type declarations', () => {
+    expect(legacyFileManagerSource).toContain("from './file-manager'")
+    expect(legacyFileManagerSource).not.toContain('interface FileItem')
+    expect(legacyFileManagerSource).not.toContain('interface BrowseResponse')
+    expect(legacyFileManagerSource).not.toContain('interface FileOperationRequest')
   })
 })
