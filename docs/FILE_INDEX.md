@@ -12,6 +12,7 @@
 quark_strm/
 ├── app/                    # 核心应用代码
 ├── config.yaml             # 主配置文件
+├── prometheus.yml          # Prometheus 抓取配置示例
 ├── cache/                  # 本地缓存与临时数据库
 ├── docs/                   # 项目文档
 ├── output/                 # 手工验证与诊断输出
@@ -234,6 +235,11 @@ quark_strm/
   - `development_plan.md` - 开发方案
   - `history.md` - 历史指令记录
   - `test_report.md` - 测试报告
+- `monitoring/` - 监控文档
+  - `README.md` - 监控执行入口与当前已落地资产说明
+  - `grafana-dashboard.json` - Grafana 仪表盘资产
+- `monitoring/README.md` - 监控执行入口与当前已落地资产说明
+- `monitoring/grafana-dashboard.json` - Grafana 仪表盘资产
 - `operations/` - 运维文档
 - `api/` - API 文档
 - `plans/` - 审查结论、阶段计划与执行路线
@@ -318,6 +324,7 @@ quark_strm/
   - API 密钥
   - 服务配置
   - 代理设置
+- `prometheus.yml` - Prometheus 抓取配置示例
 
 ### Python 配置
 - `requirements.txt` - Python 依赖包列表

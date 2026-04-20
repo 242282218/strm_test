@@ -11,6 +11,7 @@
 3. 如果改 API 路由或对外路径，再看 `docs/api/README.md`。
 4. 如果改部署、运行目录或命令，再看 `docs/operations/README.md`。
 5. 如果改 `config/db/exception` 相关入口，再看 [`../architecture/core-truth-source-boundaries.md`](../architecture/core-truth-source-boundaries.md)。
+6. 如果改 `/metrics`、Prometheus 抓取配置或 Grafana 资产，再看 [`../monitoring/README.md`](../monitoring/README.md)。
 
 ## 2. 默认执行原则
 

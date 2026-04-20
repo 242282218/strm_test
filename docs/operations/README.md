@@ -173,13 +173,12 @@ scrape_configs:
     metrics_path: '/metrics'
 ```
 
+当前仓库的抓取配置示例见 [`../../prometheus.yml`](../../prometheus.yml)，监控入口与资产说明见 [`../monitoring/README.md`](../monitoring/README.md)。
+
 ### Grafana 仪表盘
 
-导入仪表盘配置（待补充）：
-- 系统资源监控
-- API 请求延迟
-- 错误率统计
-- 任务执行状态
+当前已落地仪表盘资产：[`../monitoring/grafana-dashboard.json`](../monitoring/grafana-dashboard.json)  
+建议先阅读 [`../monitoring/README.md`](../monitoring/README.md)，再导入仪表盘并校对数据源。
 
 ## 日志管理
 
@@ -299,7 +298,7 @@ python -c "from app.config.settings import settings; print(settings)"
 
 ## 待办事项
 
-- [ ] 补充 Grafana 仪表盘配置
+- [ ] 补充 Prometheus 规则文件与 Alertmanager 资产
 - [ ] 添加自动化备份脚本
 - [ ] 补充扩容指南
 - [ ] 添加灾难恢复流程
@@ -309,3 +308,4 @@ python -c "from app.config.settings import settings; print(settings)"
 - [架构文档](../architecture/README.md)
 - [开发文档](../development/README.md)
 - [API 文档](../api/README.md)
+- [监控文档](../monitoring/README.md)

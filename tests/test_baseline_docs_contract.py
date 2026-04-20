@@ -11,6 +11,7 @@ CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-wo
 DEVELOPMENT_README_PATH = PROJECT_ROOT / "docs" / "development" / "README.md"
 API_DOC_PATH = PROJECT_ROOT / "docs" / "api" / "README.md"
 OPS_DOC_PATH = PROJECT_ROOT / "docs" / "operations" / "README.md"
+MONITORING_DOC_PATH = PROJECT_ROOT / "docs" / "monitoring" / "README.md"
 WEB_README_PATH = PROJECT_ROOT / "web" / "README.md"
 PLAN_DOC_PATH = PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md"
 CORE_BOUNDARIES_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md"
@@ -34,6 +35,7 @@ TOP_LEVEL_ENTRY_DOCS = (
     PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md",
     PROJECT_ROOT / "docs" / "api" / "README.md",
     PROJECT_ROOT / "docs" / "operations" / "README.md",
+    PROJECT_ROOT / "docs" / "monitoring" / "README.md",
     PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md",
     PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md",
     PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md",
@@ -43,6 +45,7 @@ DOCS_INDEX_LINKS = (
     ("architecture/README.md", "./architecture/README.md"),
     ("development/README.md", "./development/README.md"),
     ("operations/README.md", "./operations/README.md"),
+    ("monitoring/README.md", "./monitoring/README.md"),
     ("api/README.md", "./api/README.md"),
     ("development_plan.md", "./development_plan.md"),
     ("test_report.md", "./test_report.md"),
@@ -63,6 +66,7 @@ EXECUTION_ENTRY_DOCS_WITH_LINKS = (
     CURRENT_STATE_DOC_PATH,
     DEVELOPMENT_README_PATH,
     CODEX_WORKING_AGREEMENT_PATH,
+    MONITORING_DOC_PATH,
     PLAN_DOC_PATH,
 )
 
@@ -203,6 +207,7 @@ def test_docs_index_points_to_current_execution_entry_docs() -> None:
     for entry_hint in (
         "[`api/README.md`](./api/README.md) - API 路径、认证和 canonical/compatibility 映射入口",
         "[`operations/README.md`](./operations/README.md) - 部署、运行目录边界和本地产物约定入口",
+        "[`monitoring/README.md`](./monitoring/README.md) - Prometheus 指标、抓取配置示例和 Grafana 资产入口",
     ):
         assert entry_hint in document
 
@@ -248,6 +253,7 @@ def test_codex_working_agreement_points_to_current_truth_sources() -> None:
         "compatibility-inventory.md",
         "docs/api/README.md",
         "docs/operations/README.md",
+        "../monitoring/README.md",
         "app/api/v1/*",
         "web/src/features/<domain>/",
         "web/src/features/config/*",
@@ -355,6 +361,7 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "docs/architecture/core-truth-source-boundaries.md",
         "docs/api/README.md",
         "docs/operations/README.md",
+        "docs/monitoring/README.md",
         "docs/development/compatibility-inventory.md",
         "docs/development/codex-working-agreement.md",
         "Phase / Iteration 状态总览",
@@ -370,6 +377,7 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "../architecture/current-state.md",
         "../api/README.md",
         "../operations/README.md",
+        "../monitoring/README.md",
         "../development/codex-working-agreement.md",
         "web/package-lock.json",
         "app/api/v1",
@@ -379,8 +387,32 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "scripts/continuous_optimize.py",
         "STOP_CONTINUOUS_LOOP",
         "tests/test_continuous_optimize_contract.py",
+        "prometheus.yml",
+        "grafana-dashboard.json",
     ):
         assert hint in document
+
+
+def test_monitoring_doc_tracks_live_assets_and_links() -> None:
+    document = MONITORING_DOC_PATH.read_text(encoding="utf-8")
+
+    for hint in (
+        "**最后同步**: 2026-04-20",
+        "app/api/prometheus.py",
+        "app/core/prometheus_metrics.py",
+        "../../prometheus.yml",
+        "./grafana-dashboard.json",
+        "/metrics",
+        "/metrics/health",
+        "当前 `docs/monitoring/` 目录只落地了 `README.md` 与 `grafana-dashboard.json`。",
+        "当前仓库尚未落地 `prometheus-rules.yml` 或 `alerting/alertmanager.yml`",
+        "../operations/README.md",
+        "../api/README.md",
+        "../architecture/current-state.md",
+    ):
+        assert hint in document
+
+    _assert_relative_links_resolve(MONITORING_DOC_PATH)
 
 
 def test_core_truth_source_boundary_doc_tracks_phase3_entrypoints() -> None:

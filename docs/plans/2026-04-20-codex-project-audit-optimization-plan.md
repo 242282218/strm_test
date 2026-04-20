@@ -37,12 +37,14 @@
 - Phase 0 基线文档已经落地到 `docs/architecture/current-state.md`、`docs/development/compatibility-inventory.md`、`docs/development/codex-working-agreement.md`，并有 contract test 锁定入口和清单。
 - 开发/前端 README 已回写命令真相源：`web/package-lock.json` + `npm ci` 是当前 CI/干净安装真相源，本地日常脚本入口默认 `pnpm run ...`；Playwright 自动拉起前端 dev server 仍按 `web/playwright.config.ts` 执行 `npm run dev`。
 - `scripts/continuous_optimize.py` 的默认输入旋钮、报告输出落点、skip 规则与 `STOP_CONTINUOUS_LOOP` 停止语义，已回写到 `docs/development/codex-working-agreement.md` 并由 `tests/test_continuous_optimize_contract.py` 锁定。
+- 监控入口已收口到 `docs/monitoring/README.md`，明确当前真实已落地资产是仓库根 `prometheus.yml` 与 `docs/monitoring/grafana-dashboard.json`，不再把 `prometheus-rules.yml` / `alerting/alertmanager.yml` 误写成现有文件。
 
 ### 当前剩余边界
 
 - `web/src/features/config/*` 仍是已有大量未提交修改的脏切片，除非是极小 blast radius 的真相源修正，否则不要继续深改。
 - `app/api/v1/*` 虽然已经是 public canonical path 层，但内部仍复用部分 legacy router；不能把当前状态误写成“v1-only 实现树已完成”。
 - 前端安装层仍未完成 `pnpm-lock.yaml` 迁移；当前正确表述是“CI 装依赖用 `npm ci`，本地脚本执行默认 `pnpm run ...`”，而不是简单把所有地方都替换成 `pnpm install --frozen-lockfile`。
+- 监控目录当前还没有 `prometheus-rules.yml` 与 `alerting/alertmanager.yml`；后续若补告警能力，应先提交真实资产文件，再更新索引与 contract test。
 
 ### 当前执行入口
 
@@ -50,6 +52,7 @@
 - [`docs/architecture/core-truth-source-boundaries.md`](../architecture/core-truth-source-boundaries.md)：`config/db/exception` 当前职责边界和 Phase 3 进入说明。
 - [`docs/api/README.md`](../api/README.md)：API canonical/compatibility path、认证与公共探针的当前真相源。
 - [`docs/operations/README.md`](../operations/README.md)：部署命令、运行目录边界与本地产物约定的当前真相源。
+- [`docs/monitoring/README.md`](../monitoring/README.md)：Prometheus 指标入口、抓取配置示例与 Grafana 资产入口。
 - [`docs/development/compatibility-inventory.md`](../development/compatibility-inventory.md)：前端 wrapper 清单、状态与退役条件。
 - [`docs/development/codex-working-agreement.md`](../development/codex-working-agreement.md)：当前 truth-source、避让区域、最小验证基线与持续优化脚本 contract。
 
