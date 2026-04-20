@@ -26,7 +26,10 @@
 
 - `.github/workflows/pytest.yml` 与 `.github/workflows/docker-deploy-test.yml` 统一使用 `vars.QUARK_STRM_COVERAGE_FAIL_UNDER || '66'` 作为 coverage 真相源。
 - `docker-deploy-test.yml` 的前端门禁顺序固定为 `npm ci` -> `npm run lint` -> `npm run type-check` -> `npm run test:smoke` -> `npm run test:run` -> `npm run build-only`。
-- `docs/operations/README.md` 已切到 `pnpm`，但 `web/README.md` 与 workflow 仍以 npm 命令为主，这是当前确认存在但本轮未处理的文档/执行漂移。
+- `docs/operations/README.md`、`docs/development/README.md` 与 `web/README.md` 已显式区分两层约定：
+  - `web/package-lock.json` + `npm ci` 是当前 CI/干净安装真相源。
+  - `pnpm run ...` 是本地日常开发与人工回归的默认脚本入口。
+- Playwright 自动启动前端 dev server 时，仍按 `web/playwright.config.ts` 执行 `npm run dev -- --host ... --port ...`；这是当前测试启动实现细节，不等于前端安装层已完成 pnpm 锁文件迁移。
 
 ## 2. 兼容层边界
 

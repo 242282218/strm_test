@@ -5,30 +5,37 @@
 ## 开发命令
 
 ```sh
-npm install
-npm run dev
+npm ci
+# or: pnpm install
+pnpm run dev
 ```
 
 ```sh
-npm run test:run
-npm run test:smoke
-npm run type-check
-npm run build-only
+pnpm run lint --fix
+pnpm run test:run
+pnpm run test:smoke
+pnpm run type-check
+pnpm run build-only
 ```
 
 常用附加命令：
 
 ```sh
-npm run lint
-npm run test:smoke
-npm run test:coverage
-npm run test:e2e
-npm run preview
+pnpm run test
+pnpm run test:coverage
+pnpm run test:e2e
+pnpm run preview
 ```
+
+## 包管理约定
+
+- `web/package-lock.json` 是当前 CI/干净安装的锁文件真相源；要严格复现 workflow，使用 `npm ci`。
+- 本地日常开发与手工验证默认使用 `pnpm run ...` 调脚本。
+- Playwright 自动拉起前端 dev server 时，当前仍按 [`playwright.config.ts`](./playwright.config.ts) 执行 `npm run dev -- --host ... --port ...`，这属于测试启动实现细节，不等于仓库已经完成 pnpm 锁文件迁移。
 
 ## E2E 运行约定
 
-- `npm run test:e2e` 会默认先检查并自动拉起后端 `uvicorn app.main:app` 与前端 `npm run dev`；本地若同端口已有服务则直接复用，CI 则总是拉起新进程。
+- `pnpm run test:e2e` 会默认先检查并自动拉起后端 `uvicorn app.main:app` 与前端 `npm run dev`；本地若同端口已有服务则直接复用，CI 则总是拉起新进程。
 - Playwright 默认访问 `http://127.0.0.1:18099`，可用 `PLAYWRIGHT_BASE_URL` 覆盖；前端 dev server 会跟随这个地址启动，避免与常见本地 `3000` 端口冲突。
 - Playwright 自动启动时，Vite dev proxy 默认转发到 `http://127.0.0.1:18000`，可用 `VITE_API_PROXY_TARGET` 或 `PLAYWRIGHT_API_TARGET` 覆盖；后端 `uvicorn` 会跟随该目标地址启动，避免与常见本地 `8000` 端口冲突。
 - Playwright 本地默认使用 `2` 个 worker 且关闭 `fullyParallel`，避免压穿后端限流；可用 `PLAYWRIGHT_WORKERS` 和 `PLAYWRIGHT_FULLY_PARALLEL=true` 覆盖。
@@ -37,8 +44,8 @@ npm run preview
 示例：
 
 ```sh
-npm run test:e2e
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 VITE_API_PROXY_TARGET=http://127.0.0.1:18000 ADMIN_PASSWORD=admin npm run test:e2e
+pnpm run test:e2e
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 VITE_API_PROXY_TARGET=http://127.0.0.1:18000 ADMIN_PASSWORD=admin pnpm run test:e2e
 ```
 
 ## 当前结构
@@ -145,20 +152,20 @@ src/features/<domain>/
 前端收口阶段以这三条命令作为基本回归：
 
 ```sh
-npm run test:run
-npm run type-check
-npm run build-only
+pnpm run test:run
+pnpm run type-check
+pnpm run build-only
 ```
 
-其中 `npm run test:smoke` 是更快的启动契约门禁，覆盖 app bootstrap、登录页回退和受保护壳层渲染，适合在改动路由、鉴权恢复、应用壳层时先跑一遍。
+其中 `pnpm run test:smoke` 是更快的启动契约门禁，覆盖 app bootstrap、登录页回退和受保护壳层渲染，适合在改动路由、鉴权恢复、应用壳层时先跑一遍。
 
 如果修改了路由、鉴权恢复、应用启动、兼容包装或 feature 导入路径，提交前至少跑完：
 
 ```sh
-npm run test:smoke
-npm run test:run
-npm run type-check
-npm run build-only
+pnpm run test:smoke
+pnpm run test:run
+pnpm run type-check
+pnpm run build-only
 ```
 
 ## Node 环境
@@ -170,4 +177,4 @@ npm run build-only
 ## 备注
 
 - `ui` 相关打包产物仍然是当前体积大头，后续若继续优化，优先看 Element Plus 样式和共享 UI chunk。
-- 文档最后同步日期：`2026-04-16`
+- 文档最后同步日期：`2026-04-20`

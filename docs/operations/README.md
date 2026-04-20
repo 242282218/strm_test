@@ -109,7 +109,8 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 ```bash
 # 1. 构建前端
 cd web
-pnpm install --frozen-lockfile
+npm ci
+# 或：pnpm install
 pnpm run build
 
 # 2. 配置 Nginx

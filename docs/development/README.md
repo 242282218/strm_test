@@ -45,18 +45,25 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # 1. 进入前端目录
 cd web
 
-# 2. 安装依赖
-npm install
+# 2. 安装依赖（二选一）
+npm ci
+# 或：pnpm install
 
 # 3. 启动开发服务器
-npm run dev
+pnpm run dev
 
-# 4. 类型检查
-npm run type-check
-
-# 5. 运行测试
-npm run test
+# 4. 最小验证基线
+pnpm run lint --fix
+pnpm run type-check
+pnpm run test:run
+pnpm run build-only
 ```
+
+说明：
+
+- `npm ci` 与 `web/package-lock.json` 一起构成当前 CI/干净安装的真相源。
+- `pnpm run ...` 是当前本地开发与人工回归的默认脚本入口。
+- 这不代表仓库已经完成 `pnpm-lock.yaml` 迁移；如需完全复现 CI，优先使用 `npm ci`。
 
 ## 代码规范
 
@@ -93,29 +100,31 @@ ruff format app/
 
 ```bash
 # 代码检查
-npm run lint
-
-# 自动格式化
-npm run format
+pnpm run lint --fix
 ```
 
 ## 测试
 
 ### 运行测试
 
-```bash
-# 后端测试
-pytest tests/ --cov=app --cov-fail-under=70 -v
+当前 CI coverage 门槛真相源在 `.github/workflows/pytest.yml` 与 `.github/workflows/docker-deploy-test.yml`，统一来自 `vars.QUARK_STRM_COVERAGE_FAIL_UNDER`，未配置时回退 `66`。
 
-# 前端测试
-npm run test
+```bash
+# 后端全量测试（模拟当前 workflow 默认门槛）
+python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=66
+
+# 前端单元/组件测试
+cd web
+pnpm run test:run
+
+# 前端启动 smoke
+pnpm run test:smoke
 
 # 端到端测试
-cd web
-npm run test:e2e
+pnpm run test:e2e
 
 # 需要隔离端口时
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 VITE_API_PROXY_TARGET=http://127.0.0.1:18000 npm run test:e2e
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 VITE_API_PROXY_TARGET=http://127.0.0.1:18000 pnpm run test:e2e
 ```
 
 ### 编写测试

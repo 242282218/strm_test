@@ -7,6 +7,8 @@ DOCS_INDEX_PATH = PROJECT_ROOT / "docs" / "README.md"
 CURRENT_STATE_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "current-state.md"
 COMPATIBILITY_DOC_PATH = PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md"
 CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md"
+DEVELOPMENT_README_PATH = PROJECT_ROOT / "docs" / "development" / "README.md"
+WEB_README_PATH = PROJECT_ROOT / "web" / "README.md"
 
 
 def _iter_feature_wrappers() -> Iterator[str]:
@@ -34,6 +36,8 @@ def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
         "app/config/application.py",
         "app/api/v1/__init__.py",
         "web/src/router/index.ts",
+        "web/package-lock.json",
+        "web/playwright.config.ts",
         "vars.QUARK_STRM_COVERAGE_FAIL_UNDER",
         "docs/development/compatibility-inventory.md",
         "app/config/settings.py",
@@ -104,3 +108,29 @@ def test_codex_working_agreement_points_to_current_truth_sources() -> None:
         "pnpm exec vitest run",
     ):
         assert command_hint in document
+
+
+def test_development_and_web_readmes_match_current_command_contract() -> None:
+    development_document = DEVELOPMENT_README_PATH.read_text(encoding="utf-8")
+    web_document = WEB_README_PATH.read_text(encoding="utf-8")
+
+    assert "**最后同步**: 2026-04-20" in development_document
+    assert "npm ci" in development_document
+    assert "pnpm install" in development_document
+    assert "pnpm run dev" in development_document
+    assert "pnpm run lint --fix" in development_document
+    assert "pnpm run test:run" in development_document
+    assert "pnpm run test:e2e" in development_document
+    assert "vars.QUARK_STRM_COVERAGE_FAIL_UNDER" in development_document
+    assert "回退 `66`" in development_document
+    assert "npm run format" not in development_document
+
+    assert "文档最后同步日期：`2026-04-20`" in web_document
+    assert "npm ci" in web_document
+    assert "pnpm install" in web_document
+    assert "pnpm run dev" in web_document
+    assert "pnpm run lint --fix" in web_document
+    assert "pnpm run test:smoke" in web_document
+    assert "pnpm run test:e2e" in web_document
+    assert "web/package-lock.json" in web_document
+    assert "npm run dev -- --host ... --port ..." in web_document

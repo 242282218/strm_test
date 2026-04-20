@@ -78,10 +78,11 @@ def test_operations_doc_matches_bootstrap_contract() -> None:
     assert "`/ready`" in document
     assert "CONFIG_PATH=/app/config.yaml" in document
     assert "SMART_MEDIA_SECURITY_API_KEY" in document
-    assert "pnpm install --frozen-lockfile" in document
+    assert "npm ci" in document
+    assert "pnpm install" in document
     assert "pnpm run build" in document
-    assert "\nnpm install\n" not in document
     assert "\nnpm run build\n" not in document
+    assert "pnpm install --frozen-lockfile" not in document
 
 
 def test_gitignore_and_operations_doc_cover_local_runtime_artifacts() -> None:
