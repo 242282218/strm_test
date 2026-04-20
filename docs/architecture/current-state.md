@@ -50,40 +50,46 @@
 
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
-| `app/api/emby.py` | 975 | Emby 路由仍是最大的单体 API 模块 |
-| `app/api/quark.py` | 895 | 夸克入口仍聚合多类能力 |
-| `app/services/media/scrape.py` | 875 | 刮削流程与媒体领域逻辑耦合度高 |
-| `app/core/cache_manager.py` | 739 | 核心缓存协调入口仍偏重 |
-| `app/api/monitoring.py` | 707 | 监控 API 体量已接近配置热点 |
-| `app/config/settings.py` | 700 | 配置 schema 仍集中在单文件 |
-| `app/services/media/smart_rename.py` | 699 | 智能重命名服务职责偏多 |
-| `app/api/scrape.py` | 673 | 刮削 API 仍较重 |
-| `app/services/security_audit_service.py` | 643 | 安全审计服务已形成新的大模块 |
-| `app/api/proxy.py` | 640 | 代理路由仍是后端入口热点 |
+| `app/api/emby.py` | 1145 | Emby 路由仍是最大的单体 API 模块 |
+| `app/api/quark.py` | 1053 | 夸克入口仍聚合多类能力 |
+| `app/services/media/scrape.py` | 968 | 刮削流程与媒体领域逻辑耦合度高 |
+| `app/core/cache_manager.py` | 934 | 核心缓存协调入口仍偏重 |
+| `app/api/monitoring.py` | 892 | 监控 API 体量已接近配置热点 |
+| `app/config/settings.py` | 862 | 配置 schema 仍集中在单文件 |
+| `app/services/media/smart_rename.py` | 850 | 智能重命名服务职责偏多 |
+| `app/api/scrape.py` | 820 | 刮削 API 仍较重 |
+| `app/api/proxy.py` | 765 | 代理路由仍是后端入口热点 |
+| `app/services/security_audit_service.py` | 753 | 安全审计服务已形成新的大模块 |
 
 ### 前端热点（`web/src/`）
 
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
-| `web/src/features/rename/views/RenameView.vue` | 1183 | 视图、状态、编辑与执行流程仍混在一个 SFC |
-| `web/src/features/proxy/views/ProxyServiceView.vue` | 1029 | 代理配置与视图逻辑仍偏重 |
-| `web/src/features/scrape/views/ScrapePathsView.vue` | 931 | 刮削路径工作台仍是重页面 |
-| `web/src/features/dashboard/views/DashboardView.vue` | 912 | Dashboard 已拆一轮但页面仍重 |
-| `web/src/features/config/views/ConfigView.vue` | 904 | Config 工作台仍是高风险脏切片 |
-| `web/src/features/tasks/views/TasksView.vue` | 863 | 任务中心页面复杂度仍高 |
-| `web/src/features/scrape/views/ScrapeRecordsView.vue` | 740 | 刮削记录页面仍未明显降体量 |
-| `web/src/features/notifications/views/NotificationHistoryView.vue` | 725 | 通知历史页面仍较大 |
-| `web/src/features/notifications/views/NotificationsView.vue` | 662 | 通知配置页仍集中多职责 |
-| `web/src/features/smart-rename/views/SmartRenameView.vue` | 582 | 智能重命名页面仍值得继续拆分 |
+| `web/src/features/rename/views/RenameView.vue` | 1326 | 视图、状态、编辑与执行流程仍混在一个 SFC |
+| `web/src/features/proxy/views/ProxyServiceView.vue` | 1152 | 代理配置与视图逻辑仍偏重 |
+| `web/src/features/scrape/views/ScrapePathsView.vue` | 1052 | 刮削路径工作台仍是重页面 |
+| `web/src/features/dashboard/views/DashboardView.vue` | 1021 | Dashboard 已拆一轮但页面仍重 |
+| `web/src/features/config/views/ConfigView.vue` | 1014 | Config 工作台仍是高风险脏切片 |
+| `web/src/features/tasks/views/TasksView.vue` | 995 | 任务中心页面复杂度仍高 |
+| `web/src/features/scrape/views/ScrapeRecordsView.vue` | 843 | 刮削记录页面仍未明显降体量 |
+| `web/src/features/notifications/views/NotificationHistoryView.vue` | 830 | 通知历史页面仍较大 |
+| `web/src/features/notifications/views/NotificationsView.vue` | 760 | 通知配置页仍集中多职责 |
+| `web/src/features/smart-rename/views/SmartRenameView.vue` | 667 | 智能重命名页面仍值得继续拆分 |
 
 ### 测试热点（`tests/`）
 
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
-| `tests/test_emby_proxy_routing.py` | 2841 | Emby 路由回归面极大，改动成本高 |
-| `tests/test_emby_gateway.py` | 1734 | Gateway 契约已形成大型保护网 |
-| `tests/test_db.py` | 585 | 数据库真相源收敛时需优先关注 |
-| `tests/test_db_pool.py` | 517 | 数据库基础设施回归面仍不小 |
+| `tests/test_emby_proxy_routing.py` | 3396 | Emby 路由回归面极大，改动成本高 |
+| `tests/test_emby_gateway.py` | 2029 | Gateway 契约已形成大型保护网 |
+| `tests/test_db.py` | 675 | 数据库真相源收敛时需优先关注 |
+| `tests/test_strm_api.py` | 586 | STRM API 回归面已进入测试热点 Top 10 |
+| `tests/test_dependencies.py` | 573 | 依赖注入边界测试面在持续扩大 |
+| `tests/test_db_pool.py` | 550 | 数据库连接池回归面仍不小 |
+| `tests/test_lru_cache.py` | 546 | 缓存基础设施测试规模已接近数据库热点 |
+| `tests/test_strm_service.py` | 540 | STRM 服务回归面与 API 热点并行增长 |
+| `tests/test_auth_middleware.py` | 535 | 认证中间件契约测试已形成较大保护网 |
+| `tests/test_notification_service.py` | 523 | 通知服务行为覆盖开始进入大型测试模块 |
 
 ## 4. 当前已确认约束
 

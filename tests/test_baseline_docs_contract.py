@@ -22,7 +22,13 @@ WRAPPER_DIRS = {
 }
 FEATURE_MARKERS = ("@/features/", "../features/", "./features/")
 HOTSPOT_PATH_PATTERN = re.compile(r"^\|\s*`([^`]+)`\s*\|", re.MULTILINE)
+HOTSPOT_ROW_PATTERN = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*(\d+)\s*\|", re.MULTILINE)
 MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+HOTSPOT_TABLES = (
+    ("后端热点（`app/`）", PROJECT_ROOT / "app", {".py"}, 10),
+    ("前端热点（`web/src/`）", PROJECT_ROOT / "web" / "src", {".ts", ".vue"}, 10),
+    ("测试热点（`tests/`）", PROJECT_ROOT / "tests", {".py"}, 10),
+)
 TOP_LEVEL_ENTRY_DOCS = (
     PROJECT_ROOT / "docs" / "architecture" / "current-state.md",
     PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md",
@@ -84,6 +90,37 @@ def _iter_markdown_table_paths(document: str) -> Iterator[str]:
         yield match.group(1)
 
 
+def _count_lines(path: Path) -> int:
+    with path.open(encoding="utf-8") as handle:
+        return sum(1 for _ in handle)
+
+
+def _collect_hotspots(root: Path, suffixes: set[str], limit: int) -> list[tuple[str, int]]:
+    rows: list[tuple[str, int]] = []
+
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix not in suffixes:
+            continue
+        rows.append((path.relative_to(PROJECT_ROOT).as_posix(), _count_lines(path)))
+
+    rows.sort(key=lambda item: (-item[1], item[0]))
+    return rows[:limit]
+
+
+def _section_body(document: str, heading: str) -> str:
+    pattern = rf"### {re.escape(heading)}\n\n(.*?)(?=\n### |\Z)"
+    match = re.search(pattern, document, re.DOTALL)
+    assert match is not None, f"Missing section: {heading}"
+    return match.group(1)
+
+
+def _iter_hotspot_rows(document: str, heading: str) -> Iterator[tuple[str, int]]:
+    section = _section_body(document, heading)
+
+    for path, line_count in HOTSPOT_ROW_PATTERN.findall(section):
+        yield path, int(line_count)
+
+
 def _iter_relative_markdown_links(document: str) -> Iterator[str]:
     for match in MARKDOWN_LINK_PATTERN.finditer(document):
         target = match.group(1)
@@ -127,6 +164,13 @@ def test_current_state_hotspot_paths_exist_in_repo() -> None:
     for relative_path in _iter_markdown_table_paths(document):
         resolved_path = PROJECT_ROOT / relative_path
         assert resolved_path.exists(), f"Hotspot path missing from repo: {relative_path}"
+
+
+def test_current_state_hotspot_tables_match_live_top_files() -> None:
+    document = CURRENT_STATE_DOC_PATH.read_text(encoding="utf-8")
+
+    for heading, root, suffixes, limit in HOTSPOT_TABLES:
+        assert list(_iter_hotspot_rows(document, heading)) == _collect_hotspots(root, suffixes, limit)
 
 
 def test_docs_index_points_to_current_execution_entry_docs() -> None:
