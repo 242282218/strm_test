@@ -32,6 +32,8 @@ HOTSPOT_TABLES = (
 TOP_LEVEL_ENTRY_DOCS = (
     PROJECT_ROOT / "docs" / "architecture" / "current-state.md",
     PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md",
+    PROJECT_ROOT / "docs" / "api" / "README.md",
+    PROJECT_ROOT / "docs" / "operations" / "README.md",
     PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md",
     PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md",
     PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md",
@@ -198,6 +200,12 @@ def test_docs_index_points_to_current_execution_entry_docs() -> None:
     for path in TOP_LEVEL_ENTRY_DOCS:
         assert path.exists(), f"Top-level execution entry doc missing: {path.relative_to(PROJECT_ROOT).as_posix()}"
 
+    for entry_hint in (
+        "[`api/README.md`](./api/README.md) - API 路径、认证和 canonical/compatibility 映射入口",
+        "[`operations/README.md`](./operations/README.md) - 部署、运行目录边界和本地产物约定入口",
+    ):
+        assert entry_hint in document
+
 
 def test_docs_index_relative_links_resolve_to_existing_files() -> None:
     _assert_relative_links_resolve(DOCS_INDEX_PATH)
@@ -293,6 +301,8 @@ def test_development_and_web_readmes_match_current_command_contract() -> None:
     assert "vars.QUARK_STRM_COVERAGE_FAIL_UNDER" in development_document
     assert "回退 `66`" in development_document
     assert "../architecture/core-truth-source-boundaries.md" in development_document
+    assert "[`../api/README.md`](../api/README.md) - API 路径、认证与 canonical/compatibility 映射入口" in development_document
+    assert "[`../operations/README.md`](../operations/README.md) - 部署命令、运行目录边界和本地产物约定入口" in development_document
     assert "npm run format" not in development_document
 
     for path in DEVELOPMENT_ENTRY_DOCS:
@@ -343,6 +353,8 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "执行进度快照（2026-04-20 更新）",
         "docs/architecture/current-state.md",
         "docs/architecture/core-truth-source-boundaries.md",
+        "docs/api/README.md",
+        "docs/operations/README.md",
         "docs/development/compatibility-inventory.md",
         "docs/development/codex-working-agreement.md",
         "Phase / Iteration 状态总览",
@@ -356,6 +368,8 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "`[未开始]` 拆 `ConfigView.vue` 的状态/动作层。",
         "下文 Phase 与 Iteration 正文保留原始路线图",
         "../architecture/current-state.md",
+        "../api/README.md",
+        "../operations/README.md",
         "../development/codex-working-agreement.md",
         "web/package-lock.json",
         "app/api/v1",

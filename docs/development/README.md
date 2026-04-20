@@ -8,6 +8,8 @@
 - [`compatibility-inventory.md`](./compatibility-inventory.md) - 前端根级 wrapper 清单、状态与删除条件
 - [`../architecture/current-state.md`](../architecture/current-state.md) - 当前后端/前端/CI 基线与热点分布
 - [`../architecture/core-truth-source-boundaries.md`](../architecture/core-truth-source-boundaries.md) - `config/db/exception` 当前职责边界与 Phase 3 进入说明
+- [`../api/README.md`](../api/README.md) - API 路径、认证与 canonical/compatibility 映射入口
+- [`../operations/README.md`](../operations/README.md) - 部署命令、运行目录边界和本地产物约定入口
 
 ## 开发环境搭建
 

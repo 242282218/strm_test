@@ -48,6 +48,8 @@
 
 - [`docs/architecture/current-state.md`](../architecture/current-state.md)：当前后端/前端/CI 基线和热点分布。
 - [`docs/architecture/core-truth-source-boundaries.md`](../architecture/core-truth-source-boundaries.md)：`config/db/exception` 当前职责边界和 Phase 3 进入说明。
+- [`docs/api/README.md`](../api/README.md)：API canonical/compatibility path、认证与公共探针的当前真相源。
+- [`docs/operations/README.md`](../operations/README.md)：部署命令、运行目录边界与本地产物约定的当前真相源。
 - [`docs/development/compatibility-inventory.md`](../development/compatibility-inventory.md)：前端 wrapper 清单、状态与退役条件。
 - [`docs/development/codex-working-agreement.md`](../development/codex-working-agreement.md)：当前 truth-source、避让区域、最小验证基线与持续优化脚本 contract。
 

@@ -31,6 +31,8 @@
 
 - [`architecture/current-state.md`](./architecture/current-state.md) - 当前后端/前端入口、CI 真相源和大文件热点基线
 - [`architecture/core-truth-source-boundaries.md`](./architecture/core-truth-source-boundaries.md) - `config/db/exception` 当前职责边界与 Phase 3 进入说明
+- [`api/README.md`](./api/README.md) - API 路径、认证和 canonical/compatibility 映射入口
+- [`operations/README.md`](./operations/README.md) - 部署、运行目录边界和本地产物约定入口
 - [`development/codex-working-agreement.md`](./development/codex-working-agreement.md) - 给 Codex/维护者的固定执行入口、范围边界和最小验证基线
 - [`development/compatibility-inventory.md`](./development/compatibility-inventory.md) - 前端根级 wrapper 清单、状态和退役条件
 - [`plans/2026-04-20-codex-project-audit-optimization-plan.md`](./plans/2026-04-20-codex-project-audit-optimization-plan.md) - 本轮审查结论与分阶段优化路线
