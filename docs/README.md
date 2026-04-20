@@ -24,3 +24,9 @@
 - `development_plan.md` - 开发方案
 - `test_report.md` - 测试报告
 - `history.md` - 历史指令记录
+
+## 当前执行入口
+
+- `architecture/current-state.md` - 当前后端/前端入口、CI 真相源和大文件热点基线
+- `development/compatibility-inventory.md` - 前端根级 wrapper 清单、状态和退役条件
+- `plans/2026-04-20-codex-project-audit-optimization-plan.md` - 本轮审查结论与分阶段优化路线

@@ -223,12 +223,18 @@ quark_strm/
 ### 子目录
 - `guides/` - 使用指南
 - `architecture/` - 架构文档
+  - `README.md` - 架构总览入口
+  - `current-state.md` - 当前后端/前端入口、CI 真相源与大文件热点基线
 - `development/` - 开发文档
+  - `README.md` - 开发文档入口
+  - `compatibility-inventory.md` - 前端 wrapper 清单、状态与退役条件
   - `development_plan.md` - 开发方案
   - `history.md` - 历史指令记录
   - `test_report.md` - 测试报告
 - `operations/` - 运维文档
 - `api/` - API 文档
+- `plans/` - 审查结论、阶段计划与执行路线
+  - `2026-04-20-codex-project-audit-optimization-plan.md` - 2026-04-20 审查优化总计划
 
 ---
 

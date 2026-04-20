@@ -1,5 +1,12 @@
 # 开发文档
 
+**最后同步**: 2026-04-20
+
+## 当前执行入口
+
+- [`compatibility-inventory.md`](./compatibility-inventory.md) - 前端根级 wrapper 清单、状态与删除条件
+- [`../architecture/current-state.md`](../architecture/current-state.md) - 当前后端/前端/CI 基线与热点分布
+
 ## 开发环境搭建
 
 ### 前置要求
