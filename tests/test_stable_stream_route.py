@@ -12,6 +12,10 @@ from app.api.stable_stream import router
 from app.core.url_validator import URLValidationError
 
 
+def _build_runtime_config(*, cookie: str = "test-cookie") -> SimpleNamespace:
+    return SimpleNamespace(quark=SimpleNamespace(cookie=cookie))
+
+
 def test_stable_stream_route_when_mapping_exists_then_redirects_to_resolved_target():
     app = FastAPI()
     app.include_router(router)
@@ -39,7 +43,10 @@ def test_stable_stream_route_when_mapping_exists_then_redirects_to_resolved_targ
             return None
 
     with (
-        patch("app.api.stable_stream.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.stable_stream.get_config_service",
+            return_value=SimpleNamespace(get_config=lambda: _build_runtime_config()),
+        ),
         patch("app.api.stable_stream.MediaMappingService", return_value=_FakeMediaMappingService()),
         patch("app.api.stable_stream.QuarkService", _FakeQuarkService),
         patch("app.api.stable_stream.LinkResolver"),
@@ -84,7 +91,10 @@ def test_stable_stream_route_when_direct_first_disabled_then_redirects_to_local_
     mock_config = SimpleNamespace(playback=SimpleNamespace(direct_first=False, force_proxy_clients=[], force_proxy_hosts=[]))
 
     with (
-        patch("app.api.stable_stream.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.stable_stream.get_config_service",
+            return_value=SimpleNamespace(get_config=lambda: _build_runtime_config()),
+        ),
         patch("app.api.stable_stream.MediaMappingService", return_value=_FakeMediaMappingService()),
         patch("app.api.stable_stream.QuarkService", _FakeQuarkService),
         patch("app.api.stable_stream.LinkResolver"),
@@ -131,7 +141,10 @@ def test_stable_stream_route_when_native_authorization_header_marks_force_proxy_
     mock_config = SimpleNamespace(playback=SimpleNamespace(direct_first=True, force_proxy_clients=["infuse"], force_proxy_hosts=[]))
 
     with (
-        patch("app.api.stable_stream.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.stable_stream.get_config_service",
+            return_value=SimpleNamespace(get_config=lambda: _build_runtime_config()),
+        ),
         patch("app.api.stable_stream.MediaMappingService", return_value=_FakeMediaMappingService()),
         patch("app.api.stable_stream.QuarkService", _FakeQuarkService),
         patch("app.api.stable_stream.LinkResolver"),
@@ -182,7 +195,10 @@ def test_stable_stream_route_when_resolved_redirect_url_invalid_then_falls_back_
             return None
 
     with (
-        patch("app.api.stable_stream.config.get_quark_cookie", return_value="test-cookie"),
+        patch(
+            "app.api.stable_stream.get_config_service",
+            return_value=SimpleNamespace(get_config=lambda: _build_runtime_config()),
+        ),
         patch("app.api.stable_stream.MediaMappingService", return_value=_FakeMediaMappingService()),
         patch("app.api.stable_stream.QuarkService", _FakeQuarkService),
         patch("app.api.stable_stream.LinkResolver"),

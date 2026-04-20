@@ -72,7 +72,7 @@
 
 - 当前是运行时配置 facade。
 - `get_config_service()` 提供单例入口，内部还承载了加载、保存、watcher、回滚、回调通知等多职责。
-- `app/api/tmdb.py` 已作为 API 层首个运行态配置 caller 收口到这里，TMDB key 读取顺序固定为 `tmdb.api_key` 优先、`api_keys.tmdb_api_key` 回退。
+- `app/api/tmdb.py` 与 `app/api/stable_stream.py` 已作为 API 层运行态配置 caller 收口到这里；TMDB key 读取顺序固定为 `tmdb.api_key` 优先、`api_keys.tmdb_api_key` 回退，稳定播放入口的 Quark cookie 也已改为请求时从 `AppConfig` 读取。
 - 这意味着它是运行时入口，但还不是理想的单一职责设计。
 
 当前建议：
@@ -88,12 +88,12 @@
 - `app/core/db_utils.py` 不是 engine/session 入口，它只是工具层。
 - `app/core/exceptions.py` 和 `app/core/exception_handler.py` 不是重复模块：前者定义异常语义，后者定义 HTTP 响应表现。
 - `app/config/settings.py` 虽然过大，但当前确实还是配置 schema 真相源；如果不先明确这一点，后续很容易把新字段散落到别处。
-- `app/api/tmdb.py` 已不再直连 `ConfigManager`，但 `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py`、`app/api/stable_stream.py` 等仍保留 `get_config()` 兼容读取，不能误判为 API 层已经完全退掉 `config_manager`。
+- `app/api/tmdb.py` 与 `app/api/stable_stream.py` 已不再走 `config_manager` compatibility path，但 `app/api/emby.py`、`app/api/proxy.py`、`app/api/quark.py` 等仍保留 `get_config()` 兼容读取，不能误判为 API 层已经完全退掉 `config_manager`。
 
 ## 5. 推荐验证锚点
 
 - 数据库/连接池相关：`tests/test_db.py`、`tests/test_db_pool.py`
-- 配置/API 相关：`tests/test_system_config_api.py`、`tests/test_tmdb_api.py`、`tests/test_db_path_contract.py`
+- 配置/API 相关：`tests/test_system_config_api.py`、`tests/test_tmdb_api.py`、`tests/test_stable_stream_route.py`、`tests/test_db_path_contract.py`
 - 异常/安全相关：`tests/test_encryption.py`
 
 进入真正的 Phase 3 代码收敛前，应先以这份边界文档为入口，再决定哪些模块是“继续保留的 facade”，哪些才是应该下沉或删除的兼容层。

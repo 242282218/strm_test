@@ -12,10 +12,10 @@ from app.api.proxy import (
     _build_local_download_stream_redirect,
     _resolve_redirect_target,
 )
-from app.core.config_manager import get_config
 from app.core.logging import get_logger
 from app.core.url_validator import URLValidationError, general_validator
 from app.core.validators import InputValidationError, validate_identifier
+from app.services.config_service import get_config_service
 from app.services.link_resolver import LinkResolver
 from app.services.media_mapping_service import MediaMappingService
 from app.services.playback_decision_service import PlaybackDecisionService
@@ -30,9 +30,13 @@ from app.utils.emby_request import (
 
 router = APIRouter(tags=["StableStream"])
 
-config = get_config()
 playback_decision_service = PlaybackDecisionService()
 logger = get_logger(__name__)
+
+
+def _get_quark_cookie() -> str:
+    app_config = get_config_service().get_config()
+    return str(getattr(getattr(app_config, "quark", None), "cookie", "") or "").strip()
 
 
 @router.api_route("/strm/v1/m/{media_id}/{display_name:path}", methods=["GET", "HEAD"])
@@ -45,7 +49,7 @@ async def stable_media_entry(request: Request, media_id: str, display_name: str)
     _ = display_name
     try:
         media_id = validate_identifier(media_id, "media_id")
-        cookie = config.get_quark_cookie()
+        cookie = _get_quark_cookie()
         if not cookie:
             raise HTTPException(status_code=400, detail="Cookie not configured")
 
