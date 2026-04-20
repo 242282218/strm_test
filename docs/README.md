@@ -6,31 +6,31 @@
 
 ## 📁 目录结构
 
-- **guides/** - 使用指南
+- [`guides/README.md`](./guides/README.md) - 使用指南
   - 快速开始、配置说明、功能使用等
 
-- **architecture/** - 架构文档
+- [`architecture/README.md`](./architecture/README.md) - 架构文档
   - 系统架构、技术选型、设计方案等
 
-- **development/** - 开发文档
+- [`development/README.md`](./development/README.md) - 开发文档
   - 开发计划、实施记录、历史指令等
 
-- **operations/** - 运维文档
+- [`operations/README.md`](./operations/README.md) - 运维文档
   - 部署指南、监控配置、故障排查等
 
-- **api/** - API 文档
+- [`api/README.md`](./api/README.md) - API 文档
   - API 接口说明、使用示例等
 
 ## 📝 主要文档
 
-- `development_plan.md` - 开发方案
-- `test_report.md` - 测试报告
-- `history.md` - 历史指令记录
+- [`development_plan.md`](./development_plan.md) - 开发方案
+- [`test_report.md`](./test_report.md) - 测试报告
+- [`history.md`](./history.md) - 历史指令记录
 
 ## 当前执行入口
 
-- `architecture/current-state.md` - 当前后端/前端入口、CI 真相源和大文件热点基线
-- `architecture/core-truth-source-boundaries.md` - `config/db/exception` 当前职责边界与 Phase 3 进入说明
-- `development/codex-working-agreement.md` - 给 Codex/维护者的固定执行入口、范围边界和最小验证基线
-- `development/compatibility-inventory.md` - 前端根级 wrapper 清单、状态和退役条件
-- `plans/2026-04-20-codex-project-audit-optimization-plan.md` - 本轮审查结论与分阶段优化路线
+- [`architecture/current-state.md`](./architecture/current-state.md) - 当前后端/前端入口、CI 真相源和大文件热点基线
+- [`architecture/core-truth-source-boundaries.md`](./architecture/core-truth-source-boundaries.md) - `config/db/exception` 当前职责边界与 Phase 3 进入说明
+- [`development/codex-working-agreement.md`](./development/codex-working-agreement.md) - 给 Codex/维护者的固定执行入口、范围边界和最小验证基线
+- [`development/compatibility-inventory.md`](./development/compatibility-inventory.md) - 前端根级 wrapper 清单、状态和退役条件
+- [`plans/2026-04-20-codex-project-audit-optimization-plan.md`](./plans/2026-04-20-codex-project-audit-optimization-plan.md) - 本轮审查结论与分阶段优化路线

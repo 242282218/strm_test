@@ -20,12 +20,28 @@ WRAPPER_DIRS = {
 }
 FEATURE_MARKERS = ("@/features/", "../features/", "./features/")
 HOTSPOT_PATH_PATTERN = re.compile(r"^\|\s*`([^`]+)`\s*\|", re.MULTILINE)
+MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 TOP_LEVEL_ENTRY_DOCS = (
     PROJECT_ROOT / "docs" / "architecture" / "current-state.md",
     PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md",
     PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md",
     PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md",
     PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md",
+)
+DOCS_INDEX_LINKS = (
+    ("guides/README.md", "./guides/README.md"),
+    ("architecture/README.md", "./architecture/README.md"),
+    ("development/README.md", "./development/README.md"),
+    ("operations/README.md", "./operations/README.md"),
+    ("api/README.md", "./api/README.md"),
+    ("development_plan.md", "./development_plan.md"),
+    ("test_report.md", "./test_report.md"),
+    ("history.md", "./history.md"),
+    ("architecture/current-state.md", "./architecture/current-state.md"),
+    ("architecture/core-truth-source-boundaries.md", "./architecture/core-truth-source-boundaries.md"),
+    ("development/codex-working-agreement.md", "./development/codex-working-agreement.md"),
+    ("development/compatibility-inventory.md", "./development/compatibility-inventory.md"),
+    ("plans/2026-04-20-codex-project-audit-optimization-plan.md", "./plans/2026-04-20-codex-project-audit-optimization-plan.md"),
 )
 DEVELOPMENT_ENTRY_DOCS = (
     PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md",
@@ -64,6 +80,14 @@ def _feature_wrapper_counts() -> dict[str, int]:
 def _iter_markdown_table_paths(document: str) -> Iterator[str]:
     for match in HOTSPOT_PATH_PATTERN.finditer(document):
         yield match.group(1)
+
+
+def _iter_relative_markdown_links(document: str) -> Iterator[str]:
+    for match in MARKDOWN_LINK_PATTERN.finditer(document):
+        target = match.group(1)
+        if target.startswith(("http://", "https://", "#")):
+            continue
+        yield target
 
 
 def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
@@ -108,17 +132,19 @@ def test_docs_index_points_to_current_execution_entry_docs() -> None:
 
     assert "**最后同步**: 2026-04-20" in document
 
-    for path_hint in (
-        "architecture/current-state.md",
-        "architecture/core-truth-source-boundaries.md",
-        "development/codex-working-agreement.md",
-        "development/compatibility-inventory.md",
-        "plans/2026-04-20-codex-project-audit-optimization-plan.md",
-    ):
-        assert path_hint in document
+    for label, relative_target in DOCS_INDEX_LINKS:
+        assert f"[`{label}`]({relative_target})" in document
 
     for path in TOP_LEVEL_ENTRY_DOCS:
         assert path.exists(), f"Top-level execution entry doc missing: {path.relative_to(PROJECT_ROOT).as_posix()}"
+
+
+def test_docs_index_relative_links_resolve_to_existing_files() -> None:
+    document = DOCS_INDEX_PATH.read_text(encoding="utf-8")
+
+    for relative_target in _iter_relative_markdown_links(document):
+        resolved_path = (DOCS_INDEX_PATH.parent / relative_target).resolve()
+        assert resolved_path.exists(), f"Docs index link target missing: {relative_target}"
 
 
 def test_compatibility_inventory_lists_all_current_feature_wrappers() -> None:
