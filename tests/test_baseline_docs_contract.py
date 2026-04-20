@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from pathlib import Path
+import re
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ WRAPPER_DIRS = {
     "stores": PROJECT_ROOT / "web" / "src" / "stores",
 }
 FEATURE_MARKERS = ("@/features/", "../features/", "./features/")
+HOTSPOT_PATH_PATTERN = re.compile(r"^\|\s*`([^`]+)`\s*\|", re.MULTILINE)
 
 
 def _iter_feature_wrappers() -> Iterator[str]:
@@ -44,6 +46,11 @@ def _feature_wrapper_counts() -> dict[str, int]:
         counts[category] = count
 
     return counts
+
+
+def _iter_markdown_table_paths(document: str) -> Iterator[str]:
+    for match in HOTSPOT_PATH_PATTERN.finditer(document):
+        yield match.group(1)
 
 
 def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
@@ -73,6 +80,14 @@ def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
         f"Store 包装：{wrapper_counts['stores']}",
     ):
         assert count_hint in document
+
+
+def test_current_state_hotspot_paths_exist_in_repo() -> None:
+    document = CURRENT_STATE_DOC_PATH.read_text(encoding="utf-8")
+
+    for relative_path in _iter_markdown_table_paths(document):
+        resolved_path = PROJECT_ROOT / relative_path
+        assert resolved_path.exists(), f"Hotspot path missing from repo: {relative_path}"
 
 
 def test_docs_index_points_to_current_execution_entry_docs() -> None:
