@@ -7,40 +7,44 @@
 """
 
 import aiohttp
-from typing import Optional, Dict, Any
-from app.services.quark_service import QuarkService
-from app.services.link_cache import get_link_cache_service
-from app.core.config_manager import get_config
+
 from app.core.logging import get_logger
+from app.services.config_service import get_config_service
+from app.services.link_cache import get_link_cache_service
+from app.services.quark_service import QuarkService
+
 
 logger = get_logger(__name__)
 
+
+def get_alist_runtime_config() -> dict[str, object]:
+    return get_config_service().get_config().alist.model_dump()
+
+
 class LinkResolver:
     def __init__(self, quark_service: QuarkService = None):
-        config_mgr = get_config()
         self.quark_service = quark_service
-        self.alist_config = config_mgr.get_alist_config()
-        self.config_mgr = config_mgr
+        self.alist_config = get_alist_runtime_config()
         self.link_cache = get_link_cache_service()
-        
+
     async def resolve(self, file_id: str, path: str = None) -> str:
         """
         解析文件直链
-        
+
         策略:
         0. 检查缓存
         1. 尝试使用 QuarkService 获取直链 (file_id)
         2. 如果失败且配置了 AList，尝试使用 AList API 获取直链 (path)
         """
         cache = self.link_cache
-        
+
         # Check cache
         cached_entry = await cache.get(file_id)
         if cached_entry:
             return cached_entry.value
 
         last_error = None
-        
+
         # 1. 优先尝试 Quark API (基于 ID，最快)
         if self.quark_service:
             try:
@@ -54,10 +58,10 @@ class LinkResolver:
             except Exception as e:
                 logger.warning(f"Quark API resolve failed for {file_id}: {e}")
                 last_error = e
-        
+
         # 2. 尝试 AList API (基于 Path)
         # 仅当 path 存在且 AList 启用时
-        if self.alist_config.get('enabled') and path:
+        if self.alist_config.get("enabled") and path:
             try:
                 alist_url = await self._resolve_via_alist(path)
                 if alist_url:
@@ -68,47 +72,40 @@ class LinkResolver:
             except Exception as e:
                 logger.warning(f"AList API resolve failed for {path}: {e}")
                 last_error = e if last_error is None else last_error
-                
+
         # 如果都失败了
         if last_error:
             raise last_error
-        else:
-            raise Exception("No available link resolver service")
+        raise Exception("No available link resolver service")
 
     async def _resolve_via_alist(self, path: str) -> str:
         """通过 AList API 获取直链"""
-        base_url = self.alist_config.get('url', 'http://localhost:5244').rstrip('/')
-        token = self.alist_config.get('token', '')
-        mount_path = self.alist_config.get('mount_path', '/')
-        
+        base_url = self.alist_config.get("url", "http://localhost:5244").rstrip("/")
+        token = self.alist_config.get("token", "")
+        mount_path = self.alist_config.get("mount_path", "/")
+
         # 拼接完整路径: mount_path + file_path
         # 注意处理斜杠，避免双斜杠
         full_path = f"{mount_path.rstrip('/')}/{path.lstrip('/')}"
-        
+
         api_url = f"{base_url}/api/fs/get"
-        headers = {
-            "Authorization": token,
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "path": full_path,
-            "password": ""
-        }
-        
+        headers = {"Authorization": token, "Content-Type": "application/json"}
+        payload = {"path": full_path, "password": ""}
+
         async with aiohttp.ClientSession() as session:
             async with session.post(api_url, json=payload, headers=headers, timeout=10) as resp:
                 if resp.status != 200:
                     raise Exception(f"AList API error: {resp.status}")
-                
+
                 data = await resp.json()
-                if data.get('code') != 200:
+                if data.get("code") != 200:
                     raise Exception(f"AList API returned error: {data.get('message')}")
-                
+
                 # AList 返回的 raw_url 即为直链
                 # 注意：raw_url 可能是 302 重定向链接，也可能是真实链接，取决于 AList 驱动配置
                 # 对于 Quark，AList 通常返回的是经过本地 302 的链接或直接的下载链接
-                raw_url = data.get('data', {}).get('raw_url')
+                raw_url = data.get("data", {}).get("raw_url")
                 if not raw_url:
                     raise Exception("AList did not return a raw_url")
-                    
+
                 return raw_url

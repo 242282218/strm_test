@@ -15,16 +15,16 @@ PATH_SECURITY_CORE_PATH = PROJECT_ROOT / "app" / "core" / "path_security.py"
 AI_CONNECTIVITY_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "ai_connectivity_service.py"
 TOKEN_MONITOR_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "token_monitor.py"
 WEBDAV_FALLBACK_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "webdav_fallback.py"
+LINK_RESOLVER_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "link_resolver.py"
+QUARK_STORAGE_PROVIDER_PATH = PROJECT_ROOT / "app" / "services" / "storage" / "quark.py"
 API_CONFIG_MANAGER_GETTER_INVENTORY = ["app/api/quark.py"]
 SERVICE_CORE_CONFIG_MANAGER_COMPAT_INVENTORY = [
     "app/services/emby_proxy_service.py",
     "app/services/integrations/emby.py",
-    "app/services/link_resolver.py",
     "app/services/media/organize.py",
     "app/services/media/rename.py",
     "app/services/media/smart_rename.py",
     "app/services/media/strm_generator.py",
-    "app/services/storage/quark.py",
     "app/services/unified_ai_service.py",
 ]
 DATABASE_COMPAT_IMPORT_PATTERN = re.compile(r"^\s*(?:from\s+app\.core\.database\s+import|import\s+app\.core\.database\b)", re.MULTILINE)
@@ -160,4 +160,18 @@ def test_token_monitor_service_avoids_config_manager_getter_import() -> None:
 def test_webdav_fallback_service_avoids_config_manager_getter_import() -> None:
     document = WEBDAV_FALLBACK_SERVICE_PATH.read_text(encoding="utf-8")
 
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_link_resolver_service_avoids_direct_config_manager_imports() -> None:
+    document = LINK_RESOLVER_SERVICE_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_IMPORT_PATTERN.search(document) is None
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_storage_quark_provider_avoids_direct_config_manager_imports() -> None:
+    document = QUARK_STORAGE_PROVIDER_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_IMPORT_PATTERN.search(document) is None
     assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None

@@ -53,7 +53,8 @@
 - `app/api/v1/*` 虽然已经是 public canonical path 层，但内部仍复用部分 legacy router；不能把当前状态误写成“v1-only 实现树已完成”。
 - `app/api/quark.py` 仍保留 `get_config()` 兼容读取；当前只能说 API 层已基本收口运行态配置 caller，不能误写成 `config_manager` 已彻底退出 API 层。
 - `app/services/token_monitor.py`、`app/services/webdav_fallback.py`、`app/core/path_security.py` 与 `app/services/ai_connectivity_service.py` 已移除 `config_manager` compatibility import；Quark cookie、WebDAV fallback 配置、允许目录补充读取与 AI provider map 统一通过 `get_config_service()` / `AppConfig.ai.providers` 读取，同时保留最小 helper 作为测试 patch 点，并由对应模块测试 + `tests/test_db_path_contract.py` 锁定。
-- service/core 层仍保留 9 个 `config_manager` compatibility caller：`app/services/emby_proxy_service.py`、`app/services/integrations/emby.py`、`app/services/link_resolver.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/storage/quark.py`、`app/services/unified_ai_service.py`；当前新增的是 inventory contract，尚未进入逐模块清理。
+- `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已移除 `config_manager` compatibility import；AList runtime 配置和 Quark cookie 统一通过 `get_config_service()` facade 读取，同时保留最小 helper 作为测试 patch 点，并由 `tests/test_link_resolver.py`、`tests/test_storage_quark_provider.py` 与 `tests/test_db_path_contract.py` 锁定。
+- service/core 层仍保留 7 个 `config_manager` compatibility caller：`app/services/emby_proxy_service.py`、`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/unified_ai_service.py`；当前 inventory 已继续收紧，但基础设施代码尚未进入实质拆分。
 - 前端安装层仍未完成 `pnpm-lock.yaml` 迁移；当前正确表述是“CI 装依赖用 `npm ci`，本地脚本执行默认 `pnpm run ...`”，而不是简单把所有地方都替换成 `pnpm install --frozen-lockfile`。
 - 监控目录当前还没有 `prometheus-rules.yml` 与 `alerting/alertmanager.yml`；后续若补告警能力，应先提交真实资产文件，再更新索引与 contract test。
 
