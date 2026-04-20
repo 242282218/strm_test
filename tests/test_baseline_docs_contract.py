@@ -20,6 +20,19 @@ WRAPPER_DIRS = {
 }
 FEATURE_MARKERS = ("@/features/", "../features/", "./features/")
 HOTSPOT_PATH_PATTERN = re.compile(r"^\|\s*`([^`]+)`\s*\|", re.MULTILINE)
+TOP_LEVEL_ENTRY_DOCS = (
+    PROJECT_ROOT / "docs" / "architecture" / "current-state.md",
+    PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md",
+    PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md",
+    PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md",
+    PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md",
+)
+DEVELOPMENT_ENTRY_DOCS = (
+    PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md",
+    PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md",
+    PROJECT_ROOT / "docs" / "architecture" / "current-state.md",
+    PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md",
+)
 
 
 def _iter_feature_wrappers() -> Iterator[str]:
@@ -104,6 +117,9 @@ def test_docs_index_points_to_current_execution_entry_docs() -> None:
     ):
         assert path_hint in document
 
+    for path in TOP_LEVEL_ENTRY_DOCS:
+        assert path.exists(), f"Top-level execution entry doc missing: {path.relative_to(PROJECT_ROOT).as_posix()}"
+
 
 def test_compatibility_inventory_lists_all_current_feature_wrappers() -> None:
     document = COMPATIBILITY_DOC_PATH.read_text(encoding="utf-8")
@@ -170,6 +186,9 @@ def test_development_and_web_readmes_match_current_command_contract() -> None:
     assert "回退 `66`" in development_document
     assert "../architecture/core-truth-source-boundaries.md" in development_document
     assert "npm run format" not in development_document
+
+    for path in DEVELOPMENT_ENTRY_DOCS:
+        assert path.exists(), f"Development execution entry doc missing: {path.relative_to(PROJECT_ROOT).as_posix()}"
 
     assert "文档最后同步日期：`2026-04-20`" in web_document
     assert "npm ci" in web_document
