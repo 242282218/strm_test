@@ -83,17 +83,18 @@
 | `tests/test_emby_proxy_routing.py` | 3396 | Emby 路由回归面极大，改动成本高 |
 | `tests/test_emby_gateway.py` | 2029 | Gateway 契约已形成大型保护网 |
 | `tests/test_db.py` | 675 | 数据库真相源收敛时需优先关注 |
-| `tests/test_strm_api.py` | 586 | STRM API 回归面已进入测试热点 Top 10 |
 | `tests/test_dependencies.py` | 573 | 依赖注入边界测试面在持续扩大 |
 | `tests/test_db_pool.py` | 550 | 数据库连接池回归面仍不小 |
 | `tests/test_lru_cache.py` | 546 | 缓存基础设施测试规模已接近数据库热点 |
 | `tests/test_strm_service.py` | 540 | STRM 服务回归面与 API 热点并行增长 |
 | `tests/test_auth_middleware.py` | 535 | 认证中间件契约测试已形成较大保护网 |
 | `tests/test_notification_service.py` | 523 | 通知服务行为覆盖开始进入大型测试模块 |
+| `tests/test_strm_api.py` | 519 | STRM API 已去掉无效数据库兼容层假设，但仍是接口层回归锚点 |
 
 ## 4. 当前已确认约束
 
 - `web/src/features/config/*` 当前已有大量未提交修改，本轮不直接深入该切片。
 - `app/api/v1` 已是对外 canonical path 层，但内部仍依赖 legacy router 复用，不能误判为“已经彻底完成 API 分层”。
 - 进入 Phase 3 前，先看 [`core-truth-source-boundaries.md`](./core-truth-source-boundaries.md)；当前 `config/db/exception` 仍应按“`db.py` 主入口 + `database.py` 兼容层 + `db_utils.py` 工具层 / `error_codes.py` 错误码 / `exceptions.py` 领域异常 / `exception_handler.py` HTTP 响应层”理解。
+- `app/api/strm.py` 与 `app/api/dashboard.py` 都已不再依赖 `Database` 兼容层 caller；当前 `app/` 层显式 `Database(...)` 调用已清零。
 - 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再进入更深层的拆分或删兼容层。

@@ -11,9 +11,9 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import or_
 
 from app.core.config_manager import get_config
-from app.core.database import Database, resolve_db_path
 from app.core.db import get_db_session
 from app.core.logging import get_logger
+from app.models.strm_record import StrmRecord
 from app.models.task import Task as PlatformTask
 from app.services.config_service import get_config_service
 from app.services.link_cache import LinkCache
@@ -24,7 +24,6 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["仪表盘"])
 
 # 全局实例
-_db: Database = None
 _task_scheduler: TaskScheduler = None
 _link_cache: LinkCache = None
 config = get_config()
@@ -41,12 +40,9 @@ SUCCESS_TASK_STATUSES = {"completed", "partial_success"}
 FAILED_TASK_STATUSES = {"failed", "cancelled"}
 
 
-def get_db() -> Database:
-    """获取数据库实例"""
-    global _db
-    if _db is None:
-        _db = Database(resolve_db_path())
-    return _db
+def get_strm_files() -> list[dict[str, Any]]:
+    with get_db_session() as session:
+        return [record.to_dict() for record in StrmRecord.get_all(session)]
 
 
 async def get_task_scheduler() -> TaskScheduler:
@@ -76,10 +72,8 @@ async def get_dashboard_stats() -> dict[str, Any]:
         包含各类统计信息的字典
     """
     try:
-        db = get_db()
-
         # 1. STRM文件数量
-        strm_files = db.get_all_strms()
+        strm_files = get_strm_files()
         strm_count = len(strm_files)
 
         # 2. 任务统计
@@ -309,7 +303,7 @@ def calculate_file_types(strm_files: list[dict]) -> dict[str, int]:
     type_count = {}
 
     for file in strm_files:
-        filename = file.get("filename", "")
+        filename = file.get("filename") or file.get("file_name") or file.get("name") or ""
         if "." in filename:
             ext = filename.rsplit(".", 1)[1].lower()
         else:

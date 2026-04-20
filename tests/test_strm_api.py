@@ -49,32 +49,27 @@ class TestStrmScanEndpoint:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/videos",
-                                    "local_path": tmpdir,
-                                    "recursive": True,
-                                    "concurrent_limit": 5,
-                                    "base_url": "http://localhost:8000",
-                                    "strm_url_mode": "redirect",
-                                    "overwrite": False,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/videos",
+                            "local_path": tmpdir,
+                            "recursive": True,
+                            "concurrent_limit": 5,
+                            "base_url": "http://localhost:8000",
+                            "strm_url_mode": "redirect",
+                            "overwrite": False,
+                        }
+                    )
 
-                            assert response.status_code == 200
-                            data = response.json()
-                            assert "strms" in data
-                            assert data["count"] == 2
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert "strms" in data
+                    assert data["count"] == 2
 
     def test_scan_directory_with_overwrite(self, app, mock_cookie):
         """测试扫描目录并覆盖"""
@@ -88,29 +83,24 @@ class TestStrmScanEndpoint:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/videos",
-                                    "local_path": tmpdir,
-                                    "recursive": True,
-                                    "concurrent_limit": 5,
-                                    "base_url": "http://localhost:8000",
-                                    "strm_url_mode": "redirect",
-                                    "overwrite": True,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/videos",
+                            "local_path": tmpdir,
+                            "recursive": True,
+                            "concurrent_limit": 5,
+                            "base_url": "http://localhost:8000",
+                            "strm_url_mode": "redirect",
+                            "overwrite": True,
+                        }
+                    )
 
-                            assert response.status_code == 200
+                    assert response.status_code == 200
 
     def test_scan_directory_non_recursive(self, app, mock_cookie):
         """测试非递归扫描目录"""
@@ -124,26 +114,21 @@ class TestStrmScanEndpoint:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/videos",
-                                    "local_path": tmpdir,
-                                    "recursive": False,
-                                    "concurrent_limit": 5,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/videos",
+                            "local_path": tmpdir,
+                            "recursive": False,
+                            "concurrent_limit": 5,
+                        }
+                    )
 
-                            assert response.status_code == 200
+                    assert response.status_code == 200
 
     def test_scan_directory_different_modes(self, app, mock_cookie):
         """测试不同 URL 模式扫描"""
@@ -160,25 +145,20 @@ class TestStrmScanEndpoint:
             })
             mock_service.close = AsyncMock()
 
-            mock_database = MagicMock()
-            mock_database.close = MagicMock()
-
             with tempfile.TemporaryDirectory() as tmpdir:
                 with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                     with patch("app.api.strm.StrmService", return_value=mock_service):
-                        with patch("app.api.strm.Database", return_value=mock_database):
-                            with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                                client = TestClient(app)
-                                response = client.post(
-                                    "/api/strm/scan",
-                                    params={
-                                        "remote_path": "/videos",
-                                        "local_path": tmpdir,
-                                        "strm_url_mode": mode,
-                                    }
-                                )
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/strm/scan",
+                            params={
+                                "remote_path": "/videos",
+                                "local_path": tmpdir,
+                                "strm_url_mode": mode,
+                            }
+                        )
 
-                                assert response.status_code == 200, f"Mode {mode} failed"
+                        assert response.status_code == 200, f"Mode {mode} failed"
 
 
 class TestStrmScanValidation:
@@ -215,27 +195,22 @@ class TestStrmScanValidation:
         mock_service = AsyncMock()
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            # 并发限制超出范围
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/videos",
-                                    "local_path": tmpdir,
-                                    "concurrent_limit": 100,  # 超出最大值
-                                }
-                            )
+                    client = TestClient(app)
+                    # 并发限制超出范围
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/videos",
+                            "local_path": tmpdir,
+                            "concurrent_limit": 100,  # 超出最大值
+                        }
+                    )
 
-                            # 应该返回验证错误
-                            assert response.status_code == 422
+                    # 应该返回验证错误
+                    assert response.status_code == 422
 
     def test_scan_empty_paths(self, app, mock_cookie):
         """测试空路径"""
@@ -263,24 +238,19 @@ class TestStrmScanErrorHandling:
         )
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/videos",
-                                    "local_path": tmpdir,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/videos",
+                            "local_path": tmpdir,
+                        }
+                    )
 
-                            assert response.status_code == 500
+                    assert response.status_code == 500
 
     def test_scan_path_not_found(self, app, mock_cookie):
         """测试路径不存在"""
@@ -290,24 +260,19 @@ class TestStrmScanErrorHandling:
         )
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/nonexistent",
-                                    "local_path": tmpdir,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/nonexistent",
+                            "local_path": tmpdir,
+                        }
+                    )
 
-                            assert response.status_code == 500
+                    assert response.status_code == 500
 
 
 class TestStrmScanConcurrency:
@@ -326,25 +291,20 @@ class TestStrmScanConcurrency:
             })
             mock_service.close = AsyncMock()
 
-            mock_database = MagicMock()
-            mock_database.close = MagicMock()
-
             with tempfile.TemporaryDirectory() as tmpdir:
                 with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                     with patch("app.api.strm.StrmService", return_value=mock_service):
-                        with patch("app.api.strm.Database", return_value=mock_database):
-                            with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                                client = TestClient(app)
-                                response = client.post(
-                                    "/api/strm/scan",
-                                    params={
-                                        "remote_path": "/videos",
-                                        "local_path": tmpdir,
-                                        "concurrent_limit": limit,
-                                    }
-                                )
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/strm/scan",
+                            params={
+                                "remote_path": "/videos",
+                                "local_path": tmpdir,
+                                "concurrent_limit": limit,
+                            }
+                        )
 
-                                assert response.status_code == 200
+                        assert response.status_code == 200
 
 
 class TestStrmScanBaseUrl:
@@ -362,29 +322,24 @@ class TestStrmScanBaseUrl:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         custom_url = "http://custom.server:9000"
 
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service) as mock_strm_service:
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/videos",
-                                    "local_path": tmpdir,
-                                    "base_url": custom_url,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/videos",
+                            "local_path": tmpdir,
+                            "base_url": custom_url,
+                        }
+                    )
 
-                            assert response.status_code == 200
-                            mock_strm_service.assert_called_once()
-                            assert mock_strm_service.call_args.kwargs["base_url"] == custom_url
+                    assert response.status_code == 200
+                    mock_strm_service.assert_called_once()
+                    assert mock_strm_service.call_args.kwargs["base_url"] == custom_url
 
     def test_scan_with_proxy_override_header(self, app, mock_cookie):
         """测试请求头覆盖默认 Base URL"""
@@ -398,9 +353,6 @@ class TestStrmScanBaseUrl:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         mock_config = MagicMock()
         mock_emby = MagicMock()
         mock_emby.proxy_base_url = "http://configured.proxy:18097"
@@ -409,25 +361,23 @@ class TestStrmScanBaseUrl:
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service) as mock_strm_service:
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            with patch("app.api.strm.get_config_service") as mock_get_config_service:
-                                mock_get_config_service.return_value.get_config.return_value = mock_config
-                                client = TestClient(app)
-                                response = client.post(
-                                    "/api/strm/scan",
-                                    params={
-                                        "remote_path": "/videos",
-                                        "local_path": tmpdir,
-                                    },
-                                    headers={
-                                        "X-Proxy-Server-Url": "https://public.proxy.example",
-                                    },
-                                )
+                    with patch("app.api.strm.get_config_service") as mock_get_config_service:
+                        mock_get_config_service.return_value.get_config.return_value = mock_config
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/strm/scan",
+                            params={
+                                "remote_path": "/videos",
+                                "local_path": tmpdir,
+                            },
+                            headers={
+                                "X-Proxy-Server-Url": "https://public.proxy.example",
+                            },
+                        )
 
-                                assert response.status_code == 200
-                                mock_strm_service.assert_called_once()
-                                assert mock_strm_service.call_args.kwargs["base_url"] == "https://public.proxy.example"
+                        assert response.status_code == 200
+                        mock_strm_service.assert_called_once()
+                        assert mock_strm_service.call_args.kwargs["base_url"] == "https://public.proxy.example"
 
     def test_scan_with_invalid_proxy_override_header_then_returns_400(self, app, mock_cookie):
         """测试非法请求头代理覆盖地址返回固定 400"""
@@ -442,24 +392,22 @@ class TestStrmScanBaseUrl:
                     "app.api.strm.StrmService",
                     side_effect=AssertionError("should reject invalid proxy override before service init"),
                 ):
-                    with patch("app.api.strm.Database", side_effect=AssertionError("should not open database on invalid input")):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            with patch("app.api.strm.get_config_service") as mock_get_config_service:
-                                mock_get_config_service.return_value.get_config.return_value = mock_config
-                                client = TestClient(app, raise_server_exceptions=False)
-                                response = client.post(
-                                    "/api/strm/scan",
-                                    params={
-                                        "remote_path": "/videos",
-                                        "local_path": tmpdir,
-                                    },
-                                    headers={
-                                        "X-Proxy-Server-Url": "not-a-url",
-                                    },
-                                )
+                    with patch("app.api.strm.get_config_service") as mock_get_config_service:
+                        mock_get_config_service.return_value.get_config.return_value = mock_config
+                        client = TestClient(app, raise_server_exceptions=False)
+                        response = client.post(
+                            "/api/strm/scan",
+                            params={
+                                "remote_path": "/videos",
+                                "local_path": tmpdir,
+                            },
+                            headers={
+                                "X-Proxy-Server-Url": "not-a-url",
+                            },
+                        )
 
-                                assert response.status_code == 400
-                                assert response.json() == {"detail": "Invalid proxy server URL"}
+                        assert response.status_code == 400
+                        assert response.json() == {"detail": "Invalid proxy server URL"}
 
     def test_scan_with_default_base_url(self, app, mock_cookie):
         """测试默认 Base URL"""
@@ -473,9 +421,6 @@ class TestStrmScanBaseUrl:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         mock_config = MagicMock()
         mock_emby = MagicMock()
         mock_emby.proxy_base_url = "http://192.168.100.101:18097"
@@ -484,22 +429,20 @@ class TestStrmScanBaseUrl:
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service) as mock_strm_service:
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            with patch("app.api.strm.get_config_service") as mock_get_config_service:
-                                mock_get_config_service.return_value.get_config.return_value = mock_config
-                                client = TestClient(app)
-                                response = client.post(
-                                    "/api/strm/scan",
-                                    params={
-                                        "remote_path": "/videos",
-                                        "local_path": tmpdir,
-                                    }
-                                )
+                    with patch("app.api.strm.get_config_service") as mock_get_config_service:
+                        mock_get_config_service.return_value.get_config.return_value = mock_config
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/strm/scan",
+                            params={
+                                "remote_path": "/videos",
+                                "local_path": tmpdir,
+                            }
+                        )
 
-                                assert response.status_code == 200
-                                mock_strm_service.assert_called_once()
-                                assert mock_strm_service.call_args.kwargs["base_url"] == "http://192.168.100.101:18097"
+                        assert response.status_code == 200
+                        mock_strm_service.assert_called_once()
+                        assert mock_strm_service.call_args.kwargs["base_url"] == "http://192.168.100.101:18097"
 
 
 class TestStrmScanResponse:
@@ -517,39 +460,34 @@ class TestStrmScanResponse:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/videos",
-                                    "local_path": tmpdir,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/videos",
+                            "local_path": tmpdir,
+                        }
+                    )
 
-                            assert response.status_code == 200
-                            data = response.json()
+                    assert response.status_code == 200
+                    data = response.json()
 
-                            # 验证响应字段
-                            assert "strms" in data
-                            assert "count" in data
-                            assert "skipped" in data
-                            assert "failed" in data
-                            assert "total" in data
+                    # 验证响应字段
+                    assert "strms" in data
+                    assert "count" in data
+                    assert "skipped" in data
+                    assert "failed" in data
+                    assert "total" in data
 
-                            # 验证值
-                            assert len(data["strms"]) == 3
-                            assert data["count"] == 3
-                            assert data["skipped"] == 2
-                            assert data["failed"] == 1
-                            assert data["total"] == 6
+                    # 验证值
+                    assert len(data["strms"]) == 3
+                    assert data["count"] == 3
+                    assert data["skipped"] == 2
+                    assert data["failed"] == 1
+                    assert data["total"] == 6
 
     def test_scan_empty_result(self, app, mock_cookie):
         """测试空结果"""
@@ -563,24 +501,19 @@ class TestStrmScanResponse:
         })
         mock_service.close = AsyncMock()
 
-        mock_database = MagicMock()
-        mock_database.close = MagicMock()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("app.api.strm.get_quark_cookie", return_value=mock_cookie):
                 with patch("app.api.strm.StrmService", return_value=mock_service):
-                    with patch("app.api.strm.Database", return_value=mock_database):
-                        with patch("app.api.strm.resolve_db_path", return_value="test.db"):
-                            client = TestClient(app)
-                            response = client.post(
-                                "/api/strm/scan",
-                                params={
-                                    "remote_path": "/empty",
-                                    "local_path": tmpdir,
-                                }
-                            )
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/strm/scan",
+                        params={
+                            "remote_path": "/empty",
+                            "local_path": tmpdir,
+                        }
+                    )
 
-                            assert response.status_code == 200
-                            data = response.json()
-                            assert data["count"] == 0
-                            assert data["strms"] == []
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data["count"] == 0
+                    assert data["strms"] == []

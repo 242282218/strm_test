@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -12,30 +13,39 @@ from app.api import dashboard
 
 @pytest.fixture(autouse=True)
 def reset_dashboard_globals() -> None:
-    dashboard._db = None
     dashboard._task_scheduler = None
     dashboard._link_cache = None
     yield
-    dashboard._db = None
     dashboard._task_scheduler = None
     dashboard._link_cache = None
 
 
-def test_get_db_returns_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
-    created_paths: list[str] = []
+def test_get_strm_files_uses_primary_db_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen_sessions: list[object] = []
 
-    class FakeDatabase:
-        def __init__(self, path: str) -> None:
-            created_paths.append(path)
+    @contextmanager
+    def fake_session_context():
+        session = object()
+        seen_sessions.append(session)
+        yield session
 
-    monkeypatch.setattr(dashboard, "resolve_db_path", lambda: "test.db")
-    monkeypatch.setattr(dashboard, "Database", FakeDatabase)
+    class FakeRecord:
+        def __init__(self, payload: dict[str, str]) -> None:
+            self._payload = payload
 
-    first = dashboard.get_db()
-    second = dashboard.get_db()
+        def to_dict(self) -> dict[str, str]:
+            return self._payload
 
-    assert first is second
-    assert created_paths == ["test.db"]
+    class FakeStrmRecord:
+        @staticmethod
+        def get_all(session: object) -> list[FakeRecord]:
+            assert session is seen_sessions[0]
+            return [FakeRecord({"file_name": "episode01.mkv"})]
+
+    monkeypatch.setattr(dashboard, "get_db_session", fake_session_context)
+    monkeypatch.setattr(dashboard, "StrmRecord", FakeStrmRecord)
+
+    assert dashboard.get_strm_files() == [{"file_name": "episode01.mkv"}]
 
 
 @pytest.mark.asyncio
@@ -138,8 +148,8 @@ def test_get_services_status_reflects_cookie_state(monkeypatch: pytest.MonkeyPat
 def test_calculate_file_types_counts_extensions_and_unknown() -> None:
     files = [
         {"filename": "a.MKV"},
-        {"filename": "b.mp4"},
-        {"filename": "noext"},
+        {"file_name": "b.mp4"},
+        {"name": "noext"},
         {"filename": "b.mp4"},
     ]
 
@@ -148,11 +158,6 @@ def test_calculate_file_types_counts_extensions_and_unknown() -> None:
 
 @pytest.mark.asyncio
 async def test_get_dashboard_stats_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeDB:
-        @staticmethod
-        def get_all_strms() -> list[dict[str, str]]:
-            return [{"filename": "a.mkv"}, {"filename": "b.mp4"}, {"filename": "noext"}]
-
     class FakeScheduler:
         @staticmethod
         def get_status() -> dict[str, Any]:
@@ -163,7 +168,11 @@ async def test_get_dashboard_stats_success(monkeypatch: pytest.MonkeyPatch) -> N
         def get_stats() -> dict[str, Any]:
             return {"valid_entries": 4, "total_entries": 8, "total_access_count": 10, "default_ttl": 120, "running": True}
 
-    monkeypatch.setattr(dashboard, "get_db", lambda: FakeDB())
+    monkeypatch.setattr(
+        dashboard,
+        "get_strm_files",
+        lambda: [{"file_name": "a.mkv"}, {"file_name": "b.mp4"}, {"name": "noext"}],
+    )
 
     async def _get_scheduler() -> FakeScheduler:
         return FakeScheduler()
@@ -203,7 +212,7 @@ async def test_get_dashboard_stats_success(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.asyncio
 async def test_get_dashboard_stats_raises_http_500_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(dashboard, "get_db", lambda: (_ for _ in ()).throw(RuntimeError("db boom")))
+    monkeypatch.setattr(dashboard, "get_strm_files", lambda: (_ for _ in ()).throw(RuntimeError("db boom")))
 
     with pytest.raises(HTTPException) as exc_info:
         await dashboard.get_dashboard_stats()

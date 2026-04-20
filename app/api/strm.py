@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.api.emby import _resolve_requested_proxy_base_url
 from app.core.constants import MAX_CONCURRENT_LIMIT, MAX_PATH_LENGTH, MIN_CONCURRENT_LIMIT
-from app.core.database import Database, resolve_db_path
 from app.core.dependencies import get_quark_cookie
 from app.core.logging import get_logger
 from app.core.validators import InputValidationError, validate_path
@@ -35,7 +34,6 @@ async def scan_directory(
 
     参考: AlistAutoStrm mission.go:31-158
     """
-    database = None
     service = None
     try:
         remote_path = validate_path(remote_path, "remote_path", allow_absolute=True)
@@ -46,7 +44,6 @@ async def scan_directory(
             app_config = get_config_service().get_config()
             resolved_base_url = _resolve_requested_proxy_base_url(request, app_config)
 
-        database = Database(resolve_db_path())
         service = StrmService(
             cookie=cookie,
             recursive=recursive,
@@ -72,5 +69,3 @@ async def scan_directory(
     finally:
         if service:
             await service.close()
-        if database:
-            database.close()
