@@ -155,11 +155,12 @@ quark_strm/
 **用途**: 提供核心基础设施组件
 
 - `config_manager.py` - 运行时配置读取与访问入口
-- `database.py` - 轻量数据库包装与路径解析
+- `database.py` - 数据库兼容层与路径解析
 - `db.py` - SQLAlchemy engine/session 主入口
-- `db_utils.py` - 数据库辅助工具
+- `db_utils.py` - 查询优化与批处理辅助工具
 - `dependencies.py` - 依赖注入
 - `encryption.py` - 加密解密功能
+- `error_codes.py` - 错误码 / HTTP 状态 / 前端消息映射
 - `exception_handler.py` - FastAPI 异常处理器
 - `exceptions.py` - 领域异常定义
 - `logging.py` - 日志配置

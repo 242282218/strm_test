@@ -21,6 +21,7 @@ def test_file_index_tracks_current_core_and_runtime_structure() -> None:
         "2026-04-20-codex-project-audit-optimization-plan.md",
         "app/api/v1/__init__.py",
         "config_manager.py",
+        "error_codes.py",
         "cache_manager.py",
         "metrics_collector.py",
         "websocket_manager.py",
