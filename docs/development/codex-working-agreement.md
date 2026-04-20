@@ -41,13 +41,44 @@
   - `pnpm run type-check`
   - `pnpm exec vitest run src/features/file-manager/api/fileManager.spec.ts src/features/file-manager/module-aliases.spec.ts src/features/proxy/views/ProxyServiceView.spec.ts`
 
-## 5. 提交前自检
+## 5. 持续优化脚本 contract
+
+- `scripts/continuous_optimize.py` 只作为本地持续优化 loop，不是 CI authoritative pipeline。
+- 默认输入旋钮：
+  - `--repo-root`
+  - `--report-dir`
+  - `--stop-file`
+  - `--max-iterations`
+  - `--interval-seconds`
+  - `--module`
+  - `--model`
+  - `--max-parallel-agents`
+  - `--agent-timeout-seconds`
+  - `--skip-agent-optimize`
+  - `--list-modules`
+  - `--unsafe-bypass-sandbox`
+- 默认输出落点：
+  - `target/continuous/module-inventory.json`
+  - `target/continuous/latest.json`
+  - `target/continuous/latest.md`
+  - `target/continuous/iterations/<iteration-slug>.json`
+  - `target/continuous/iterations/<iteration-slug>.md`
+  - `target/continuous/logs/`
+  - `target/continuous/prompts/`
+  - `target/continuous/agents/`
+- skip / stop 规则：
+  - pytest 命令没有匹配文件时，记录 `no matching pytest targets` 并把命令标记为 `skipped`
+  - frontend `pnpm-files` 命令没有匹配文件时，记录 `no matching frontend targets` 并把命令标记为 `skipped`
+  - 某个模块所有命令都被跳过时，模块状态也必须是 `skipped`
+  - 创建 `target/continuous/STOP_CONTINUOUS_LOOP` 后，loop 会在下一轮开始前或当前轮结束后停止
+
+## 6. 提交前自检
 
 1. 这次修改是否让“唯一入口、唯一契约、唯一门禁”更清楚，而不是更模糊。
 2. 是否只动了必要文件，且没有把用户已有脏改动捎带进提交。
 3. 是否留下了清单、映射、测试或文档，而不是只改实现不补真相源。
 
-## 6. 当前推荐顺序
+## 7. 当前推荐顺序
 
 1. 先收敛 docs 与 contract test。
 2. 再处理低风险的 API/compatibility truth-source gap。

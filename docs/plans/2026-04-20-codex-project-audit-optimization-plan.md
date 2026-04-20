@@ -36,6 +36,7 @@
 - 前端 `file-manager` 的双 API 类型定义已收口到 canonical `file-manager.ts`，`fileManager.ts` 仅保留 camelCase 兼容包装。
 - Phase 0 基线文档已经落地到 `docs/architecture/current-state.md`、`docs/development/compatibility-inventory.md`、`docs/development/codex-working-agreement.md`，并有 contract test 锁定入口和清单。
 - 开发/前端 README 已回写命令真相源：`web/package-lock.json` + `npm ci` 是当前 CI/干净安装真相源，本地日常脚本入口默认 `pnpm run ...`；Playwright 自动拉起前端 dev server 仍按 `web/playwright.config.ts` 执行 `npm run dev`。
+- `scripts/continuous_optimize.py` 的默认输入旋钮、报告输出落点、skip 规则与 `STOP_CONTINUOUS_LOOP` 停止语义，已回写到 `docs/development/codex-working-agreement.md` 并由 `tests/test_continuous_optimize_contract.py` 锁定。
 
 ### 当前剩余边界
 
@@ -48,7 +49,7 @@
 - [`docs/architecture/current-state.md`](../architecture/current-state.md)：当前后端/前端/CI 基线和热点分布。
 - [`docs/architecture/core-truth-source-boundaries.md`](../architecture/core-truth-source-boundaries.md)：`config/db/exception` 当前职责边界和 Phase 3 进入说明。
 - [`docs/development/compatibility-inventory.md`](../development/compatibility-inventory.md)：前端 wrapper 清单、状态与退役条件。
-- [`docs/development/codex-working-agreement.md`](../development/codex-working-agreement.md)：当前 truth-source、避让区域和最小验证基线。
+- [`docs/development/codex-working-agreement.md`](../development/codex-working-agreement.md)：当前 truth-source、避让区域、最小验证基线与持续优化脚本 contract。
 
 ### Phase / Iteration 状态总览
 
@@ -62,13 +63,13 @@
 | Phase 3 | 部分完成 | `config/db/exception` 边界文档与 `resolve_db_path()` contract 已补，但基础设施代码尚未进入实质拆分。 |
 | Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
 | Phase 5 | 大部分完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新；`docs/architecture/README.md`、`docs/guides/README.md` 仍因脏工作树暂不扩散修改。 |
-| Phase 6 | 部分完成 | wrapper 数量、重复 endpoint 类型与入口链接漂移已有 contract，`scripts/continuous_optimize.py` 的输入输出/skip 规则仍待补。 |
+| Phase 6 | 已完成 | 热点、wrapper、重复 endpoint 类型、入口链接漂移，以及 `scripts/continuous_optimize.py` 的输入输出/skip 规则都已有 contract。 |
 | Iteration 1 | 已完成 | 已完成 CI 门禁与 `.gitignore` 收敛。 |
 | Iteration 2 | 已完成到映射表层 | 已完成 API canonical path 设计与映射表，尚未进入 v1-only 实现树。 |
 | Iteration 3 | 已完成到边界文档层 | 已完成 `config/db/exception` 入口边界文档化，尚未进入基础设施重构。 |
 | Iteration 4 | 部分完成 | 已完成 `file-manager` 子项，`config` / `rename` 拆分仍待后续在干净切片推进。 |
 | Iteration 5 | 大部分完成 | 核心索引、入口文档与 contract test 基本落地，剩余 `architecture/guides` README 待脏改动边界明确。 |
-| Iteration 6 | 部分完成 | 持续优化护栏已覆盖热点、wrapper、重复类型与链接漂移，持续优化脚本 contract 仍缺失。 |
+| Iteration 6 | 已完成 | 持续优化护栏已覆盖热点、wrapper、重复类型、链接漂移，以及持续优化脚本输入输出/skip 语义。 |
 
 ### 首批执行清单状态
 

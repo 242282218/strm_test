@@ -257,6 +257,27 @@ def test_codex_working_agreement_points_to_current_truth_sources() -> None:
     ):
         assert command_hint in document
 
+    for script_hint in (
+        "scripts/continuous_optimize.py",
+        "--repo-root",
+        "--report-dir",
+        "--skip-agent-optimize",
+        "--list-modules",
+        "--unsafe-bypass-sandbox",
+        "target/continuous/module-inventory.json",
+        "target/continuous/latest.json",
+        "target/continuous/latest.md",
+        "target/continuous/iterations/<iteration-slug>.json",
+        "target/continuous/iterations/<iteration-slug>.md",
+        "target/continuous/logs/",
+        "target/continuous/prompts/",
+        "target/continuous/agents/",
+        "no matching pytest targets",
+        "no matching frontend targets",
+        "target/continuous/STOP_CONTINUOUS_LOOP",
+    ):
+        assert script_hint in document
+
 
 def test_development_and_web_readmes_match_current_command_contract() -> None:
     development_document = DEVELOPMENT_README_PATH.read_text(encoding="utf-8")
@@ -327,8 +348,9 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "Phase / Iteration 状态总览",
         "Phase 0 | 已完成",
         "Phase 5 | 大部分完成",
+        "Phase 6 | 已完成",
         "Iteration 1 | 已完成",
-        "Iteration 6 | 部分完成",
+        "Iteration 6 | 已完成",
         "首批执行清单状态",
         "`[已完成]` 收敛 `.github/workflows/ci.yml`",
         "`[未开始]` 拆 `ConfigView.vue` 的状态/动作层。",
@@ -340,6 +362,9 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "web/src/features/config/*",
         "npm run dev",
         "pnpm run ...",
+        "scripts/continuous_optimize.py",
+        "STOP_CONTINUOUS_LOOP",
+        "tests/test_continuous_optimize_contract.py",
     ):
         assert hint in document
 
