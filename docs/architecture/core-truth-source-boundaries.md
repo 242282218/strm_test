@@ -91,8 +91,9 @@
 - `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py`、`app/api/proxy.py`、`app/api/emby.py` 与 `app/core/dependencies.py` 已不再走 `config_manager` compatibility path，但 `app/api/quark.py` 仍保留 `get_config()` 兼容读取，不能误判为 API 层已经彻底退掉 `config_manager`。
 - `app/services/token_monitor.py`、`app/services/webdav_fallback.py`、`app/core/path_security.py` 与 `app/services/ai_connectivity_service.py` 已不再直接 import `ConfigManager` / `get_config()`；当前 Quark cookie、WebDAV fallback 配置、允许目录补充读取和 AI provider map 统一走 `get_config_service()` / `AppConfig.ai.providers`，并保留最小 helper 作为测试 patch 点。
 - `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已不再直接 import `ConfigManager` / `get_config()`；AList runtime 配置和 Quark cookie 统一走 `get_config_service()`，并保留最小 helper 作为测试 patch 点。
-- service/core 层当前仍有 7 个 `config_manager` compatibility caller：`app/services/emby_proxy_service.py`、`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/unified_ai_service.py`；它们只是“剩余清单已明确”，不是“已经收口完成”。
-- `tests/test_db_path_contract.py` 已锁定 “API 只剩 `app/api/quark.py` + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark 不得回退 + service/core 剩余 7 个 caller” 这个 Phase 3 现状。后续若继续收口，必须同步更新 inventory 和文档，不能让新 caller 悄悄扩散。
+- `app/services/emby_proxy_service.py` 也已不再直接 import `get_config()`；当前模块只保留 Emby 代理、PlaybackInfo、媒体映射和回退逻辑，不再依赖 `config_manager` 的模块级副作用。
+- service/core 层当前仍有 6 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/unified_ai_service.py`；它们只是“剩余清单已明确”，不是“已经收口完成”。
+- `tests/test_db_path_contract.py` 已锁定 “API 只剩 `app/api/quark.py` + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark/emby-proxy-service 不得回退 + service/core 剩余 6 个 caller” 这个 Phase 3 现状。后续若继续收口，必须同步更新 inventory 和文档，不能让新 caller 悄悄扩散。
 
 ## 5. 推荐验证锚点
 

@@ -17,9 +17,9 @@ TOKEN_MONITOR_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "token_monitor.
 WEBDAV_FALLBACK_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "webdav_fallback.py"
 LINK_RESOLVER_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "link_resolver.py"
 QUARK_STORAGE_PROVIDER_PATH = PROJECT_ROOT / "app" / "services" / "storage" / "quark.py"
+EMBY_PROXY_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "emby_proxy_service.py"
 API_CONFIG_MANAGER_GETTER_INVENTORY = ["app/api/quark.py"]
 SERVICE_CORE_CONFIG_MANAGER_COMPAT_INVENTORY = [
-    "app/services/emby_proxy_service.py",
     "app/services/integrations/emby.py",
     "app/services/media/organize.py",
     "app/services/media/rename.py",
@@ -133,6 +133,12 @@ def test_proxy_api_avoids_config_manager_getter_import() -> None:
 
 def test_emby_api_avoids_config_manager_getter_import() -> None:
     document = EMBY_API_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_emby_proxy_service_avoids_config_manager_getter_import() -> None:
+    document = EMBY_PROXY_SERVICE_PATH.read_text(encoding="utf-8")
 
     assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
 
