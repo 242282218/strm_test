@@ -133,6 +133,7 @@ def test_codex_working_agreement_points_to_current_truth_sources() -> None:
 
     for path_hint in (
         "current-state.md",
+        "core-truth-source-boundaries.md",
         "compatibility-inventory.md",
         "docs/api/README.md",
         "docs/operations/README.md",
@@ -167,6 +168,7 @@ def test_development_and_web_readmes_match_current_command_contract() -> None:
     assert "pnpm run test:e2e" in development_document
     assert "vars.QUARK_STRM_COVERAGE_FAIL_UNDER" in development_document
     assert "回退 `66`" in development_document
+    assert "../architecture/core-truth-source-boundaries.md" in development_document
     assert "npm run format" not in development_document
 
     assert "文档最后同步日期：`2026-04-20`" in web_document
