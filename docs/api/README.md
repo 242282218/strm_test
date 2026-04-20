@@ -12,6 +12,26 @@ quark_strm 提供 RESTful API 接口，所有接口返回统一的 JSON 响应�
 - Canonical: `/api/v1/<module>/*`（例如 `/api/v1/quark/files/0`）
 - Legacy alias: `/api/v1/api/<module>/*`（兼容旧客户端，建议尽快迁移）
 
+## 当前路由真相源
+
+- `app/config/application.py` 当前会同时注册 legacy 路由与 v1/support 路由，因此公共路径仍处于双轨并行阶段。
+- `app/api/v1/__init__.py` 是当前对外的 v1 契约层，但它仍通过聚合现有 router 暴露 Quark/STRM/Proxy/Emby/Tasks 的 canonical 路径；这意味着“canonical public path”已经存在，但“独立 v1 实现层”尚未完全落地。
+- 结论：新增公开接口时，先判断是否属于已 versioned 的模块；属于则优先落到 `/api/v1/*`，不属于则先明确是否要迁移到 v1，再决定是否继续挂在 legacy/support 路径。
+
+### versioned 模块 canonical / compatibility 映射
+
+| 领域 | Canonical public path | Compatibility path | 当前实现来源 | 说明 |
+|------|------------------------|--------------------|--------------|------|
+| Quark | `/api/v1/quark/*` | `/api/quark/*`、`/api/v1/api/quark/*` | `app.api.quark.router` 经 `app.api.v1` 聚合 | `v1` 已是推荐外部入口 |
+| STRM | `/api/v1/strm/*` | `/api/strm/*`、`/api/v1/api/strm/*` | `app.api.strm.router` 经 `app.api.v1` 聚合 | `v1` 已是推荐外部入口 |
+| Proxy | `/api/v1/proxy/*` | `/api/proxy/*`、`/api/v1/api/proxy/*` | `app.api.proxy.router` 经 `app.api.v1` 聚合 | `v1` 已是推荐外部入口 |
+| Emby | `/api/v1/emby/*` | `/api/emby/*`、`/api/v1/api/emby/*` | `app.api.emby.router` 经 `app.api.v1` 聚合 | `v1` 已是推荐外部入口 |
+| Tasks | `/api/v1/tasks/*` | `/api/tasks/*` | `app.api.tasks.router` 经 `app.api.v1` 聚合 | 当前不提供 `/api/v1/api/tasks/*`，避免动态路由冲突 |
+| Scrape | `/api/v1/scrape/*` | `/api/scrape/*` | `app.api.scrape.router` 直接以 `/scrape` 前缀接入 v1 与 legacy | router 本身已是 canonical 前缀 |
+| Monitor | `/api/v1/monitor/*` | `/api/monitor/*` | `app.api.monitoring.router` 直接以 `/monitor` 前缀接入 v1 与 support | 监控类公共探针仍保留 support 路径 |
+
+未出现在上表中的模块（如 `rename`、`notification`、`system-config`）目前仍只保留现有 `/api/*` 公共路径，尚未迁移到 `/api/v1`。在继续新增接口前，应先决定它们是否要进入 versioned contract。
+
 ## 认证
 
 ### 认证方式
@@ -145,7 +165,7 @@ Content-Type: application/json
 | POST | `/change-password` | 修改当前用户密码 | ✅ |
 | GET | `/me` | 获取当前用户 | ✅ |
 
-### 夸克网盘 (`/api/quark`)
+### 夸克网盘（canonical: `/api/v1/quark`，legacy: `/api/quark`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
@@ -154,7 +174,7 @@ Content-Type: application/json
 | POST | `/files/:id/strm` | 生成 STRM 文件 | ✅ |
 | DELETE | `/files/:id` | 删除文件 | ✅ |
 
-### STRM 管理 (`/api/strm`)
+### STRM 管理（canonical: `/api/v1/strm`，legacy: `/api/strm`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
@@ -163,7 +183,7 @@ Content-Type: application/json
 | DELETE | `/batch` | 批量删除 STRM | ✅ |
 | GET | `/status` | 获取生成状态 | ✅ |
 
-### Emby 集成 (`/api/emby`)
+### Emby 集成（canonical: `/api/v1/emby`，legacy: `/api/emby`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
@@ -172,7 +192,7 @@ Content-Type: application/json
 | GET | `/libraries` | 获取媒体库列表 | ✅ |
 | GET | `/sessions` | 获取播放会话 | ✅ |
 
-### 刮削服务 (`/api/scrape`)
+### 刮削服务（canonical: `/api/v1/scrape`，legacy: `/api/scrape`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
@@ -182,7 +202,7 @@ Content-Type: application/json
 | POST | `/execute` | 执行刮削任务 | ✅ |
 | GET | `/records` | 获取刮削记录 | ✅ |
 
-### 任务管理 (`/api/tasks`)
+### 任务管理（canonical: `/api/v1/tasks`，legacy: `/api/tasks`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
@@ -191,7 +211,7 @@ Content-Type: application/json
 | POST | `/cancel/:id` | 取消任务 | ✅ |
 | DELETE | `/history` | 清空历史记录 | ✅ |
 
-### 重命名服务 (`/api/rename`)
+### 重命名服务（legacy-only: `/api/rename`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
@@ -199,7 +219,7 @@ Content-Type: application/json
 | POST | `/smart` | 智能重命名 | ✅ |
 | GET | `/history` | 获取重命名历史 | ✅ |
 
-### 系统监控 (`/api/monitor`)
+### 系统监控（canonical: `/api/v1/monitor`，support: `/api/monitor`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|
@@ -209,7 +229,7 @@ Content-Type: application/json
 | GET | `/api/monitor/http-pool/health` | HTTP 连接池健康状态 | ❌ |
 | GET | `/api/monitor/db-pool/health` | 数据库连接池健康状态 | ❌ |
 
-### 通知服务 (`/api/notification`)
+### 通知服务（legacy-only: `/api/notification`）
 
 | 方法 | 端点 | 说明 | 认证 |
 |------|------|------|------|

@@ -50,3 +50,31 @@ def test_api_docs_cover_current_auth_routes() -> None:
         "/me",
     ):
         assert path in document
+
+
+def test_api_docs_define_canonical_and_compatibility_path_matrix() -> None:
+    document = API_DOC_PATH.read_text(encoding="utf-8")
+
+    for path in (
+        "/api/v1/quark/*",
+        "/api/quark/*",
+        "/api/v1/api/quark/*",
+        "/api/v1/strm/*",
+        "/api/strm/*",
+        "/api/v1/proxy/*",
+        "/api/proxy/*",
+        "/api/v1/emby/*",
+        "/api/emby/*",
+        "/api/v1/tasks/*",
+        "/api/tasks/*",
+        "/api/v1/scrape/*",
+        "/api/scrape/*",
+        "/api/v1/monitor/*",
+        "/api/monitor/*",
+    ):
+        assert path in document
+
+    assert "/api/v1/api/tasks/*" in document
+    assert "当前不提供 `/api/v1/api/tasks/*`" in document
+    assert "legacy-only: `/api/rename`" in document
+    assert "legacy-only: `/api/notification`" in document

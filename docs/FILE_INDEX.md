@@ -2,7 +2,7 @@
 
 本文档记录 quark_strm 项目中所有主要文件和目录的功能与用途。
 
-**最后更新**: 2026-02-04
+**最后更新**: 2026-04-20
 
 ---
 
@@ -12,8 +12,12 @@
 quark_strm/
 ├── app/                    # 核心应用代码
 ├── config.yaml             # 主配置文件
+├── cache/                  # 本地缓存与临时数据库
 ├── docs/                   # 项目文档
+├── output/                 # 手工验证与诊断输出
 ├── scripts/                # 工具脚本
+├── target/                 # 持续优化脚本与覆盖率产物
+├── tmp_wheel/              # 本地 wheel 打包临时目录
 ├── web/                    # 前端应用
 ├── data/                   # 数据存储
 ├── logs/                   # 日志文件
@@ -55,9 +59,12 @@ quark_strm/
 
 #### v1 API（新版本）
 - `v1/` - 版本化 API 目录
-  - 包含重构后的 API 端点
+  - 当前对外 canonical contract 层，负责聚合 `/api/v1/*` 公共路径
 
-**说明**: 根级别 API 为旧版本，v1 为新版本。建议新功能使用 v1 API。
+**说明**:
+- 根级别 `app/api/*.py` 仍保留 legacy/support 路由。
+- `app/api/v1/__init__.py` 已是对外 canonical path 入口，但内部仍复用部分现有 router，而不是完全独立的 v1-only 实现树。
+- 目前已 versioned 的模块以 `quark`、`strm`、`proxy`、`emby`、`tasks`、`scrape`、`monitor` 为主；其他模块是否迁移到 v1，需要先明确契约后再新增接口。
 
 ---
 
@@ -147,19 +154,24 @@ quark_strm/
 
 **用途**: 提供核心基础设施组件
 
-- `config.py` - 配置管理
-- `database.py` - 数据库连接和管理
+- `config_manager.py` - 运行时配置读取与访问入口
+- `database.py` - 轻量数据库包装与路径解析
+- `db.py` - SQLAlchemy engine/session 主入口
+- `db_utils.py` - 数据库辅助工具
 - `dependencies.py` - 依赖注入
 - `encryption.py` - 加密解密功能
-- `exceptions.py` - 异常定义和处理
+- `exception_handler.py` - FastAPI 异常处理器
+- `exceptions.py` - 领域异常定义
 - `logging.py` - 日志配置
-- `cache.py` - LRU 缓存实现
-- `metrics.py` - 性能指标收集
+- `lru_cache.py` - 轻量 LRU 缓存实现
+- `cache_manager.py` - 多级缓存协调入口
+- `metrics_collector.py` - 监控与指标采集
 - `response.py` - API 响应格式化
 - `retry.py` - 重试机制
 - `security.py` - 安全相关功能
+- `url_validator.py` - 外部 URL 校验与 SSRF 边界
 - `validators.py` - 数据验证器
-- `websocket.py` - WebSocket 管理
+- `websocket_manager.py` - WebSocket 连接管理
 
 ---
 
@@ -237,6 +249,21 @@ quark_strm/
 ## 🌐 前端应用 (`web/`)
 
 **技术栈**: Vue 3 + Vite + Element Plus
+
+### 当前结构要点
+
+- `src/features/` - 业务域真实实现
+  - 当前包含：`app-shell`、`auth`、`category-strategy`、`config`、`dashboard`、`emby`、`file-manager`、`notifications`、`proxy`、`quark`、`rename`、`scrape`、`search`、`smart-rename`、`tasks`、`webdav`
+- `src/views/` - 历史页面路径兼容入口
+- `src/api/` - 共享 API client 与历史 API 兼容导出
+- `src/components/` - 跨域共享组件与少量兼容包装
+- `src/stores/` - 全局 store 与少量兼容包装
+
+### 组织原则
+
+- 新增前端业务代码优先进入 `src/features/<domain>/`
+- 旧 `src/views/*`、`src/api/*` 路径保留薄包装，避免一次性打断路由、测试和外部导入
+- 每个已迁移业务域一般会带有 `module-aliases.spec.ts`，用于验证旧路径仍映射到新实现
 
 详见 `web/README.md`
 
@@ -332,4 +359,4 @@ quark_strm/
 ---
 
 **维护者**: DevOps Agent  
-**最后更新**: 2026-02-04
+**最后更新**: 2026-04-20
