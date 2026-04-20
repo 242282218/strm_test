@@ -57,6 +57,11 @@ DEVELOPMENT_ENTRY_DOCS = (
     PROJECT_ROOT / "docs" / "architecture" / "current-state.md",
     PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md",
 )
+EXECUTION_ENTRY_DOCS_WITH_LINKS = (
+    CURRENT_STATE_DOC_PATH,
+    DEVELOPMENT_README_PATH,
+    CODEX_WORKING_AGREEMENT_PATH,
+)
 
 
 def _iter_feature_wrappers() -> Iterator[str]:
@@ -129,6 +134,14 @@ def _iter_relative_markdown_links(document: str) -> Iterator[str]:
         yield target
 
 
+def _assert_relative_links_resolve(path: Path) -> None:
+    document = path.read_text(encoding="utf-8")
+
+    for relative_target in _iter_relative_markdown_links(document):
+        resolved_path = (path.parent / relative_target).resolve()
+        assert resolved_path.exists(), f"{path.relative_to(PROJECT_ROOT).as_posix()} link target missing: {relative_target}"
+
+
 def test_current_state_doc_tracks_entrypoints_and_hotspots() -> None:
     document = CURRENT_STATE_DOC_PATH.read_text(encoding="utf-8")
     wrapper_counts = _feature_wrapper_counts()
@@ -186,11 +199,12 @@ def test_docs_index_points_to_current_execution_entry_docs() -> None:
 
 
 def test_docs_index_relative_links_resolve_to_existing_files() -> None:
-    document = DOCS_INDEX_PATH.read_text(encoding="utf-8")
+    _assert_relative_links_resolve(DOCS_INDEX_PATH)
 
-    for relative_target in _iter_relative_markdown_links(document):
-        resolved_path = (DOCS_INDEX_PATH.parent / relative_target).resolve()
-        assert resolved_path.exists(), f"Docs index link target missing: {relative_target}"
+
+def test_execution_entry_docs_relative_links_resolve_to_existing_files() -> None:
+    for path in EXECUTION_ENTRY_DOCS_WITH_LINKS:
+        _assert_relative_links_resolve(path)
 
 
 def test_compatibility_inventory_lists_all_current_feature_wrappers() -> None:
@@ -297,9 +311,7 @@ def test_api_and_operations_entry_docs_have_sync_dates_and_resolvable_links() ->
         for hint in path_hints:
             assert hint in document
 
-        for relative_target in _iter_relative_markdown_links(document):
-            resolved_path = (path.parent / relative_target).resolve()
-            assert resolved_path.exists(), f"{path.relative_to(PROJECT_ROOT).as_posix()} link target missing: {relative_target}"
+        _assert_relative_links_resolve(path)
 
 
 def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
