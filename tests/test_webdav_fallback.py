@@ -3,19 +3,11 @@ import pytest
 from app.services import webdav_fallback as webdav_fallback_mod
 
 
-class FakeConfigManager:
-    def __init__(self, config: dict):
-        self._config = config
-
-    def get_webdav_config(self) -> dict:
-        return self._config
-
-
 def build_service(monkeypatch, config: dict) -> webdav_fallback_mod.WebDAVFallback:
     monkeypatch.setattr(
         webdav_fallback_mod,
-        "get_config",
-        lambda: FakeConfigManager(config),
+        "get_webdav_config",
+        lambda: config,
     )
     return webdav_fallback_mod.WebDAVFallback()
 

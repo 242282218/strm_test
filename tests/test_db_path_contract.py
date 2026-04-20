@@ -11,6 +11,8 @@ EMBY_GATEWAY_API_PATH = PROJECT_ROOT / "app" / "api" / "emby_gateway.py"
 STABLE_STREAM_API_PATH = PROJECT_ROOT / "app" / "api" / "stable_stream.py"
 PROXY_API_PATH = PROJECT_ROOT / "app" / "api" / "proxy.py"
 EMBY_API_PATH = PROJECT_ROOT / "app" / "api" / "emby.py"
+TOKEN_MONITOR_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "token_monitor.py"
+WEBDAV_FALLBACK_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "webdav_fallback.py"
 API_CONFIG_MANAGER_GETTER_INVENTORY = ["app/api/quark.py"]
 SERVICE_CORE_CONFIG_MANAGER_COMPAT_INVENTORY = [
     "app/core/path_security.py",
@@ -23,9 +25,7 @@ SERVICE_CORE_CONFIG_MANAGER_COMPAT_INVENTORY = [
     "app/services/media/smart_rename.py",
     "app/services/media/strm_generator.py",
     "app/services/storage/quark.py",
-    "app/services/token_monitor.py",
     "app/services/unified_ai_service.py",
-    "app/services/webdav_fallback.py",
 ]
 DATABASE_COMPAT_IMPORT_PATTERN = re.compile(r"^\s*(?:from\s+app\.core\.database\s+import|import\s+app\.core\.database\b)", re.MULTILINE)
 CONFIG_MANAGER_IMPORT_PATTERN = re.compile(
@@ -133,5 +133,17 @@ def test_proxy_api_avoids_config_manager_getter_import() -> None:
 
 def test_emby_api_avoids_config_manager_getter_import() -> None:
     document = EMBY_API_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_token_monitor_service_avoids_config_manager_getter_import() -> None:
+    document = TOKEN_MONITOR_SERVICE_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_webdav_fallback_service_avoids_config_manager_getter_import() -> None:
+    document = WEBDAV_FALLBACK_SERVICE_PATH.read_text(encoding="utf-8")
 
     assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None

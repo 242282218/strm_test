@@ -12,13 +12,8 @@ class FakeConfig:
     def __init__(self, cookie: str | None) -> None:
         self._cookie = cookie
 
-    def get_quark_cookie(self) -> str | None:
+    def __call__(self) -> str | None:
         return self._cookie
-
-
-class FakeNotifier:
-    def __init__(self) -> None:
-        self.send_notification = AsyncMock()
 
 
 class FakeQuarkService:
@@ -40,9 +35,14 @@ class FakeQuarkService:
 def _build_monitor_with_cookie(
     monkeypatch: pytest.MonkeyPatch, cookie: str | None, notifier: FakeNotifier
 ) -> token_monitor.TokenMonitor:
-    monkeypatch.setattr(token_monitor, "get_config", lambda: FakeConfig(cookie))
+    monkeypatch.setattr(token_monitor, "get_quark_cookie", FakeConfig(cookie))
     monkeypatch.setattr(token_monitor, "get_notification_service", lambda: notifier)
     return token_monitor.TokenMonitor()
+
+
+class FakeNotifier:
+    def __init__(self) -> None:
+        self.send_notification = AsyncMock()
 
 
 @pytest.mark.asyncio

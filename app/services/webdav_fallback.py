@@ -5,33 +5,43 @@ WebDAV 兜底服务 (WebDAV Fallback)
 """
 
 from urllib.parse import quote
-from app.core.config_manager import get_config
+
 from app.core.logging import get_logger
+from app.services.config_service import get_config_service
+
 
 logger = get_logger(__name__)
 
+
+def get_webdav_config() -> dict:
+    app_config = get_config_service().get_config()
+    webdav_config = getattr(app_config, "webdav", None)
+    if webdav_config is None:
+        return {}
+    return webdav_config.model_dump()
+
+
 class WebDAVFallback:
     def __init__(self):
-        self.config_mgr = get_config()
-        self.webdav_config = self.config_mgr.get_webdav_config()
+        self.webdav_config = get_webdav_config()
 
     def get_fallback_url(self, path: str) -> str:
         """
         生成 WebDAV 播放链接
-        
+
         Args:
             path: 文件相对路径 (e.g. "Movies/Avatar.mp4")
-            
+
         Returns:
             str: WebDAV URL
         """
-        if not self.webdav_config.get('enabled') or not self.webdav_config.get('fallback_enabled'):
+        if not self.webdav_config.get("enabled") or not self.webdav_config.get("fallback_enabled"):
             return None
-            
-        base_url = self.webdav_config.get('url', 'http://localhost:5244/dav').rstrip('/')
-        mount_path = self.webdav_config.get('mount_path', '/')
-        username = self.webdav_config.get('username', '')
-        password = self.webdav_config.get('password', '')
+
+        base_url = self.webdav_config.get("url", "http://localhost:5244/dav").rstrip("/")
+        mount_path = self.webdav_config.get("mount_path", "/")
+        username = self.webdav_config.get("username", "")
+        password = self.webdav_config.get("password", "")
 
         def _norm_prefix(p: str) -> str:
             v = (p or "").strip()
@@ -71,10 +81,10 @@ class WebDAVFallback:
         encoded_path = quote(final_path, safe="/")
 
         netloc = parsed.netloc
-        if username and password and '@' not in netloc:
+        if username and password and "@" not in netloc:
             netloc = f"{quote(username)}:{quote(password)}@{netloc}"
 
-        fallback_url = urlunparse((parsed.scheme, netloc, encoded_path, '', '', ''))
-        
+        fallback_url = urlunparse((parsed.scheme, netloc, encoded_path, "", "", ""))
+
         logger.debug(f"Generated WebDAV fallback URL: {fallback_url}")
         return fallback_url
