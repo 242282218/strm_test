@@ -1,6 +1,6 @@
 # 当前状态基线
 
-**最后校验**: 2026-04-20  
+**最后校验**: 2026-04-21  
 **对应计划**: [`docs/plans/2026-04-20-codex-project-audit-optimization-plan.md`](../plans/2026-04-20-codex-project-audit-optimization-plan.md)  
 **适用范围**: `quark_strm/`
 
@@ -103,5 +103,7 @@
 - `app/core/dependencies.py` 的 `get_quark_cookie()`、`get_only_video_flag()`、`get_root_id()` 也已移除 `get_config()` 全局实例；当前 Quark 依赖 helper 统一走 `get_config_service()`，并由 `tests/test_dependencies.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/api/proxy.py` 已移除 `get_config()` 全局实例；代理流、302、转码和缓存入口的 Quark cookie 统一通过 `get_config_service()` facade 读取，并由 `tests/test_emby_proxy_routing.py` + `tests/test_proxy_stream_contract.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/api/emby.py` 也已移除 `get_config()` 全局实例；本地 PlaybackInfo / item / stream / master 入口的 Quark cookie 改为通过 `get_config_service()` facade 读取，并由 `tests/test_emby_proxy_routing.py` + `tests/test_db_path_contract.py` 锁定。
-- `app/api/quark.py` 仍保留 `get_config()` 兼容读取，所以 Phase 3 现在是“只剩个别 API caller 继续收口中”，不是“配置兼容层已退役”。
-- 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再进入更深层的拆分或删兼容层。
+- `app/api/quark.py` 仍保留 `get_config()` 兼容读取，所以 Phase 3 现在是“API 层只剩 1 个遗留 caller”，不是“配置兼容层已退役”。
+- service/core 层还保留 13 个 `config_manager` compatibility caller：`app/core/path_security.py`、`app/services/ai_connectivity_service.py`、`app/services/emby_proxy_service.py`、`app/services/integrations/emby.py`、`app/services/link_resolver.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/storage/quark.py`、`app/services/token_monitor.py`、`app/services/unified_ai_service.py`、`app/services/webdav_fallback.py`；当前只是 inventory 已锁定，还没进入逐模块清理。
+- `tests/test_db_path_contract.py` 现在同时锁定“API 层只剩 `app/api/quark.py`”和上述 service/core inventory，避免在 `quark.py` 脏切片之外继续无声扩散。
+- 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再从上述 inventory 中挑干净切片逐个收口，而不是直接跨脏切片硬推。
