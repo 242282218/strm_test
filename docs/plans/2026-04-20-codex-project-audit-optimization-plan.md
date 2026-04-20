@@ -38,6 +38,7 @@
 - 开发/前端 README 已回写命令真相源：`web/package-lock.json` + `npm ci` 是当前 CI/干净安装真相源，本地日常脚本入口默认 `pnpm run ...`；Playwright 自动拉起前端 dev server 仍按 `web/playwright.config.ts` 执行 `npm run dev`。
 - `scripts/continuous_optimize.py` 的默认输入旋钮、报告输出落点、skip 规则与 `STOP_CONTINUOUS_LOOP` 停止语义，已回写到 `docs/development/codex-working-agreement.md` 并由 `tests/test_continuous_optimize_contract.py` 锁定。
 - 监控入口已收口到 `docs/monitoring/README.md`，明确当前真实已落地资产是仓库根 `prometheus.yml` 与 `docs/monitoring/grafana-dashboard.json`，不再把 `prometheus-rules.yml` / `alerting/alertmanager.yml` 误写成现有文件。
+- `docs/architecture/README.md`、`docs/guides/README.md` 与 `docs/guides/startup_guide.md` 已补齐最后同步、对应代码目录、执行入口和前端命令真相源，不再保留静态总述式目录索引漂移。
 
 ### 当前剩余边界
 
@@ -67,13 +68,13 @@
 | Phase 2 | 部分完成 | canonical path 映射表已补齐，但 `app/api/v1/*` 仍未完全摆脱 legacy 实现复用。 |
 | Phase 3 | 部分完成 | `config/db/exception` 边界文档与 `resolve_db_path()` contract 已补，但基础设施代码尚未进入实质拆分。 |
 | Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
-| Phase 5 | 大部分完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新；`docs/architecture/README.md`、`docs/guides/README.md` 仍因脏工作树暂不扩散修改。 |
+| Phase 5 | 已完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/architecture/README.md`、`docs/guides/*.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新。 |
 | Phase 6 | 已完成 | 热点、wrapper、重复 endpoint 类型、入口链接漂移，以及 `scripts/continuous_optimize.py` 的输入输出/skip 规则都已有 contract。 |
 | Iteration 1 | 已完成 | 已完成 CI 门禁与 `.gitignore` 收敛。 |
 | Iteration 2 | 已完成到映射表层 | 已完成 API canonical path 设计与映射表，尚未进入 v1-only 实现树。 |
 | Iteration 3 | 已完成到边界文档层 | 已完成 `config/db/exception` 入口边界文档化，尚未进入基础设施重构。 |
 | Iteration 4 | 部分完成 | 已完成 `file-manager` 子项，`config` / `rename` 拆分仍待后续在干净切片推进。 |
-| Iteration 5 | 大部分完成 | 核心索引、入口文档与 contract test 基本落地，剩余 `architecture/guides` README 待脏改动边界明确。 |
+| Iteration 5 | 已完成 | 核心索引、入口文档、`architecture/guides` 目录索引与 contract test 已落地。 |
 | Iteration 6 | 已完成 | 持续优化护栏已覆盖热点、wrapper、重复类型、链接漂移，以及持续优化脚本输入输出/skip 语义。 |
 
 ### 首批执行清单状态
@@ -87,7 +88,7 @@
 
 ### 当前推荐后续顺序
 
-1. 继续优先做 docs/contract/truth-source 收敛，避免在脏工作树里直接跳进高耦合实现切片。
+1. 文档主入口与 guides / architecture 目录索引已基本收口；后续只要继续改 truth source，就同步更新对应 contract test，避免重新漂移。
 2. 若进入代码层，优先看 Phase 3 的 `config/db/exception` 真相源收敛，而不是继续扩散 wrapper 或新增 legacy 入口。
 3. 前端大页面拆分仍以 `config` 之外的干净切片为主，等待 `web/src/features/config/*` 脏改动边界变清晰后再处理。
 
@@ -127,6 +128,95 @@
 - `docs/FILE_INDEX.md`
 - `docs/operations/README.md`
 - `web/README.md`
+
+### 2.5 审查范围与排除项
+
+本次“全面审查”按真实仓库边界执行，不把工作区容器和基准仓库误当成业务代码：
+
+- 真正业务仓库根目录：`quark_strm/`
+- 重点审查范围：
+  - `app/`
+  - `web/`
+  - `tests/`
+  - `docs/`
+  - `.github/workflows/`
+  - `pyproject.toml`
+  - `pytest.ini`
+  - `.gitignore`
+- 明确排除或降权处理：
+  - 工作区外层目录
+  - `.codexpotter/benchmarks/*`
+  - `.venv/`
+  - `.mypy_cache/`、`.pytest_cache/`、`.ruff_cache/`
+  - `cache/`、`output/`、`target/`、`tmp_wheel/`
+  - `.coverage*`
+  - 数据库与日志运行产物
+
+这条边界很重要。否则 Codex 在递归扫描时会把 benchmark、虚拟环境、缓存和样本数据误判成项目复杂度，导致错误结论。
+
+### 2.6 本次复核的实测基线
+
+以下结论不是只看文档得出，而是基于 2026-04-20 在当前工作树中直接执行的最小充分验证：
+
+#### 后端契约与入口基线
+
+执行命令：
+
+```powershell
+.venv\Scripts\python.exe -m pytest tests/test_baseline_docs_contract.py tests/test_file_index_contract.py tests/test_api_docs_contract.py tests/test_api_v1_routes.py tests/test_main_entrypoint.py -q
+```
+
+结果：
+
+- `53 passed`
+- 总耗时约 `18.34s`
+
+说明：
+
+- 文档入口、API 文档、`/api/v1` 契约和 `app/main.py` 当前是自洽的。
+- 这证明项目已经有一层“结构化保护网”，不是纯人工维护。
+- 也正因为这层保护网已经存在，后续优化更适合做“收敛真相源”，而不是推倒重来。
+
+#### 前端基线
+
+执行命令：
+
+```powershell
+pnpm run type-check
+pnpm run test:smoke -- --reporter=dot
+```
+
+结果：
+
+- `vue-tsc --build` 通过
+- smoke tests：`1 passed file / 2 passed tests`
+
+说明：
+
+- 前端当前不是“已经坏掉”，而是“仍可工作，但结构债明显”。
+- 这类项目最忌讳因为页面还能跑，就忽略真实复杂度和兼容层数量。
+
+### 2.7 结构量化快照
+
+为了避免“感觉上很复杂”这种模糊结论，这里给出当前量化快照：
+
+| 指标 | 当前值 | 含义 |
+| --- | ---: | --- |
+| `app/api/*.py` | 26 | 根级 API 模块数量偏多，且 legacy/support/v1 并存 |
+| `app/api/v1/*.py` | 1 | `v1` 当前更像聚合层，而不是完整实现树 |
+| `app/services/**/*.py` | 86 | 业务层体量大，适合继续按领域收敛 |
+| `app/core/*.py` | 41 | 基础设施入口多，容易形成真相源分裂 |
+| `tests/test_*.py` | 108 | 已有较大保护网，适合保守重构 |
+| `web/src/views/*` wrapper | 19 | 根级视图兼容层仍偏多 |
+| `web/src/features/*` 业务域 | 16 | feature 化方向是对的，但收口未完成 |
+| 代码中命中 `兼容` | 80 | 兼容逻辑占比高 |
+| 代码中命中 `Legacy` | 115 | legacy 债是当前主旋律之一 |
+
+附加判断：
+
+1. 当前最大问题不是测试缺失，而是“兼容层过多且入口分散”。
+2. 当前最需要优化的不是再补一个功能，而是降低 Codex 决策成本。
+3. 当前最值得保留的资产是已有 contract test，而不是旧目录名。
 
 ---
 
@@ -719,6 +809,68 @@ Codex 后续按本计划执行时，必须遵守以下规则：
 - 任一新任务都能在 5 分钟内定位 canonical path。
 - 兼容包装是否还能删除，有显式标记而不是猜。
 - 针对 API、前端 feature、配置/数据库三类任务，都能找到对应总览文档。
+
+### 9.1 Codex 单迭代执行模板
+
+后续每一轮优化，建议都按下面模板落地，避免“做了一堆，但无法验收”：
+
+| 字段 | 必填内容 |
+| --- | --- |
+| 目标 | 只写一个主题，例如“收敛 API canonical path” |
+| In Scope | 本轮允许修改的目录和文件 |
+| Out of Scope | 明确不碰的切片，尤其是脏工作树区域 |
+| 真相源 | 本轮唯一 authoritative 文件或目录 |
+| 交付物 | 文档、代码、测试、脚本、映射表 |
+| 验证命令 | 必须可复制执行 |
+| 通过条件 | 结果需要满足的精确标准 |
+| 停手条件 | 遇到哪些情况必须暂停并重排计划 |
+| 残余风险 | 本轮故意不解决的部分 |
+
+建议交付格式：
+
+```text
+Iteration: <name>
+Goal: <single theme>
+Truth Source: <path>
+Files Changed: <paths>
+Validation: <commands + summary>
+Exit Criteria: <done definition>
+Residual Risk: <what remains>
+```
+
+### 9.2 单迭代 DoD（Definition of Done）
+
+以下条件同时满足，才能算一轮优化“完成”：
+
+1. 只解决了一个主题，没有把 API、前端、CI、docs 混成一次提交。
+2. 有明确真相源，而且文档和代码不互相打架。
+3. 至少有一条自动化验证通过，不靠肉眼拍脑袋验收。
+4. 若引入 canonical path、wrapper inventory、mapping table，必须写入文档或测试。
+5. 能说明“本轮之后 Codex 判断入口是否更容易”，而不是更难。
+
+### 9.3 必须停手并重新对齐的条件
+
+出现以下任一情况时，不应继续按原路线硬推：
+
+1. 需要跨越用户当前脏工作树的大范围冲突。
+2. 一个主题的修改文件数超过 `20` 且跨越 `backend + frontend + docs + ci` 多个层次。
+3. 需要同时改 legacy 与 canonical 两套实现才能通过验证。
+4. 无法在当前仓库中找到 authoritative truth source。
+5. 验证只能依赖手工点击，无法形成可重复命令。
+
+### 9.4 Phase 级验收映射
+
+为了让 Codex 不用重新理解“每个阶段成功长什么样”，这里把 Phase 和证据直接绑定：
+
+| Phase | 最少交付物 | 最低验证要求 | 通过标准 |
+| --- | --- | --- | --- |
+| Phase 0 | `current-state.md` / `compatibility-inventory.md` 更新 | docs contract tests | 入口、wrapper、热点表全部和仓库现状一致 |
+| Phase 1 | workflow + `.gitignore` + operations 文档 | CI/workflow contract tests | 门禁无放行项，运行产物边界清晰 |
+| Phase 2 | API path 映射表 + API 文档 + 路由测试 | API docs + v1 route tests | 新接口入口规则一句话能说清 |
+| Phase 3 | `config/db/exception` 边界文档与代码收敛 | db/exception 相关测试 | 主入口唯一，兼容层职责清楚 |
+| Phase 4 | wrapper inventory + 页面拆分 + import 护栏 | frontend lint/type-check/tests | feature 内部不再反向依赖旧 wrapper |
+| Phase 5 | docs index / README / FILE_INDEX 更新 | docs contract tests | 文档命令、目录和实际仓库一致 |
+| Phase 6 | 持续优化脚本 contract + 指标 | contract tests 或脚本输出 | 新结构债能被及早发现，不靠人工巡检 |
 
 ---
 

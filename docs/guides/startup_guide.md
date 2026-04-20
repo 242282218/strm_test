@@ -1,11 +1,14 @@
 # Quark STRM 开发环境启动指南
 
+**最后同步**: 2026-04-20  
+**对应代码目录**: `app/main.py`、`web/package.json`、`web/playwright.config.ts`、`web/vite.config.ts`
+
 本文档介绍如何在本地启动 Quark STRM 项目的前后端开发环境。
 
 ## 环境要求
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 22+
 - pnpm 或 npm
 
 ## 快速启动
@@ -32,14 +35,30 @@ cd quark_strm
 ```bash
 cd quark_strm\web
 
-# 安装依赖（首次运行）
-npm install
+# 安装依赖（首次运行，二选一）
+npm ci
+# 或：pnpm install
 
 # 启动开发服务器（推荐端口 18099，避免与本机 3000 冲突）
-npm run dev -- --port 18099
+pnpm run dev -- --port 18099
 ```
 
 前端服务启动后，访问：http://localhost:18099
+
+说明：
+
+- `web/package-lock.json` + `npm ci` 是当前 CI / 干净安装真相源。
+- `pnpm run ...` 是当前本地手动启动和人工回归的默认脚本入口。
+- Playwright 自动拉起前端 dev server 时，当前仍按 `web/playwright.config.ts` 执行 `npm run dev -- --host ... --port ...`；这是测试启动实现细节，不等于本地日常命令入口。
+
+### 3. 最小验证基线
+
+```bash
+cd quark_strm\web
+pnpm run lint --fix
+pnpm run type-check
+pnpm run test:smoke -- --reporter=dot
+```
 
 ## 端口配置
 
@@ -135,7 +154,8 @@ pip install -r requirements.txt
 # 前端
 cd quark_strm\web
 rm -rf node_modules
-npm install
+npm ci
+# 或：pnpm install
 ```
 
 ## 开发调试
@@ -154,4 +174,4 @@ npm install
 
 ## 生产部署
 
-生产环境部署请参考 `docs/operations/` 目录下的部署文档。
+生产环境部署请参考 [`../operations/README.md`](../operations/README.md)。

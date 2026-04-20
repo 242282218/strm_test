@@ -5,13 +5,16 @@ import re
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOCS_INDEX_PATH = PROJECT_ROOT / "docs" / "README.md"
+ARCHITECTURE_README_PATH = PROJECT_ROOT / "docs" / "architecture" / "README.md"
 CURRENT_STATE_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "current-state.md"
 COMPATIBILITY_DOC_PATH = PROJECT_ROOT / "docs" / "development" / "compatibility-inventory.md"
 CODEX_WORKING_AGREEMENT_PATH = PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md"
 DEVELOPMENT_README_PATH = PROJECT_ROOT / "docs" / "development" / "README.md"
 API_DOC_PATH = PROJECT_ROOT / "docs" / "api" / "README.md"
+GUIDES_README_PATH = PROJECT_ROOT / "docs" / "guides" / "README.md"
 OPS_DOC_PATH = PROJECT_ROOT / "docs" / "operations" / "README.md"
 MONITORING_DOC_PATH = PROJECT_ROOT / "docs" / "monitoring" / "README.md"
+STARTUP_GUIDE_PATH = PROJECT_ROOT / "docs" / "guides" / "startup_guide.md"
 WEB_README_PATH = PROJECT_ROOT / "web" / "README.md"
 PLAN_DOC_PATH = PROJECT_ROOT / "docs" / "plans" / "2026-04-20-codex-project-audit-optimization-plan.md"
 CORE_BOUNDARIES_DOC_PATH = PROJECT_ROOT / "docs" / "architecture" / "core-truth-source-boundaries.md"
@@ -352,6 +355,63 @@ def test_api_and_operations_entry_docs_have_sync_dates_and_resolvable_links() ->
         _assert_relative_links_resolve(path)
 
 
+def test_architecture_and_guides_docs_have_sync_dates_and_resolvable_links() -> None:
+    for path, path_hints in (
+        (
+            ARCHITECTURE_README_PATH,
+            (
+                "app/main.py",
+                "app/config/application.py",
+                "app/api/v1/__init__.py",
+                "web/src/router/index.ts",
+                "web/package-lock.json",
+                "web/playwright.config.ts",
+                "./current-state.md",
+                "./core-truth-source-boundaries.md",
+                "../monitoring/README.md",
+                "../development/codex-working-agreement.md",
+            ),
+        ),
+        (
+            GUIDES_README_PATH,
+            (
+                "./startup_guide.md",
+                "./strm_playback_quickstart.md",
+                "../development/README.md",
+                "../../web/README.md",
+                "../operations/README.md",
+                "../api/README.md",
+                "npm ci",
+                "pnpm run ...",
+            ),
+        ),
+        (
+            STARTUP_GUIDE_PATH,
+            (
+                "Python 3.11+",
+                "Node.js 22+",
+                "npm ci",
+                "pnpm install",
+                "pnpm run dev -- --port 18099",
+                "pnpm run lint --fix",
+                "pnpm run type-check",
+                "pnpm run test:smoke -- --reporter=dot",
+                "web/package-lock.json",
+                "web/playwright.config.ts",
+                "../operations/README.md",
+            ),
+        ),
+    ):
+        document = path.read_text(encoding="utf-8")
+
+        assert "**最后同步**: 2026-04-20" in document
+
+        for hint in path_hints:
+            assert hint in document
+
+        _assert_relative_links_resolve(path)
+
+
 def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
     document = PLAN_DOC_PATH.read_text(encoding="utf-8")
 
@@ -366,9 +426,10 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "docs/development/codex-working-agreement.md",
         "Phase / Iteration 状态总览",
         "Phase 0 | 已完成",
-        "Phase 5 | 大部分完成",
+        "Phase 5 | 已完成",
         "Phase 6 | 已完成",
         "Iteration 1 | 已完成",
+        "Iteration 5 | 已完成",
         "Iteration 6 | 已完成",
         "首批执行清单状态",
         "`[已完成]` 收敛 `.github/workflows/ci.yml`",
@@ -389,6 +450,8 @@ def test_plan_doc_tracks_execution_progress_and_current_boundaries() -> None:
         "tests/test_continuous_optimize_contract.py",
         "prometheus.yml",
         "grafana-dashboard.json",
+        "docs/guides/startup_guide.md",
+        "architecture/guides",
     ):
         assert hint in document
 
