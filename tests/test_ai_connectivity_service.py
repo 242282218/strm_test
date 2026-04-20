@@ -11,21 +11,6 @@ import pytest
 from app.services import ai_connectivity_service as acs
 
 
-class _FakeConfig:
-    def __init__(self, data: dict[str, Any]) -> None:
-        self.data = data
-
-    def get(self, key: str, default=None):
-        keys = key.split(".")
-        value: Any = self.data
-        for item in keys:
-            if isinstance(value, dict) and item in value:
-                value = value[item]
-            else:
-                return default
-        return value
-
-
 class _FakeResponse:
     def __init__(self, status: int, body: str = "") -> None:
         self.status = status
@@ -74,7 +59,8 @@ class _FakeSession:
 
 def _build_service(config_data: dict[str, Any]) -> acs.AIConnectivityService:
     service = acs.AIConnectivityService()
-    service._config = _FakeConfig(config_data)
+    providers = config_data.get("ai", {}).get("providers", [])
+    service._provider_configs_getter = lambda: providers
     return service
 
 
