@@ -216,16 +216,7 @@ class ConfigService:
                 logger.error(f"Config watcher error: {e}")
             self._watcher_stop_event.wait(interval_seconds)
 
-    def _check_for_changes(self):
-        if not os.path.exists(self.config_path):
-            return
-        current_mtime = os.path.getmtime(self.config_path)
-        if self._last_mtime is None:
-            self._last_mtime = current_mtime
-            return
-        if current_mtime <= self._last_mtime:
-            return
-        logger.info("Config file change detected, reloading...")
+    def _reload_config_from_disk(self, current_mtime: float, log_message: str):
         try:
             new_config = AppConfig.from_yaml(self.config_path)
         except Exception as e:
@@ -238,7 +229,20 @@ class ConfigService:
             self._last_good_config = new_config
             self._last_mtime = current_mtime
         self._notify_config_changed()
-        logger.info("Config reloaded from file")
+        logger.info(log_message)
+
+    def _check_for_changes(self):
+        if not os.path.exists(self.config_path):
+            return
+        current_mtime = os.path.getmtime(self.config_path)
+        if self._last_mtime is None:
+            logger.info("Config file created, loading...")
+            self._reload_config_from_disk(current_mtime, "Config loaded from newly created file")
+            return
+        if current_mtime <= self._last_mtime:
+            return
+        logger.info("Config file change detected, reloading...")
+        self._reload_config_from_disk(current_mtime, "Config reloaded from file")
 
     def _rollback_to_last_good(self):
         if not self._last_good_config:

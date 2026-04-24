@@ -10,6 +10,11 @@ from app.services import config_service as config_service_module
 from app.services.config_service import ConfigService
 
 
+def _reset_config_service_singletons() -> None:
+    ConfigService._instance = None
+    config_service_module._config_service_instance = None
+
+
 class _FakeConfigService:
     def __init__(self, config: AppConfig) -> None:
         self._config = config
@@ -46,8 +51,7 @@ def test_get_api_keys_prefers_unified_ai_provider_key() -> None:
 
 def test_config_service_does_not_write_default_config_when_file_is_missing(tmp_path) -> None:
     config_path = tmp_path / "config.yaml"
-    ConfigService._instance = None
-    config_service_module._config_service_instance = None
+    _reset_config_service_singletons()
 
     try:
         service = ConfigService(str(config_path))
@@ -55,8 +59,26 @@ def test_config_service_does_not_write_default_config_when_file_is_missing(tmp_p
         assert service.get_config() is not None
         assert not config_path.exists()
     finally:
-        ConfigService._instance = None
-        config_service_module._config_service_instance = None
+        _reset_config_service_singletons()
+
+
+def test_config_service_reloads_when_missing_file_is_created(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _reset_config_service_singletons()
+
+    try:
+        service = ConfigService(str(config_path))
+        callback_calls: list[str] = []
+        service.register_change_callback(lambda: callback_calls.append(service.get_config().quark.cookie))
+
+        config_path.write_text("quark:\n  cookie: created-cookie\n", encoding="utf-8")
+
+        service._check_for_changes()
+
+        assert service.get_config().quark.cookie == "created-cookie"
+        assert callback_calls == ["created-cookie"]
+    finally:
+        _reset_config_service_singletons()
 
 
 def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> None:
