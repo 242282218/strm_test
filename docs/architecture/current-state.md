@@ -54,12 +54,12 @@
 | `app/api/quark.py` | 1055 | 夸克入口仍聚合多类能力 |
 | `app/services/media/scrape.py` | 968 | 刮削流程与媒体领域逻辑耦合度高 |
 | `app/core/cache_manager.py` | 934 | 核心缓存协调入口仍偏重 |
-| `app/api/monitoring.py` | 892 | 监控 API 体量已接近配置热点 |
-| `app/config/settings.py` | 862 | 配置 schema 仍集中在单文件 |
+| `app/api/monitoring.py` | 892 | 监控 API 体量仍偏大 |
 | `app/services/media/smart_rename.py` | 860 | 智能重命名服务职责偏多 |
 | `app/api/scrape.py` | 820 | 刮削 API 仍较重 |
 | `app/api/proxy.py` | 772 | 代理路由仍是后端入口热点 |
 | `app/services/security_audit_service.py` | 753 | 安全审计服务已形成新的大模块 |
+| `app/config/settings.py` | 714 | 配置 schema 聚合仍偏重，但 env/runtime helper 已拆出 |
 
 ### 前端热点（`web/src/`）
 
@@ -109,5 +109,6 @@
 - `app/services/emby_proxy_service.py` 也已移除未使用的 `get_config()` compatibility import / 全局实例；当前 Emby 代理、PlaybackInfo、媒体映射与回退逻辑不再依赖 `config_manager` 的模块级副作用，并由 `tests/test_emby_proxy_service.py`、`tests/test_stable_playback_hook.py` 与 `tests/test_db_path_contract.py` 锁定。
 - `app/services/unified_ai_service.py` 已移除 `config_manager` compatibility import；统一 AI provider 列表改为通过 `get_config_service()` / `AppConfig.ai.get_enabled_providers()` 读取，`app/services/ai_parser_service.py` 也补齐了 `api_key` / `has_available_provider` / timeout 转发兼容契约，并由 `tests/test_unified_ai_service.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/services/integrations/emby.py` 与 `app/services/media/{organize,rename,smart_rename,strm_generator}.py` 也已移除 `config_manager` compatibility import；Emby/TMDB/Quark/WebDAV 的运行态配置统一改为通过 `get_config_service()` / `AppConfig` 读取，并保留最小 facade 作为测试 patch 点，由 `tests/test_service_runtime_config_facades.py` + `tests/test_db_path_contract.py` 锁定。
+- `app/config/settings.py` 已把环境变量覆盖 / 占位符替换抽到 `app/config/runtime.py`，公开 schema / 敏感字段状态 helper 抽到 `app/config/metadata.py`；`AppConfig` 仍保留 schema 聚合与稳定入口，相关行为由 `tests/test_config_runtime_metadata.py`、`tests/test_env_contracts.py`、`tests/test_sdk_config.py` 与 `tests/test_system_config_api.py` 锁定。
 - `tests/test_db_path_contract.py` 现在同时锁定 API 层、service/core 层都不得悄悄回退到 `config_manager`；当前 Phase 3 `config_manager` inventory 已清零。
-- 当前更安全的继续推进方式是把注意力转回 `settings.py` / `config_service.py` 的深层职责拆分，而不是继续维护已清零的 compatibility caller 清单。
+- 当前更安全的继续推进方式是继续收敛 `config_service.py` 的 watcher / rollback / notification 多职责，以及后续把配置 schema 再按领域拆分，而不是继续维护已清零的 compatibility caller 清单。

@@ -79,7 +79,7 @@
 | Phase 0 | 已完成 | `current-state.md`、`compatibility-inventory.md`、`codex-working-agreement.md` 与对应 contract 已落地。 |
 | Phase 1 | 已完成 | CI 门禁、coverage 真相源、运行产物边界与 `.gitignore` 已收敛。 |
 | Phase 2 | 部分完成 | canonical path 映射表已补齐，但 `app/api/v1/*` 仍未完全摆脱 legacy 实现复用。 |
-| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理、TMDB / stable-stream / Emby gateway API 与 `core/dependencies.py` 运行态 caller 收口、`token_monitor` / `webdav_fallback` / `path_security` / `ai_connectivity_service` / `emby_proxy_service` / `unified_ai_service` caller 收口与 import guard 已补，service/core `config_manager` inventory 也已清零；剩余工作主要是 `settings.py` / `config_service.py` 的深层职责拆分。 |
+| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理、TMDB / stable-stream / Emby gateway API 与 `core/dependencies.py` 运行态 caller 收口、`token_monitor` / `webdav_fallback` / `path_security` / `ai_connectivity_service` / `emby_proxy_service` / `unified_ai_service` caller 收口与 import guard 已补，service/core `config_manager` inventory 也已清零；`settings.py` 的非 schema helper 也已下沉到 `app/config/runtime.py` / `app/config/metadata.py`，剩余工作主要是配置 schema 子模块化与 `config_service.py` 的深层职责拆分。 |
 | Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
 | Phase 5 | 已完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/architecture/README.md`、`docs/guides/*.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新。 |
 | Phase 6 | 已完成 | 热点、wrapper、重复 endpoint 类型、入口链接漂移，以及 `scripts/continuous_optimize.py` 的输入输出/skip 规则都已有 contract。 |
@@ -257,7 +257,7 @@ pnpm run test:smoke -- --reporter=dot
 
 证据：
 
-- `app/config/settings.py` 总长约 700 行，`AppConfig` 从 `app/config/settings.py:504` 才开始，单文件承载了大量领域配置模型。
+- `app/config/settings.py` 已从约 700 行收缩到约 570 行，环境变量覆盖 / 占位符替换与公开 metadata helper 已抽到 `app/config/runtime.py` / `app/config/metadata.py`，但 `AppConfig` 与大量领域 schema 仍集中在同一文件。
 - `app/core/` 同时存在 `database.py`、`db.py`、`db_utils.py`、`db_loader.py`、`db_monitor.py`、`db_pool_monitor.py`、`db_write_queue.py`。
 - 同层还同时存在 `error_handler.py`、`exception_handler.py`、`exceptions.py`、`error_codes.py`。
 - `app/services/config_service.py` 自带单例、文件保存、回滚、watcher、回调通知等多职责。

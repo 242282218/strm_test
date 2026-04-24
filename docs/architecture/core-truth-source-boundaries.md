@@ -64,9 +64,9 @@
 
 ### `app/config/settings.py`
 
-- 当前仍是配置 schema 和环境变量归一化的主文件。
-- `AppConfig`、Pydantic 子配置模型、环境变量覆盖、占位符替换都集中在这里。
-- 这是进入 Phase 3 前必须承认的现实真相源，但它仍然过大。
+- 当前仍是配置 schema 聚合与 `AppConfig` 入口。
+- `AppConfig` 与大部分 Pydantic 子配置模型仍集中在这里，但环境变量覆盖 / 占位符替换已抽到 `app/config/runtime.py`，公开 schema / 敏感字段状态 helper 已抽到 `app/config/metadata.py`。
+- 这是当前配置真相源入口，但 schema 聚合本身仍然偏大。
 
 ### `app/services/config_service.py`
 
@@ -79,7 +79,7 @@
 
 1. 运行时读写配置优先通过 `get_config_service()`，不要新写一套旁路。
 2. API 层如果只是读取运行态配置，直接取 `AppConfig` 字段，不要在 route 里实例化 `ConfigManager`。
-3. schema、环境变量归一化问题优先回到 `settings.py` 解决。
+3. schema 问题优先回到 `settings.py`，环境变量与公开元数据 helper 优先回到 `app/config/` 下对应模块解决。
 4. watcher/rollback/notification 的进一步拆分应在后续收敛里做，不要先用 workaround 再叠一层。
 
 ## 4. 当前不要误判的点
@@ -87,14 +87,14 @@
 - `app/core/database.py` 不是新的数据库主入口，它已经退化为兼容层。
 - `app/core/db_utils.py` 不是 engine/session 入口，它只是工具层。
 - `app/core/exceptions.py` 和 `app/core/exception_handler.py` 不是重复模块：前者定义异常语义，后者定义 HTTP 响应表现。
-- `app/config/settings.py` 虽然过大，但当前确实还是配置 schema 真相源；如果不先明确这一点，后续很容易把新字段散落到别处。
+- `app/config/settings.py` 虽然仍偏大，但当前确实还是配置 schema 真相源入口；`app/config/runtime.py` 与 `app/config/metadata.py` 只是把非 schema helper 抽出去，不能重新演变成第二套配置入口。
 - `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py`、`app/api/proxy.py`、`app/api/emby.py`、`app/api/quark.py` 与 `app/core/dependencies.py` 已不再走 `config_manager` compatibility path；当前 API 层运行态配置读取统一回到 `get_config_service()` / `AppConfig` 字段。
 - `app/services/token_monitor.py`、`app/services/webdav_fallback.py`、`app/core/path_security.py` 与 `app/services/ai_connectivity_service.py` 已不再直接 import `ConfigManager` / `get_config()`；当前 Quark cookie、WebDAV fallback 配置、允许目录补充读取和 AI provider map 统一走 `get_config_service()` / `AppConfig.ai.providers`，并保留最小 helper 作为测试 patch 点。
 - `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已不再直接 import `ConfigManager` / `get_config()`；AList runtime 配置和 Quark cookie 统一走 `get_config_service()`，并保留最小 helper 作为测试 patch 点。
 - `app/services/emby_proxy_service.py` 也已不再直接 import `get_config()`；当前模块只保留 Emby 代理、PlaybackInfo、媒体映射和回退逻辑，不再依赖 `config_manager` 的模块级副作用。
 - `app/services/unified_ai_service.py` 已改为通过 `get_config_service()` / `AppConfig.ai.get_enabled_providers()` 读取统一 AI provider；`app/services/ai_parser_service.py` 也补齐了现有调用方依赖的 `api_key` / `has_available_provider` / timeout 转发兼容契约。
 - `app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py` 也已改成运行态通过 `get_config_service()` / `AppConfig` 读取配置；它们保留的只是模块内最小 facade，不再依赖 `config_manager`。
-- `tests/test_db_path_contract.py` 已锁定 “API 层不得回退 + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark/emby-proxy-service/unified-ai-service 不得回退 + service/core inventory 为空” 这个 Phase 3 现状；后续重点应转向 `settings.py` / `config_service.py` 的深层职责拆分，而不是继续维护剩余 caller 清单。
+- `tests/test_db_path_contract.py` 已锁定 “API 层不得回退 + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark/emby-proxy-service/unified-ai-service 不得回退 + service/core inventory 为空” 这个 Phase 3 现状；后续重点应转向 `config_service.py` 的 watcher/load/save/rollback 职责拆分，以及配置 schema 的进一步领域拆分，而不是继续维护剩余 caller 清单。
 
 ## 5. 推荐验证锚点
 

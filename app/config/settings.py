@@ -4,15 +4,25 @@
 参考: AlistAutoStrm config.go
 """
 
-import os
 from typing import ClassVar
 
-import yaml
 from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config.ai_config import AIConfig
-from app.core.env_aliases import AI_PROVIDER_API_KEY_ENV_PRIORITY, get_provider_api_key_env_override
+from app.config.metadata import (
+    LEGACY_AI_SCHEMA_KEYS as APP_CONFIG_LEGACY_AI_SCHEMA_KEYS,
+    LEGACY_AI_SENSITIVE_KEYS as APP_CONFIG_LEGACY_AI_SENSITIVE_KEYS,
+    build_public_model_json_schema,
+    collect_sensitive_fields_status,
+)
+from app.config.runtime import (
+    apply_env_overrides,
+    build_config_from_env_overrides,
+    build_config_from_yaml,
+    dump_config_to_yaml,
+    replace_env_placeholders,
+)
 from app.core.constants import MAX_TIMEOUT_SECONDS, MAX_URL_LENGTH, MIN_TIMEOUT_SECONDS
 from app.core.encryption import get_decrypted_config_value
 from app.core.validators import validate_http_url
@@ -504,8 +514,8 @@ class LogConfig(BaseModel):
 class AppConfig(BaseModel):
     """应用配置"""
 
-    LEGACY_AI_SCHEMA_KEYS: ClassVar[set[str]] = {"zhipu", "deepseek", "glm", "kimi"}
-    LEGACY_AI_SENSITIVE_KEYS: ClassVar[set[str]] = {"zhipu.api_key", "deepseek.api_key", "glm.api_key", "kimi.api_key"}
+    LEGACY_AI_SCHEMA_KEYS: ClassVar[set[str]] = APP_CONFIG_LEGACY_AI_SCHEMA_KEYS
+    LEGACY_AI_SENSITIVE_KEYS: ClassVar[set[str]] = APP_CONFIG_LEGACY_AI_SENSITIVE_KEYS
 
 
     model_config = ConfigDict(extra="forbid")
@@ -635,157 +645,22 @@ class AppConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str) -> "AppConfig":
-        """
-        从 YAML 文件加载配置
-
-        Args:
-            path: YAML 文件路径
-
-        Returns:
-            AppConfig 实例
-        """
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Config file not found: {path}")
-
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-
-        data = cls._apply_env_overrides(data)
-        return cls(**data)
+        return build_config_from_yaml(cls, path)
 
     @classmethod
     def from_env_overrides(cls) -> "AppConfig":
-        """Build config from defaults plus environment overrides only."""
-        data = cls._apply_env_overrides({})
-        if not data:
-            return cls()
-        return cls(**data)
+        return build_config_from_env_overrides(cls)
 
     @classmethod
     def _apply_env_overrides(cls, data: dict) -> dict:
-        """
-        Apply environment overrides for sensitive config values.
-
-        Environment variables follow the pattern: SMART_MEDIA_<SECTION>_<FIELD>
-        Example: SMART_MEDIA_QUARK_COOKIE, SMART_MEDIA_EMBY_API_KEY
-
-        Priority: Environment Variable > config.yaml value
-        """
-
-        def _set_nested(target: dict, keys: list[str], value: str):
-            current = target
-            for key in keys[:-1]:
-                if key not in current or not isinstance(current[key], dict):
-                    current[key] = {}
-                current = current[key]
-            current[keys[-1]] = value
-
-        def _set_ai_provider_api_key(target: dict, provider_name: str, value: str):
-            ai_section = target.get("ai")
-            if isinstance(ai_section, dict):
-                providers = ai_section.get("providers")
-                if isinstance(providers, list):
-                    for provider in providers:
-                        if not isinstance(provider, dict):
-                            continue
-                        current_name = str(provider.get("name", "")).strip().lower()
-                        if current_name == provider_name:
-                            provider["api_key"] = value
-                            return
-
-            legacy_section = target.get(provider_name)
-            if not isinstance(legacy_section, dict):
-                legacy_section = {}
-                target[provider_name] = legacy_section
-            legacy_section["api_key"] = value
-
-        # Complete environment variable mapping table
-        # Format: "ENV_VAR_NAME": ["config", "path", "keys"]
-        env_map = {
-            # API Keys (top-level api_keys section)
-            "SMART_MEDIA_AI_API_KEY": ["api_keys", "ai_api_key"],
-            "SMART_MEDIA_TMDB_API_KEY": ["tmdb", "api_key"],
-            # Quark cloud drive
-            "SMART_MEDIA_QUARK_COOKIE": ["quark", "cookie"],
-            # Emby integration
-            "SMART_MEDIA_EMBY_URL": ["emby", "url"],
-            "SMART_MEDIA_EMBY_PROXY_BASE_URL": ["emby", "proxy_base_url"],
-            "SMART_MEDIA_EMBY_API_KEY": ["emby", "api_key"],
-            # Telegram notifications
-            "SMART_MEDIA_TELEGRAM_BOT_TOKEN": ["telegram", "bot_token"],
-            "SMART_MEDIA_TELEGRAM_CHAT_ID": ["telegram", "chat_id"],
-            "SMART_MEDIA_TELEGRAM_PROXY": ["telegram", "proxy"],
-            # WebDAV
-            "SMART_MEDIA_WEBDAV_USERNAME": ["webdav", "username"],
-            "SMART_MEDIA_WEBDAV_PASSWORD": ["webdav", "password"],
-            # AList
-            "SMART_MEDIA_ALIST_TOKEN": ["alist", "token"],
-            # WeChat
-            "SMART_MEDIA_WECHAT_SEND_KEY": ["wechat", "send_key"],
-            # Security
-            "SMART_MEDIA_SECURITY_API_KEY": ["security", "api_key"],
-            "SMART_MEDIA_JWT_SECRET_KEY": ["security", "jwt_secret_key"],
-            # Log
-            "SMART_MEDIA_LOG_FORMAT": ["log", "format"],
-            "SMART_MEDIA_LOG_LEVEL": ["log_level"],
-        }
-
-        for env_key, path_keys in env_map.items():
-            env_value = os.getenv(env_key)
-            if env_value:
-                _set_nested(data, path_keys, env_value)
-
-        for provider_name in AI_PROVIDER_API_KEY_ENV_PRIORITY:
-            env_value = get_provider_api_key_env_override(provider_name)
-            if env_value:
-                _set_ai_provider_api_key(data, provider_name, env_value)
-
-        # Replace env var placeholders (${VAR_NAME} or ${VAR_NAME:-default})
-        data = cls._replace_env_placeholders(data)
-        return data
+        return apply_env_overrides(data)
 
     @classmethod
     def _replace_env_placeholders(cls, data: any) -> any:
-        """Replace ${VAR_NAME} or ${VAR_NAME:-default} placeholders recursively."""
-        if isinstance(data, dict):
-            return {key: cls._replace_env_placeholders(value) for key, value in data.items()}
-        if isinstance(data, list):
-            return [cls._replace_env_placeholders(item) for item in data]
-        if isinstance(data, str):
-            import re
-
-            # Match ${VAR_NAME} or ${VAR_NAME:-default} placeholders
-            pattern = r"\$\{([^}]+)\}"
-            matches = re.findall(pattern, data)
-
-            for match in matches:
-                if ":-" in match:
-                    var_name, default_val = match.split(":-", 1)
-                else:
-                    var_name = match
-                    default_val = ""
-
-                env_value = os.getenv(var_name.strip())
-                if env_value is not None:
-                    data = data.replace(f"${{{match}}}", env_value)
-                elif ":-" in match:  # Use default value
-                    data = data.replace(f"${{{match}}}", default_val)
-                # If env var not found and no default, keep original
-            return data
-        return data
+        return replace_env_placeholders(data)
 
     def to_yaml(self, path: str) -> None:
-        """
-        保存配置到 YAML 文件
-
-        Args:
-            path: YAML 文件路径
-        """
-        dirname = os.path.dirname(path)
-        if dirname:  # Only create directory if path has a parent directory
-            os.makedirs(dirname, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            yaml.dump(self.model_dump(), f, allow_unicode=True, default_flow_style=False)
+        dump_config_to_yaml(self, path)
 
     def validate_required_configs(self) -> list[str]:
         """
@@ -833,30 +708,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def public_model_json_schema(cls) -> dict:
-        schema = cls.model_json_schema()
-        properties = schema.get("properties")
-        if isinstance(properties, dict):
-            for key in cls.LEGACY_AI_SCHEMA_KEYS:
-                properties.pop(key, None)
-        return schema
+        return build_public_model_json_schema(cls)
 
     def get_sensitive_fields_status(self) -> dict[str, bool]:
-        """
-        Get status of sensitive fields (whether they are configured).
-        Returns dict mapping field path to boolean (True if configured).
-        """
-        ai_providers = self.ai.providers if self.ai else []
-        return {
-            "api_keys.ai_api_key": bool(self.api_keys and self.api_keys.ai_api_key) if self.api_keys else False,
-            "api_keys.tmdb_api_key": bool(self.api_keys and self.api_keys.tmdb_api_key) if self.api_keys else False,
-            "ai.providers": any(bool(provider.api_key) for provider in ai_providers),
-            "quark.cookie": bool(self.quark.cookie),
-            "emby.api_key": bool(self.emby.api_key),
-            "telegram.bot_token": bool(self.telegram.bot_token),
-            "security.api_key": bool(self.security.api_key),
-            "security.jwt_secret_key": bool(self.security.jwt_secret_key),
-            "tmdb.api_key": bool(self.tmdb.api_key),
-            "webdav.password": bool(self.webdav.password),
-            "alist.token": bool(self.alist.token),
-            "wechat.send_key": bool(self.wechat.send_key),
-        }
+        return collect_sensitive_fields_status(self)
