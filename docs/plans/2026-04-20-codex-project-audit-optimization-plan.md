@@ -56,7 +56,7 @@
 - `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已移除 `config_manager` compatibility import；AList runtime 配置和 Quark cookie 统一通过 `get_config_service()` facade 读取，同时保留最小 helper 作为测试 patch 点，并由 `tests/test_link_resolver.py`、`tests/test_storage_quark_provider.py` 与 `tests/test_db_path_contract.py` 锁定。
 - `app/services/emby_proxy_service.py` 也已移除未使用的 `get_config()` compatibility import / 全局实例；本轮只清理模块级遗留入口，不改 Emby 代理、PlaybackInfo、媒体映射与回退逻辑，并由 `tests/test_emby_proxy_service.py`、`tests/test_stable_playback_hook.py` 与 `tests/test_db_path_contract.py` 锁定。
 - `app/services/unified_ai_service.py` 已移除 `config_manager` compatibility import；统一 AI provider 列表改为通过 `get_config_service()` / `AppConfig.ai.get_enabled_providers()` 读取，`app/services/ai_parser_service.py` 也补齐了 `api_key` / `has_available_provider` / timeout 转发兼容契约，并由 `tests/test_unified_ai_service.py` + `tests/test_db_path_contract.py` 锁定。
-- service/core 层仍保留 5 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`；当前 inventory 已继续收紧，但基础设施代码尚未进入实质拆分。
+- service/core 层的 `config_manager` compatibility caller 已清零；`app/services/integrations/emby.py` 与 `app/services/media/{organize,rename,smart_rename,strm_generator}.py` 已统一改为通过 `get_config_service()` / `AppConfig` 读取 Emby/TMDB/Quark/WebDAV 运行态配置，并由 `tests/test_service_runtime_config_facades.py` + `tests/test_db_path_contract.py` 锁定。
 - 前端安装层仍未完成 `pnpm-lock.yaml` 迁移；当前正确表述是“CI 装依赖用 `npm ci`，本地脚本执行默认 `pnpm run ...`”，而不是简单把所有地方都替换成 `pnpm install --frozen-lockfile`。
 - 监控目录当前还没有 `prometheus-rules.yml` 与 `alerting/alertmanager.yml`；后续若补告警能力，应先提交真实资产文件，再更新索引与 contract test。
 
@@ -79,7 +79,7 @@
 | Phase 0 | 已完成 | `current-state.md`、`compatibility-inventory.md`、`codex-working-agreement.md` 与对应 contract 已落地。 |
 | Phase 1 | 已完成 | CI 门禁、coverage 真相源、运行产物边界与 `.gitignore` 已收敛。 |
 | Phase 2 | 部分完成 | canonical path 映射表已补齐，但 `app/api/v1/*` 仍未完全摆脱 legacy 实现复用。 |
-| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理、TMDB / stable-stream / Emby gateway API 与 `core/dependencies.py` 运行态 caller 收口、`token_monitor` / `webdav_fallback` / `path_security` / `ai_connectivity_service` / `emby_proxy_service` / `unified_ai_service` caller 收口与 import guard 已补；剩余 service/core `config_manager` compatibility inventory 也已继续收紧，但基础设施代码尚未进入实质拆分。 |
+| Phase 3 | 部分完成 | `config/db/exception` 边界文档、`resolve_db_path()` contract、app 层 compatibility-caller 清理、TMDB / stable-stream / Emby gateway API 与 `core/dependencies.py` 运行态 caller 收口、`token_monitor` / `webdav_fallback` / `path_security` / `ai_connectivity_service` / `emby_proxy_service` / `unified_ai_service` caller 收口与 import guard 已补，service/core `config_manager` inventory 也已清零；剩余工作主要是 `settings.py` / `config_service.py` 的深层职责拆分。 |
 | Phase 4 | 部分完成 | wrapper 清单、`file-manager` 双类型定义与导入护栏已收敛，但 `config` / `rename` 大页面拆分未开始。 |
 | Phase 5 | 已完成 | `docs/README.md`、`docs/api/README.md`、`docs/operations/README.md`、`docs/architecture/README.md`、`docs/guides/*.md`、`docs/FILE_INDEX.md` 与文档 contract 已刷新。 |
 | Phase 6 | 已完成 | 热点、wrapper、重复 endpoint 类型、入口链接漂移，以及 `scripts/continuous_optimize.py` 的输入输出/skip 规则都已有 contract。 |
@@ -102,7 +102,7 @@
 ### 当前推荐后续顺序
 
 1. 文档主入口与 guides / architecture 目录索引已基本收口；后续只要继续改 truth source，就同步更新对应 contract test，避免重新漂移。
-2. 若进入代码层，优先看 Phase 3 的 `config/db/exception` 真相源收敛，并从已锁定的 service/core compatibility inventory 中选干净切片逐个收口，而不是继续扩散 wrapper 或新增 legacy 入口。
+2. 若进入代码层，优先看 Phase 3 的 `config/db/exception` 真相源收敛，把重点放在 `settings.py` / `config_service.py` 的职责拆分，而不是继续扩散 wrapper 或新增 legacy 入口。
 3. 前端大页面拆分仍以 `config` 之外的干净切片为主，等待 `web/src/features/config/*` 脏改动边界变清晰后再处理。
 
 ---

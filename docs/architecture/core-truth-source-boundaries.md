@@ -93,13 +93,13 @@
 - `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已不再直接 import `ConfigManager` / `get_config()`；AList runtime 配置和 Quark cookie 统一走 `get_config_service()`，并保留最小 helper 作为测试 patch 点。
 - `app/services/emby_proxy_service.py` 也已不再直接 import `get_config()`；当前模块只保留 Emby 代理、PlaybackInfo、媒体映射和回退逻辑，不再依赖 `config_manager` 的模块级副作用。
 - `app/services/unified_ai_service.py` 已改为通过 `get_config_service()` / `AppConfig.ai.get_enabled_providers()` 读取统一 AI provider；`app/services/ai_parser_service.py` 也补齐了现有调用方依赖的 `api_key` / `has_available_provider` / timeout 转发兼容契约。
-- service/core 层当前仍有 5 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`；它们只是“剩余清单已明确”，不是“已经收口完成”。
-- `tests/test_db_path_contract.py` 已锁定 “API 层不得回退 + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark/emby-proxy-service/unified-ai-service 不得回退 + service/core 剩余 5 个 caller” 这个 Phase 3 现状。后续若继续收口，必须同步更新 inventory 和文档，不能让新 caller 悄悄扩散。
+- `app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py` 也已改成运行态通过 `get_config_service()` / `AppConfig` 读取配置；它们保留的只是模块内最小 facade，不再依赖 `config_manager`。
+- `tests/test_db_path_contract.py` 已锁定 “API 层不得回退 + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark/emby-proxy-service/unified-ai-service 不得回退 + service/core inventory 为空” 这个 Phase 3 现状；后续重点应转向 `settings.py` / `config_service.py` 的深层职责拆分，而不是继续维护剩余 caller 清单。
 
 ## 5. 推荐验证锚点
 
 - 数据库/连接池相关：`tests/test_db.py`、`tests/test_db_pool.py`
-- 配置/API 相关：`tests/test_system_config_api.py`、`tests/test_tmdb_api.py`、`tests/test_stable_stream_route.py`、`tests/test_emby_gateway.py`、`tests/test_dependencies.py`、`tests/test_db_path_contract.py`
+- 配置/API 相关：`tests/test_system_config_api.py`、`tests/test_tmdb_api.py`、`tests/test_stable_stream_route.py`、`tests/test_emby_gateway.py`、`tests/test_dependencies.py`、`tests/test_service_runtime_config_facades.py`、`tests/test_db_path_contract.py`
 - 异常/安全相关：`tests/test_encryption.py`
 
 进入真正的 Phase 3 代码收敛前，应先以这份边界文档为入口，再决定哪些模块是“继续保留的 facade”，哪些才是应该下沉或删除的兼容层。

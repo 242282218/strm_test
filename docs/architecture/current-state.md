@@ -56,7 +56,7 @@
 | `app/core/cache_manager.py` | 934 | 核心缓存协调入口仍偏重 |
 | `app/api/monitoring.py` | 892 | 监控 API 体量已接近配置热点 |
 | `app/config/settings.py` | 862 | 配置 schema 仍集中在单文件 |
-| `app/services/media/smart_rename.py` | 850 | 智能重命名服务职责偏多 |
+| `app/services/media/smart_rename.py` | 860 | 智能重命名服务职责偏多 |
 | `app/api/scrape.py` | 820 | 刮削 API 仍较重 |
 | `app/api/proxy.py` | 772 | 代理路由仍是后端入口热点 |
 | `app/services/security_audit_service.py` | 753 | 安全审计服务已形成新的大模块 |
@@ -108,6 +108,6 @@
 - `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已移除 `config_manager` compatibility import：AList runtime 配置和 Quark cookie 统一通过 `get_config_service()` facade 读取，并保留模块级 helper 作为测试 patch 点，由 `tests/test_link_resolver.py`、`tests/test_storage_quark_provider.py` 与 `tests/test_db_path_contract.py` 锁定。
 - `app/services/emby_proxy_service.py` 也已移除未使用的 `get_config()` compatibility import / 全局实例；当前 Emby 代理、PlaybackInfo、媒体映射与回退逻辑不再依赖 `config_manager` 的模块级副作用，并由 `tests/test_emby_proxy_service.py`、`tests/test_stable_playback_hook.py` 与 `tests/test_db_path_contract.py` 锁定。
 - `app/services/unified_ai_service.py` 已移除 `config_manager` compatibility import；统一 AI provider 列表改为通过 `get_config_service()` / `AppConfig.ai.get_enabled_providers()` 读取，`app/services/ai_parser_service.py` 也补齐了 `api_key` / `has_available_provider` / timeout 转发兼容契约，并由 `tests/test_unified_ai_service.py` + `tests/test_db_path_contract.py` 锁定。
-- service/core 层还保留 5 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`；当前只是 inventory 已锁定，还没进入逐模块清理。
-- `tests/test_db_path_contract.py` 现在同时锁定 API 层不得回退到 `config_manager`、`path_security` / `token_monitor` / `webdav_fallback` / `ai_connectivity_service` / `link_resolver` / `storage/quark` / `emby_proxy_service` / `unified_ai_service` 不得回退，以及上述 5 个 service/core inventory，避免在未跟踪脏切片之外继续无声扩散。
-- 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再从上述 inventory 中挑干净切片逐个收口，而不是直接跨脏切片硬推。
+- `app/services/integrations/emby.py` 与 `app/services/media/{organize,rename,smart_rename,strm_generator}.py` 也已移除 `config_manager` compatibility import；Emby/TMDB/Quark/WebDAV 的运行态配置统一改为通过 `get_config_service()` / `AppConfig` 读取，并保留最小 facade 作为测试 patch 点，由 `tests/test_service_runtime_config_facades.py` + `tests/test_db_path_contract.py` 锁定。
+- `tests/test_db_path_contract.py` 现在同时锁定 API 层、service/core 层都不得悄悄回退到 `config_manager`；当前 Phase 3 `config_manager` inventory 已清零。
+- 当前更安全的继续推进方式是把注意力转回 `settings.py` / `config_service.py` 的深层职责拆分，而不是继续维护已清零的 compatibility caller 清单。
