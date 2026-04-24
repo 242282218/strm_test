@@ -231,8 +231,26 @@ class ConfigService:
         self._notify_config_changed()
         logger.info(log_message)
 
+    def _reload_config_from_env_defaults(self, log_message: str):
+        try:
+            new_config = AppConfig.from_env_overrides()
+        except Exception as e:
+            logger.error(f"Config fallback reload failed: {e}")
+            self._rollback_to_last_good()
+            return
+
+        with self._config_lock:
+            self._config = new_config
+            self._last_good_config = new_config
+            self._last_mtime = None
+        self._notify_config_changed()
+        logger.info(log_message)
+
     def _check_for_changes(self):
         if not os.path.exists(self.config_path):
+            if self._last_mtime is not None:
+                logger.info("Config file removed, reloading from env/defaults...")
+                self._reload_config_from_env_defaults("Config reloaded from env/defaults after file removal")
             return
         current_mtime = os.path.getmtime(self.config_path)
         if self._last_mtime is None:

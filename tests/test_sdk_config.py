@@ -81,6 +81,26 @@ def test_config_service_reloads_when_missing_file_is_created(tmp_path) -> None:
         _reset_config_service_singletons()
 
 
+def test_config_service_reloads_from_env_defaults_when_file_is_removed(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("quark:\n  cookie: file-cookie\n", encoding="utf-8")
+    monkeypatch.setenv("SMART_MEDIA_QUARK_COOKIE", "env-cookie")
+    _reset_config_service_singletons()
+
+    try:
+        service = ConfigService(str(config_path))
+        callback_calls: list[str] = []
+        service.register_change_callback(lambda: callback_calls.append(service.get_config().quark.cookie))
+
+        config_path.unlink()
+        service._check_for_changes()
+
+        assert service.get_config().quark.cookie == "env-cookie"
+        assert callback_calls == ["env-cookie"]
+    finally:
+        _reset_config_service_singletons()
+
+
 def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> None:
     monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
     monkeypatch.setenv("SMART_MEDIA_TMDB_API_KEY", "env-tmdb")
