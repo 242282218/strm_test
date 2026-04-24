@@ -101,6 +101,27 @@ def test_config_service_reloads_from_env_defaults_when_file_is_removed(tmp_path,
         _reset_config_service_singletons()
 
 
+def test_get_config_service_stops_previous_watcher_when_path_changes(tmp_path) -> None:
+    first_path = tmp_path / "config-a.yaml"
+    second_path = tmp_path / "config-b.yaml"
+    first_path.write_text("quark:\n  cookie: first-cookie\n", encoding="utf-8")
+    second_path.write_text("quark:\n  cookie: second-cookie\n", encoding="utf-8")
+    _reset_config_service_singletons()
+
+    try:
+        first_service = config_service_module.get_config_service(str(first_path))
+        first_service.start_watcher(interval_seconds=60)
+
+        second_service = config_service_module.get_config_service(str(second_path))
+
+        assert second_service is not first_service
+        assert second_service.config_path == str(second_path)
+        assert first_service._watcher_thread is None
+        assert first_service._watcher_stop_event.is_set() is True
+    finally:
+        _reset_config_service_singletons()
+
+
 def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> None:
     monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
     monkeypatch.setenv("SMART_MEDIA_TMDB_API_KEY", "env-tmdb")
