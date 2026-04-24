@@ -32,7 +32,11 @@ async def test_get_quark_cookie_prefers_canonical_env_over_legacy(monkeypatch: p
     monkeypatch.setenv("SMART_MEDIA_QUARK_COOKIE", "canonical-cookie")
     monkeypatch.setenv("QUARK_COOKIE", "legacy-cookie")
 
-    with patch.object(dependencies_module.config, "get_quark_cookie", return_value="config-cookie"):
+    with patch.object(
+        dependencies_module,
+        "_get_runtime_quark_config",
+        return_value=SimpleNamespace(cookie="config-cookie"),
+    ):
         cookie = await dependencies_module.get_quark_cookie()
 
     assert cookie == "canonical-cookie"
@@ -43,7 +47,11 @@ async def test_get_quark_cookie_keeps_legacy_env_as_fallback(monkeypatch: pytest
     monkeypatch.delenv("SMART_MEDIA_QUARK_COOKIE", raising=False)
     monkeypatch.setenv("QUARK_COOKIE", "legacy-cookie")
 
-    with patch.object(dependencies_module.config, "get_quark_cookie", return_value="config-cookie"):
+    with patch.object(
+        dependencies_module,
+        "_get_runtime_quark_config",
+        return_value=SimpleNamespace(cookie="config-cookie"),
+    ):
         cookie = await dependencies_module.get_quark_cookie()
 
     assert cookie == "legacy-cookie"
