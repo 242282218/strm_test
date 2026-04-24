@@ -22,6 +22,7 @@ WEBDAV_FALLBACK_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "webdav_fallb
 LINK_RESOLVER_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "link_resolver.py"
 QUARK_STORAGE_PROVIDER_PATH = PROJECT_ROOT / "app" / "services" / "storage" / "quark.py"
 EMBY_PROXY_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "emby_proxy_service.py"
+UNIFIED_AI_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "unified_ai_service.py"
 DATABASE_COMPAT_IMPORT_PATTERN = re.compile(r"^\s*(?:from\s+app\.core\.database\s+import|import\s+app\.core\.database\b)", re.MULTILINE)
 CONFIG_MANAGER_IMPORT_PATTERN = re.compile(
     r"^\s*from\s+app\.core\.config_manager\s+import\s+.*\bConfigManager\b",
@@ -135,6 +136,13 @@ def test_emby_api_avoids_config_manager_getter_import() -> None:
 def test_emby_proxy_service_avoids_config_manager_getter_import() -> None:
     document = EMBY_PROXY_SERVICE_PATH.read_text(encoding="utf-8")
 
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_unified_ai_service_avoids_config_manager_getter_import() -> None:
+    document = UNIFIED_AI_SERVICE_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_IMPORT_PATTERN.search(document) is None
     assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
 
 
