@@ -1,6 +1,6 @@
 # 当前状态基线
 
-**最后校验**: 2026-04-21  
+**最后校验**: 2026-04-25  
 **对应计划**: [`docs/plans/2026-04-20-codex-project-audit-optimization-plan.md`](../plans/2026-04-20-codex-project-audit-optimization-plan.md)  
 **适用范围**: `quark_strm/`
 
@@ -51,7 +51,7 @@
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
 | `app/api/emby.py` | 1153 | Emby 路由仍是最大的单体 API 模块 |
-| `app/api/quark.py` | 1053 | 夸克入口仍聚合多类能力 |
+| `app/api/quark.py` | 1055 | 夸克入口仍聚合多类能力 |
 | `app/services/media/scrape.py` | 968 | 刮削流程与媒体领域逻辑耦合度高 |
 | `app/core/cache_manager.py` | 934 | 核心缓存协调入口仍偏重 |
 | `app/api/monitoring.py` | 892 | 监控 API 体量已接近配置热点 |
@@ -103,10 +103,11 @@
 - `app/core/dependencies.py` 的 `get_quark_cookie()`、`get_only_video_flag()`、`get_root_id()` 也已移除 `get_config()` 全局实例；当前 Quark 依赖 helper 统一走 `get_config_service()`，并由 `tests/test_dependencies.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/api/proxy.py` 已移除 `get_config()` 全局实例；代理流、302、转码和缓存入口的 Quark cookie 统一通过 `get_config_service()` facade 读取，并由 `tests/test_emby_proxy_routing.py` + `tests/test_proxy_stream_contract.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/api/emby.py` 也已移除 `get_config()` 全局实例；本地 PlaybackInfo / item / stream / master 入口的 Quark cookie 改为通过 `get_config_service()` facade 读取，并由 `tests/test_emby_proxy_routing.py` + `tests/test_db_path_contract.py` 锁定。
-- `app/api/quark.py` 仍保留 `get_config()` 兼容读取，所以 Phase 3 现在是“API 层只剩 1 个遗留 caller”，不是“配置兼容层已退役”。
+- `app/api/quark.py` 也已移除 `get_config()` 全局实例；转码、配置与同步入口统一在请求期通过 `get_config_service()` 读取 `AppConfig.quark`，API 层 `config_manager` getter caller 已清零，并由 `tests/test_quark_api.py` + `tests/test_db_path_contract.py` 锁定。
 - `app/services/token_monitor.py`、`app/services/webdav_fallback.py`、`app/core/path_security.py` 与 `app/services/ai_connectivity_service.py` 已移除 `config_manager` compatibility import：Quark cookie、WebDAV fallback 配置、允许目录补充读取和 AI provider map 统一通过 `get_config_service()` / `AppConfig.ai.providers` 读取，同时保留最小 helper 作为测试 patch 点，并由对应模块测试 + `tests/test_db_path_contract.py` 锁定。
 - `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已移除 `config_manager` compatibility import：AList runtime 配置和 Quark cookie 统一通过 `get_config_service()` facade 读取，并保留模块级 helper 作为测试 patch 点，由 `tests/test_link_resolver.py`、`tests/test_storage_quark_provider.py` 与 `tests/test_db_path_contract.py` 锁定。
 - `app/services/emby_proxy_service.py` 也已移除未使用的 `get_config()` compatibility import / 全局实例；当前 Emby 代理、PlaybackInfo、媒体映射与回退逻辑不再依赖 `config_manager` 的模块级副作用，并由 `tests/test_emby_proxy_service.py`、`tests/test_stable_playback_hook.py` 与 `tests/test_db_path_contract.py` 锁定。
-- service/core 层还保留 6 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/unified_ai_service.py`；当前只是 inventory 已锁定，还没进入逐模块清理。
-- `tests/test_db_path_contract.py` 现在同时锁定“API 层只剩 `app/api/quark.py`”、`path_security` / `token_monitor` / `webdav_fallback` / `ai_connectivity_service` / `link_resolver` / `storage/quark` / `emby_proxy_service` 不得回退到 `config_manager`，以及上述 6 个 service/core inventory，避免在 `quark.py` 脏切片之外继续无声扩散。
+- `app/services/unified_ai_service.py` 已移除 `config_manager` compatibility import；统一 AI provider 列表改为通过 `get_config_service()` / `AppConfig.ai.get_enabled_providers()` 读取，`app/services/ai_parser_service.py` 也补齐了 `api_key` / `has_available_provider` / timeout 转发兼容契约，并由 `tests/test_unified_ai_service.py` + `tests/test_db_path_contract.py` 锁定。
+- service/core 层还保留 5 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`；当前只是 inventory 已锁定，还没进入逐模块清理。
+- `tests/test_db_path_contract.py` 现在同时锁定 API 层不得回退到 `config_manager`、`path_security` / `token_monitor` / `webdav_fallback` / `ai_connectivity_service` / `link_resolver` / `storage/quark` / `emby_proxy_service` / `unified_ai_service` 不得回退，以及上述 5 个 service/core inventory，避免在未跟踪脏切片之外继续无声扩散。
 - 当前最安全的继续推进方式仍是：先固化文档、清单和 contract test，再从上述 inventory 中挑干净切片逐个收口，而不是直接跨脏切片硬推。

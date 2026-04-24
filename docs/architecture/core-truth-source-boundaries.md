@@ -1,6 +1,6 @@
 # config/db/exception 真相源边界
 
-**最后校验**: 2026-04-21  
+**最后校验**: 2026-04-25  
 **适用范围**: `app/config/`、`app/core/`、`app/services/config_service.py`  
 **进入时机**: 在进入 Phase 3 的 `config/db/exception` 收敛前先读
 
@@ -88,12 +88,13 @@
 - `app/core/db_utils.py` 不是 engine/session 入口，它只是工具层。
 - `app/core/exceptions.py` 和 `app/core/exception_handler.py` 不是重复模块：前者定义异常语义，后者定义 HTTP 响应表现。
 - `app/config/settings.py` 虽然过大，但当前确实还是配置 schema 真相源；如果不先明确这一点，后续很容易把新字段散落到别处。
-- `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py`、`app/api/proxy.py`、`app/api/emby.py` 与 `app/core/dependencies.py` 已不再走 `config_manager` compatibility path，但 `app/api/quark.py` 仍保留 `get_config()` 兼容读取，不能误判为 API 层已经彻底退掉 `config_manager`。
+- `app/api/tmdb.py`、`app/api/stable_stream.py`、`app/api/emby_gateway.py`、`app/api/proxy.py`、`app/api/emby.py`、`app/api/quark.py` 与 `app/core/dependencies.py` 已不再走 `config_manager` compatibility path；当前 API 层运行态配置读取统一回到 `get_config_service()` / `AppConfig` 字段。
 - `app/services/token_monitor.py`、`app/services/webdav_fallback.py`、`app/core/path_security.py` 与 `app/services/ai_connectivity_service.py` 已不再直接 import `ConfigManager` / `get_config()`；当前 Quark cookie、WebDAV fallback 配置、允许目录补充读取和 AI provider map 统一走 `get_config_service()` / `AppConfig.ai.providers`，并保留最小 helper 作为测试 patch 点。
 - `app/services/link_resolver.py` 与 `app/services/storage/quark.py` 也已不再直接 import `ConfigManager` / `get_config()`；AList runtime 配置和 Quark cookie 统一走 `get_config_service()`，并保留最小 helper 作为测试 patch 点。
 - `app/services/emby_proxy_service.py` 也已不再直接 import `get_config()`；当前模块只保留 Emby 代理、PlaybackInfo、媒体映射和回退逻辑，不再依赖 `config_manager` 的模块级副作用。
-- service/core 层当前仍有 6 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`、`app/services/unified_ai_service.py`；它们只是“剩余清单已明确”，不是“已经收口完成”。
-- `tests/test_db_path_contract.py` 已锁定 “API 只剩 `app/api/quark.py` + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark/emby-proxy-service 不得回退 + service/core 剩余 6 个 caller” 这个 Phase 3 现状。后续若继续收口，必须同步更新 inventory 和文档，不能让新 caller 悄悄扩散。
+- `app/services/unified_ai_service.py` 已改为通过 `get_config_service()` / `AppConfig.ai.get_enabled_providers()` 读取统一 AI provider；`app/services/ai_parser_service.py` 也补齐了现有调用方依赖的 `api_key` / `has_available_provider` / timeout 转发兼容契约。
+- service/core 层当前仍有 5 个 `config_manager` compatibility caller：`app/services/integrations/emby.py`、`app/services/media/organize.py`、`app/services/media/rename.py`、`app/services/media/smart_rename.py`、`app/services/media/strm_generator.py`；它们只是“剩余清单已明确”，不是“已经收口完成”。
+- `tests/test_db_path_contract.py` 已锁定 “API 层不得回退 + path_security/token_monitor/webdav_fallback/ai_connectivity_service/link_resolver/storage-quark/emby-proxy-service/unified-ai-service 不得回退 + service/core 剩余 5 个 caller” 这个 Phase 3 现状。后续若继续收口，必须同步更新 inventory 和文档，不能让新 caller 悄悄扩散。
 
 ## 5. 推荐验证锚点
 

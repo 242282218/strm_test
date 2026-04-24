@@ -15,6 +15,7 @@ EMBY_GATEWAY_API_PATH = PROJECT_ROOT / "app" / "api" / "emby_gateway.py"
 STABLE_STREAM_API_PATH = PROJECT_ROOT / "app" / "api" / "stable_stream.py"
 PROXY_API_PATH = PROJECT_ROOT / "app" / "api" / "proxy.py"
 EMBY_API_PATH = PROJECT_ROOT / "app" / "api" / "emby.py"
+QUARK_API_PATH = PROJECT_ROOT / "app" / "api" / "quark.py"
 PATH_SECURITY_CORE_PATH = PROJECT_ROOT / "app" / "core" / "path_security.py"
 AI_CONNECTIVITY_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "ai_connectivity_service.py"
 TOKEN_MONITOR_SERVICE_PATH = PROJECT_ROOT / "app" / "services" / "token_monitor.py"
@@ -129,6 +130,12 @@ def test_proxy_api_avoids_config_manager_getter_import() -> None:
 
 def test_emby_api_avoids_config_manager_getter_import() -> None:
     document = EMBY_API_PATH.read_text(encoding="utf-8")
+
+    assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
+
+
+def test_quark_api_avoids_config_manager_getter_import() -> None:
+    document = QUARK_API_PATH.read_text(encoding="utf-8")
 
     assert CONFIG_MANAGER_GETTER_IMPORT_PATTERN.search(document) is None
 
