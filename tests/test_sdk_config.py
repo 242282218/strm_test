@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -120,6 +121,20 @@ def test_get_config_service_stops_previous_watcher_when_path_changes(tmp_path) -
         assert first_service._watcher_stop_event.is_set() is True
     finally:
         _reset_config_service_singletons()
+
+
+def test_config_service_callback_can_stop_watcher_from_current_thread() -> None:
+    service = ConfigService.__new__(ConfigService)
+    service._watcher_thread = threading.current_thread()
+    service._watcher_stop_event = threading.Event()
+    service._change_callbacks = [service.stop_watcher]
+
+    with patch.object(config_service_module.logger, "error") as mock_error:
+        service._notify_config_changed()
+
+    assert service._watcher_thread is None
+    assert service._watcher_stop_event.is_set() is True
+    mock_error.assert_not_called()
 
 
 def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> None:

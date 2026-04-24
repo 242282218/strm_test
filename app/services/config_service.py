@@ -204,7 +204,8 @@ class ConfigService:
         if not self._watcher_thread:
             return
         self._watcher_stop_event.set()
-        self._watcher_thread.join(timeout=5)
+        if self._watcher_thread is not threading.current_thread():
+            self._watcher_thread.join(timeout=5)
         self._watcher_thread = None
         logger.info("Config watcher stopped")
 
