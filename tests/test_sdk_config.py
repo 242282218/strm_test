@@ -123,6 +123,26 @@ def test_get_config_service_stops_previous_watcher_when_path_changes(tmp_path) -
         _reset_config_service_singletons()
 
 
+def test_get_config_service_logs_resolved_paths_when_path_changes(tmp_path) -> None:
+    first_path = tmp_path / "config-a.yaml"
+    second_path = tmp_path / "config-b.yaml"
+    first_path.write_text("quark:\n  cookie: first-cookie\n", encoding="utf-8")
+    second_path.write_text("quark:\n  cookie: second-cookie\n", encoding="utf-8")
+    _reset_config_service_singletons()
+
+    try:
+        config_service_module.get_config_service(str(first_path))
+
+        with patch.object(config_service_module.logger, "warning") as mock_warning:
+            config_service_module.get_config_service(str(second_path))
+
+        mock_warning.assert_called_once_with(
+            f"ConfigService path changed from {first_path} to {second_path}, reloading instance"
+        )
+    finally:
+        _reset_config_service_singletons()
+
+
 def test_config_service_callback_can_stop_watcher_from_current_thread() -> None:
     service = ConfigService.__new__(ConfigService)
     service._watcher_thread = threading.current_thread()

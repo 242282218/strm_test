@@ -334,9 +334,7 @@ def get_config_service(config_path: str | None = None) -> ConfigService:
     elif _config_service_instance.config_path != resolved_path:
         previous_instance = _config_service_instance
         logger.warning(
-            "ConfigService path changed from %s to %s, reloading instance",
-            previous_instance.config_path,
-            resolved_path,
+            f"ConfigService path changed from {previous_instance.config_path} to {resolved_path}, reloading instance"
         )
         previous_instance.stop_watcher()
         ConfigService._instance = None
