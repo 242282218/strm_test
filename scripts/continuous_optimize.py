@@ -23,6 +23,12 @@ DEFAULT_INTERVAL_SECONDS = 120
 DEFAULT_MAX_PARALLEL_AGENTS = 3
 DEFAULT_REPORT_DIR = Path("target/continuous")
 STOP_FILE_NAME = "STOP_CONTINUOUS_LOOP"
+RISK_PRIORITY = {
+    "high": 3,
+    "medium-high": 2,
+    "medium": 1,
+    "low": 0,
+}
 
 
 @dataclass(frozen=True)
@@ -1007,11 +1013,54 @@ def build_failure_lanes(module_results: list[dict[str, Any]]) -> list[tuple[str,
         if result["status"] != "failed":
             continue
         grouped.setdefault(result["optimization_lane"], []).append(result)
-    return sorted(grouped.items(), key=lambda item: item[0])
+    ordered = [(lane_name, sort_module_failures(failures)) for lane_name, failures in grouped.items()]
+    return sorted(
+        ordered,
+        key=lambda item: (
+            -max((module_failure_max_timeout(result) for result in item[1]), default=0),
+            -sum(module_failure_total_timeout(result) for result in item[1]),
+            -max((risk_priority(result["risk"]) for result in item[1]), default=-1),
+            -sum(len(failed_commands(result)) for result in item[1]),
+            item[0],
+        ),
+    )
 
 
 def failed_command_names(module_result: dict[str, Any]) -> set[str]:
     return {command["name"] for command in module_result["commands"] if command["status"] == "failed"}
+
+
+def failed_commands(module_result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [command for command in module_result["commands"] if command["status"] == "failed"]
+
+
+def command_timeout_seconds(command: dict[str, Any]) -> int:
+    timeout = command.get("timeout_seconds")
+    return int(timeout) if isinstance(timeout, (int, float)) else 0
+
+
+def module_failure_max_timeout(module_result: dict[str, Any]) -> int:
+    return max((command_timeout_seconds(command) for command in failed_commands(module_result)), default=0)
+
+
+def module_failure_total_timeout(module_result: dict[str, Any]) -> int:
+    return sum(command_timeout_seconds(command) for command in failed_commands(module_result))
+
+
+def risk_priority(risk: str) -> int:
+    return RISK_PRIORITY.get(risk.lower(), -1)
+
+
+def sort_module_failures(module_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        module_results,
+        key=lambda result: (
+            -module_failure_max_timeout(result),
+            -module_failure_total_timeout(result),
+            -risk_priority(result["risk"]),
+            result["name"],
+        ),
+    )
 
 
 def merge_command_results(

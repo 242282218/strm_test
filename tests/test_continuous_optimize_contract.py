@@ -304,6 +304,71 @@ def test_run_module_can_target_specific_commands(tmp_path: Path, monkeypatch) ->
     assert [command["name"] for command in result["commands"]] == ["baseline-fail"]
 
 
+def test_build_failure_lanes_prioritizes_longer_higher_risk_lanes() -> None:
+    module = load_module()
+    module_results = [
+        {
+            "name": "repo-medium",
+            "optimization_lane": "repo-contracts",
+            "risk": "medium-high",
+            "status": "failed",
+            "commands": [
+                {"name": "lint", "status": "failed", "timeout_seconds": 1800},
+                {"name": "build", "status": "failed", "timeout_seconds": 1200},
+            ],
+        },
+        {
+            "name": "frontend-long",
+            "optimization_lane": "frontend-web",
+            "risk": "high",
+            "status": "failed",
+            "commands": [
+                {"name": "e2e", "status": "failed", "timeout_seconds": 2400},
+            ],
+        },
+        {
+            "name": "backend-short",
+            "optimization_lane": "backend-runtime",
+            "risk": "high",
+            "status": "failed",
+            "commands": [
+                {"name": "pytest", "status": "failed", "timeout_seconds": 1800},
+            ],
+        },
+        {
+            "name": "backend-heavy",
+            "optimization_lane": "backend-runtime",
+            "risk": "medium-high",
+            "status": "failed",
+            "commands": [
+                {"name": "pytest-a", "status": "failed", "timeout_seconds": 1800},
+                {"name": "pytest-b", "status": "failed", "timeout_seconds": 900},
+            ],
+        },
+        {
+            "name": "frontend-passed",
+            "optimization_lane": "frontend-web",
+            "risk": "high",
+            "status": "passed",
+            "commands": [
+                {"name": "skip", "status": "passed", "timeout_seconds": 2400},
+            ],
+        },
+    ]
+
+    lanes = module.build_failure_lanes(module_results)
+
+    assert [lane for lane, _ in lanes] == [
+        "frontend-web",
+        "backend-runtime",
+        "repo-contracts",
+    ]
+    assert [failure["name"] for failure in lanes[1][1]] == [
+        "backend-heavy",
+        "backend-short",
+    ]
+
+
 def test_merge_module_results_keeps_baseline_failure_when_verify_is_skipped() -> None:
     module = load_module()
     baseline_results = [
