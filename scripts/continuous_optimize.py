@@ -214,6 +214,29 @@ def pnpm_files_plan(
     )
 
 
+def vitest_files_plan(
+    name: str,
+    patterns: list[str],
+    *,
+    base_args: list[str] | None = None,
+    cwd: str = "web",
+    target_root: str = "web",
+    timeout_seconds: int = 900,
+    env_overrides: dict[str, str] | None = None,
+) -> CommandPlan:
+    env_items = tuple(sorted((env_overrides or {}).items()))
+    return CommandPlan(
+        name=name,
+        runner="vitest-files",
+        cwd=cwd,
+        target_root=target_root,
+        target_patterns=tuple(patterns),
+        base_args=tuple(base_args or []),
+        timeout_seconds=timeout_seconds,
+        env_overrides=env_items,
+    )
+
+
 def build_default_modules(_repo_root: Path) -> list[ModuleSpec]:
     frontend_ci_env = {"CI": "1"}
     frontend_e2e_env = {"CI": "1", "PLAYWRIGHT_WORKERS": "1"}
@@ -433,9 +456,8 @@ def build_default_modules(_repo_root: Path) -> list[ModuleSpec]:
                 "web/src/smoke.spec.ts",
             ),
             command_plans=(
-                pnpm_files_plan(
+                vitest_files_plan(
                     "frontend-shell-auth-unit",
-                    "test:run",
                     [
                         "src/router/index.spec.ts",
                         "src/stores/auth.spec.ts",
@@ -526,9 +548,8 @@ def build_default_modules(_repo_root: Path) -> list[ModuleSpec]:
                 "web/src/features/file-manager/",
             ),
             command_plans=(
-                pnpm_files_plan(
+                vitest_files_plan(
                     "frontend-config-admin-surfaces",
-                    "test:run",
                     [
                         "src/features/config/views/ConfigView.spec.ts",
                         "src/features/notifications/views/NotificationsView.spec.ts",
@@ -719,6 +740,25 @@ def materialize_command(plan: CommandPlan, repo_root: Path) -> MaterializedComma
             timeout_seconds=plan.timeout_seconds,
             env_overrides=env_overrides,
         )
+    if plan.runner == "vitest-files":
+        targets = resolve_glob_targets(repo_root / plan.target_root, plan.target_patterns)
+        if not targets:
+            return MaterializedCommand(
+                name=plan.name,
+                cwd=cwd,
+                command=(),
+                timeout_seconds=plan.timeout_seconds,
+                env_overrides=env_overrides,
+                skipped_reason="no matching frontend targets",
+            )
+        command = ("pnpm", "exec", "vitest", "run", *plan.base_args, *targets)
+        return MaterializedCommand(
+            name=plan.name,
+            cwd=cwd,
+            command=command,
+            timeout_seconds=plan.timeout_seconds,
+            env_overrides=env_overrides,
+        )
     raise ValueError(f"unsupported command runner: {plan.runner}")
 
 
@@ -797,20 +837,31 @@ def run_materialized_command(command: MaterializedCommand, log_path: Path) -> di
     }
 
 
-def run_module(module: ModuleSpec, repo_root: Path, iteration_dir: Path, phase: str) -> dict[str, Any]:
+def summarize_module_status(commands: list[dict[str, Any]]) -> str:
+    active = [result for result in commands if result["status"] != "skipped"]
+    if not active:
+        return "skipped"
+    if all(result["status"] == "passed" for result in active):
+        return "passed"
+    return "failed"
+
+
+def run_module(
+    module: ModuleSpec,
+    repo_root: Path,
+    iteration_dir: Path,
+    phase: str,
+    *,
+    command_names: set[str] | None = None,
+) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for index, plan in enumerate(module.command_plans, start=1):
+        if command_names is not None and plan.name not in command_names:
+            continue
         materialized = materialize_command(plan, repo_root)
         log_path = iteration_dir / "logs" / f"{phase}-{slugify(module.name)}-{index:02d}-{slugify(plan.name)}.log"
         results.append(run_materialized_command(materialized, log_path))
 
-    active = [result for result in results if result["status"] != "skipped"]
-    if not active:
-        status = "skipped"
-    elif all(result["status"] == "passed" for result in active):
-        status = "passed"
-    else:
-        status = "failed"
     return {
         "name": module.name,
         "category": module.category,
@@ -818,7 +869,7 @@ def run_module(module: ModuleSpec, repo_root: Path, iteration_dir: Path, phase: 
         "risk": module.risk,
         "optimization_lane": module.optimization_lane,
         "ownership_paths": list(module.ownership_paths),
-        "status": status,
+        "status": summarize_module_status(results),
         "commands": results,
     }
 
@@ -959,6 +1010,30 @@ def build_failure_lanes(module_results: list[dict[str, Any]]) -> list[tuple[str,
     return sorted(grouped.items(), key=lambda item: item[0])
 
 
+def failed_command_names(module_result: dict[str, Any]) -> set[str]:
+    return {command["name"] for command in module_result["commands"] if command["status"] == "failed"}
+
+
+def merge_command_results(
+    baseline_commands: list[dict[str, Any]],
+    verification_commands: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    # Keep the baseline failure visible if a targeted verify rerun no longer has a runnable command.
+    replacements = {
+        command["name"]: command
+        for command in verification_commands
+        if command["status"] != "skipped"
+    }
+    baseline_names = {command["name"] for command in baseline_commands}
+    merged = [replacements.get(command["name"], command) for command in baseline_commands]
+    merged.extend(
+        command
+        for command in verification_commands
+        if command["status"] != "skipped" and command["name"] not in baseline_names
+    )
+    return merged
+
+
 def merge_module_results(
     baseline_results: list[dict[str, Any]],
     verification_results: list[dict[str, Any]],
@@ -966,7 +1041,12 @@ def merge_module_results(
     replacements = {result["name"]: result for result in verification_results}
     merged: list[dict[str, Any]] = []
     for result in baseline_results:
-        merged.append(replacements.get(result["name"], result))
+        verification = replacements.get(result["name"])
+        if verification is None:
+            merged.append(result)
+            continue
+        commands = merge_command_results(result["commands"], verification["commands"])
+        merged.append({**result, "status": summarize_module_status(commands), "commands": commands})
     return merged
 
 
@@ -1096,9 +1176,13 @@ def run_iteration(
             for future in concurrent.futures.as_completed(futures):
                 agents.append(future.result())
 
-        verification_targets = {failure["name"] for _, failures in failure_lanes for failure in failures}
+        verification_targets = {
+            failure["name"]: failed_command_names(failure)
+            for _, failures in failure_lanes
+            for failure in failures
+        }
         verification_results = [
-            run_module(module, repo_root, iteration_dir, "verify")
+            run_module(module, repo_root, iteration_dir, "verify", command_names=verification_targets[module.name])
             for module in modules
             if module.name in verification_targets
         ]

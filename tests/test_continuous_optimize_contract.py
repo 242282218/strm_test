@@ -182,6 +182,45 @@ def test_materialize_command_marks_missing_targets_as_skipped(tmp_path: Path) ->
     assert frontend_command.skipped_reason == "no matching frontend targets"
 
 
+def test_materialize_vitest_files_plan_uses_direct_vitest_without_separator(tmp_path: Path) -> None:
+    module = load_module()
+    repo_root = tmp_path / "repo"
+    target = repo_root / "web" / "src" / "router" / "index.spec.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text("test", encoding="utf-8")
+
+    command = module.materialize_command(
+        module.vitest_files_plan(
+            "frontend-shell-auth-unit",
+            ["src/router/index.spec.ts"],
+            base_args=["--reporter=dot"],
+        ),
+        repo_root,
+    )
+
+    assert command.command == (
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--reporter=dot",
+        "src/router/index.spec.ts",
+    )
+    assert "--" not in command.command
+
+
+def test_default_frontend_unit_lanes_use_direct_vitest_runner() -> None:
+    module = load_module()
+
+    module_specs = module.build_default_modules(Path("D:/repo"))
+
+    shell_auth = next(spec for spec in module_specs if spec.name == "frontend-shell-auth-startup")
+    config_admin = next(spec for spec in module_specs if spec.name == "frontend-config-admin-surfaces")
+
+    assert shell_auth.command_plans[0].runner == "vitest-files"
+    assert config_admin.command_plans[0].runner == "vitest-files"
+
+
 def test_run_module_returns_skipped_when_every_command_is_skipped(tmp_path: Path) -> None:
     module = load_module()
     repo_root = tmp_path / "repo"
@@ -202,6 +241,206 @@ def test_run_module_returns_skipped_when_every_command_is_skipped(tmp_path: Path
     assert result["status"] == "skipped"
     assert result["commands"][0]["status"] == "skipped"
     assert result["commands"][0]["log_tail"] == "no matching pytest targets"
+
+
+def test_run_module_can_target_specific_commands(tmp_path: Path, monkeypatch) -> None:
+    module = load_module()
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    iteration_dir = tmp_path / "report"
+    module_spec = module.ModuleSpec(
+        name="targeted-verify-lane",
+        category="contracts",
+        description="target command filtering",
+        risk="medium",
+        optimization_lane="repo-contracts",
+        ownership_paths=("tests/",),
+        command_plans=(
+            module.command_plan("baseline-pass", ["echo", "pass"]),
+            module.command_plan("baseline-fail", ["echo", "fail"]),
+        ),
+    )
+    executed: list[str] = []
+
+    def fake_materialize(plan, _repo_root):
+        return module.MaterializedCommand(
+            name=plan.name,
+            cwd=_repo_root,
+            command=(plan.name,),
+            timeout_seconds=plan.timeout_seconds,
+            env_overrides={},
+        )
+
+    def fake_run(command, log_path):
+        executed.append(command.name)
+        return {
+            "name": command.name,
+            "status": "passed",
+            "command": list(command.command),
+            "cwd": str(command.cwd),
+            "timeout_seconds": command.timeout_seconds,
+            "log_path": str(log_path),
+            "log_tail": "",
+            "return_code": 0,
+            "duration_seconds": 0.01,
+            "started_at": "2026-04-25T00:00:00Z",
+            "ended_at": "2026-04-25T00:00:00Z",
+            "error": None,
+        }
+
+    monkeypatch.setattr(module, "materialize_command", fake_materialize)
+    monkeypatch.setattr(module, "run_materialized_command", fake_run)
+
+    result = module.run_module(
+        module_spec,
+        repo_root,
+        iteration_dir,
+        "verify",
+        command_names={"baseline-fail"},
+    )
+
+    assert executed == ["baseline-fail"]
+    assert result["status"] == "passed"
+    assert [command["name"] for command in result["commands"]] == ["baseline-fail"]
+
+
+def test_merge_module_results_keeps_baseline_failure_when_verify_is_skipped() -> None:
+    module = load_module()
+    baseline_results = [
+        {
+            "name": "contracts-frontend-build-startup",
+            "category": "contracts",
+            "description": "frontend startup contract",
+            "risk": "high",
+            "optimization_lane": "repo-contracts",
+            "ownership_paths": ["web/"],
+            "status": "failed",
+            "commands": [
+                {"name": "lint", "status": "passed", "command": ["pnpm", "lint"]},
+                {"name": "build", "status": "failed", "command": ["pnpm", "build"]},
+            ],
+        }
+    ]
+    verification_results = [
+        {
+            "name": "contracts-frontend-build-startup",
+            "category": "contracts",
+            "description": "frontend startup contract",
+            "risk": "high",
+            "optimization_lane": "repo-contracts",
+            "ownership_paths": ["web/"],
+            "status": "skipped",
+            "commands": [
+                {"name": "build", "status": "skipped", "command": [], "log_tail": "no matching frontend targets"}
+            ],
+        }
+    ]
+
+    merged = module.merge_module_results(baseline_results, verification_results)
+
+    assert merged[0]["status"] == "failed"
+    assert [command["status"] for command in merged[0]["commands"]] == ["passed", "failed"]
+
+
+def test_run_iteration_only_verifies_failed_commands_and_merges_results(tmp_path: Path, monkeypatch) -> None:
+    module = load_module()
+    repo_root = tmp_path / "repo"
+    report_dir = tmp_path / "report"
+    stop_file = report_dir / module.STOP_FILE_NAME
+    repo_root.mkdir()
+    module_spec = module.ModuleSpec(
+        name="contracts-frontend-build-startup",
+        category="contracts",
+        description="frontend startup contract",
+        risk="high",
+        optimization_lane="repo-contracts",
+        ownership_paths=("web/",),
+        command_plans=(
+            module.command_plan("lint", ["pnpm", "lint"]),
+            module.command_plan("build", ["pnpm", "build"]),
+        ),
+    )
+    verify_calls: list[set[str] | None] = []
+
+    def fake_run_module(current_module, _repo_root, iteration_dir, phase, *, command_names=None):
+        assert current_module.name == module_spec.name
+        assert _repo_root == repo_root
+        assert iteration_dir.name.startswith("2026")
+        verify_calls.append(command_names)
+        if phase == "baseline":
+            return {
+                "name": current_module.name,
+                "category": current_module.category,
+                "description": current_module.description,
+                "risk": current_module.risk,
+                "optimization_lane": current_module.optimization_lane,
+                "ownership_paths": list(current_module.ownership_paths),
+                "status": "failed",
+                "commands": [
+                    {"name": "lint", "status": "passed", "command": ["pnpm", "lint"]},
+                    {"name": "build", "status": "failed", "command": ["pnpm", "build"]},
+                ],
+            }
+        assert phase == "verify"
+        assert command_names == {"build"}
+        return {
+            "name": current_module.name,
+            "category": current_module.category,
+            "description": current_module.description,
+            "risk": current_module.risk,
+            "optimization_lane": current_module.optimization_lane,
+            "ownership_paths": list(current_module.ownership_paths),
+            "status": "passed",
+            "commands": [
+                {"name": "build", "status": "passed", "command": ["pnpm", "build"]},
+            ],
+        }
+
+    times = iter(
+        [
+            module.dt.datetime(2026, 4, 25, 0, 0, 0, tzinfo=module.dt.timezone.utc),
+            module.dt.datetime(2026, 4, 25, 0, 0, 3, tzinfo=module.dt.timezone.utc),
+        ]
+    )
+
+    monkeypatch.setattr(module, "run_module", fake_run_module)
+    monkeypatch.setattr(
+        module,
+        "run_agent_lane",
+        lambda *args, **kwargs: {
+            "lane": "repo-contracts",
+            "status": "passed",
+            "failures": [module_spec.name],
+            "prompt_path": "prompt.md",
+            "output_message_path": "agent.txt",
+            "summary": "fixed build",
+            "execution": {"status": "passed"},
+        },
+    )
+    monkeypatch.setattr(module, "utc_now", lambda: next(times))
+    monkeypatch.setattr(module, "write_report_files", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "collect_git_state", lambda _repo_root: {"dirty_count": 1})
+    monkeypatch.setattr(module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules])
+
+    report = module.run_iteration(
+        iteration=1,
+        modules=[module_spec],
+        repo_root=repo_root,
+        report_dir=report_dir,
+        stop_file=stop_file,
+        model=module.DEFAULT_AGENT_MODEL,
+        skip_agent_optimize=False,
+        unsafe_bypass_sandbox=False,
+        max_parallel_agents=1,
+        agent_timeout_seconds=60,
+    )
+
+    assert verify_calls == [None, {"build"}]
+    assert report["issue_count"] == 0
+    assert report["verification_modules"][0]["commands"] == [
+        {"name": "build", "status": "passed", "command": ["pnpm", "build"]}
+    ]
+    assert [command["status"] for command in report["modules"][0]["commands"]] == ["passed", "passed"]
 
 
 def test_write_report_files_emits_latest_and_iteration_reports(tmp_path: Path) -> None:
