@@ -46,6 +46,12 @@ def test_default_modules_cover_backend_frontend_and_contract_lanes() -> None:
     assert module_specs[-3].optimization_lane == "repo-contracts"
 
 
+def test_default_agent_model_matches_project_goal() -> None:
+    module = load_module()
+
+    assert module.DEFAULT_AGENT_MODEL == "gpt-5.5"
+
+
 def test_resolve_glob_targets_deduplicates_in_order(tmp_path: Path) -> None:
     module = load_module()
 
@@ -69,19 +75,19 @@ def test_resolve_glob_targets_deduplicates_in_order(tmp_path: Path) -> None:
     ]
 
 
-def test_build_codex_exec_command_uses_gpt54_and_full_auto_by_default(tmp_path: Path) -> None:
+def test_build_codex_exec_command_uses_requested_model_and_full_auto_by_default(tmp_path: Path) -> None:
     module = load_module()
 
     command = module.build_codex_exec_command(
         repo_root=tmp_path,
-        model="gpt-5.4",
+        model="gpt-5.5",
         prompt="fix failing module",
         output_message_path=tmp_path / "agent-last-message.txt",
         unsafe_bypass_sandbox=False,
     )
 
     assert command[:4] == ["codex", "exec", "--full-auto", "-m"]
-    assert "gpt-5.4" in command
+    assert "gpt-5.5" in command
     assert "-C" in command
     assert str(tmp_path) in command
     assert "-o" in command
@@ -137,6 +143,7 @@ def test_parse_args_supports_observe_only_inventory_and_module_filter(monkeypatc
     assert args.modules == ["contracts-runtime-probes-docs", "frontend-shell-auth-startup"]
     assert args.max_iterations == 1
     assert args.interval_seconds == 0
+    assert args.model == module.DEFAULT_AGENT_MODEL
     assert args.skip_agent_optimize is True
     assert args.list_modules is True
 
@@ -203,7 +210,7 @@ def test_write_report_files_emits_latest_and_iteration_reports(tmp_path: Path) -
         "iteration": 1,
         "started_at": "2026-04-20T00:00:00Z",
         "ended_at": "2026-04-20T00:00:03Z",
-        "agent_model": "gpt-5.4",
+        "agent_model": "gpt-5.5",
         "stop_file": "target/continuous/STOP_CONTINUOUS_LOOP",
         "git_state": {"dirty_count": 7},
         "issue_count": 1,

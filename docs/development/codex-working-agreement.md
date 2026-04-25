@@ -58,6 +58,9 @@
   - `--skip-agent-optimize`
   - `--list-modules`
   - `--unsafe-bypass-sandbox`
+- 默认优化 agent 模型：
+  - `gpt-5.5`
+  - 如需切换，必须显式传入 `--model`
 - 默认输出落点：
   - `target/continuous/module-inventory.json`
   - `target/continuous/latest.json`
