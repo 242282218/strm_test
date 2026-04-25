@@ -79,13 +79,61 @@ def ensure_directory(path: Path) -> None:
 
 
 def write_json(path: Path, payload: Any) -> None:
-    ensure_directory(path.parent)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
 
 def write_text(path: Path, content: str) -> None:
     ensure_directory(path.parent)
-    path.write_text(content, encoding="utf-8")
+    temporary_path = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        temporary_path.write_text(content, encoding="utf-8")
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def format_exception(exc: BaseException) -> str:
+    return f"{exc.__class__.__name__}: {exc}"
+
+
+def build_failed_execution_result(
+    *,
+    name: str,
+    cwd: Path,
+    command: tuple[str, ...] | list[str],
+    timeout_seconds: int,
+    log_path: Path,
+    error_message: str,
+    log_label: str,
+) -> dict[str, Any]:
+    started = utc_now()
+    ended = utc_now()
+    rendered_command = list(command)
+    log_lines: list[str] = []
+    if rendered_command:
+        log_lines.extend([f"$ {quote_command(rendered_command)}", ""])
+    log_lines.append(f"[{log_label}] {error_message}")
+    log_tail = "\n".join(log_lines)
+    stored_error = error_message
+    try:
+        write_text(log_path, log_tail + "\n")
+    except OSError as log_exc:
+        log_tail = f"{log_tail}\n[log-write-error] {format_exception(log_exc)}"
+        stored_error = f"{error_message}; log write failed: {format_exception(log_exc)}"
+    return {
+        "name": name,
+        "status": "failed",
+        "command": rendered_command,
+        "cwd": str(cwd),
+        "timeout_seconds": timeout_seconds,
+        "log_path": str(log_path),
+        "log_tail": log_tail,
+        "return_code": None,
+        "duration_seconds": round((ended - started).total_seconds(), 3),
+        "started_at": iso_utc(started),
+        "ended_at": iso_utc(ended),
+        "error": stored_error,
+    }
 
 
 def slugify(value: str) -> str:
@@ -852,6 +900,28 @@ def summarize_module_status(commands: list[dict[str, Any]]) -> str:
     return "failed"
 
 
+def build_command_exception_result(
+    *,
+    plan: CommandPlan,
+    repo_root: Path,
+    log_path: Path,
+    error: BaseException,
+    materialized: MaterializedCommand | None = None,
+) -> dict[str, Any]:
+    cwd = materialized.cwd if materialized is not None else (repo_root / plan.cwd).resolve()
+    command = materialized.command if materialized is not None else plan.command
+    timeout_seconds = materialized.timeout_seconds if materialized is not None else plan.timeout_seconds
+    return build_failed_execution_result(
+        name=plan.name,
+        cwd=cwd,
+        command=command,
+        timeout_seconds=timeout_seconds,
+        log_path=log_path,
+        error_message=f"command orchestration failed: {format_exception(error)}",
+        log_label="command-error",
+    )
+
+
 def run_module(
     module: ModuleSpec,
     repo_root: Path,
@@ -864,9 +934,22 @@ def run_module(
     for index, plan in enumerate(module.command_plans, start=1):
         if command_names is not None and plan.name not in command_names:
             continue
-        materialized = materialize_command(plan, repo_root)
         log_path = iteration_dir / "logs" / f"{phase}-{slugify(module.name)}-{index:02d}-{slugify(plan.name)}.log"
-        results.append(run_materialized_command(materialized, log_path))
+        materialized: MaterializedCommand | None = None
+        try:
+            materialized = materialize_command(plan, repo_root)
+            results.append(run_materialized_command(materialized, log_path))
+        except Exception as exc:  # noqa: BLE001
+            # Why: keep one broken command orchestration path from aborting the whole iteration.
+            results.append(
+                build_command_exception_result(
+                    plan=plan,
+                    repo_root=repo_root,
+                    log_path=log_path,
+                    error=exc,
+                    materialized=materialized,
+                )
+            )
 
     return {
         "name": module.name,
@@ -960,6 +1043,46 @@ def build_agent_prompt(repo_root: Path, lane_name: str, failures: list[dict[str,
     return "\n".join(lines).strip()
 
 
+def agent_artifact_paths(iteration_dir: Path, lane_name: str) -> tuple[Path, Path, Path]:
+    lane_slug = slugify(lane_name)
+    return (
+        iteration_dir / "prompts" / f"{lane_slug}.md",
+        iteration_dir / "agents" / f"{lane_slug}-last-message.txt",
+        iteration_dir / "logs" / f"agent-{lane_slug}.log",
+    )
+
+
+def build_agent_exception_result(
+    lane_name: str,
+    failures: list[dict[str, Any]],
+    repo_root: Path,
+    iteration_dir: Path,
+    *,
+    timeout_seconds: int,
+    error: BaseException,
+) -> dict[str, Any]:
+    prompt_path, output_message_path, log_path = agent_artifact_paths(iteration_dir, lane_name)
+    execution = build_failed_execution_result(
+        name=f"agent-{lane_name}",
+        cwd=repo_root,
+        command=(),
+        timeout_seconds=timeout_seconds,
+        log_path=log_path,
+        error_message=f"agent lane crashed: {format_exception(error)}",
+        log_label="agent-lane-error",
+    )
+    return {
+        "lane": lane_name,
+        "status": "failed",
+        "failures": [failure["name"] for failure in failures],
+        "prompt_path": str(prompt_path),
+        "output_message_path": str(output_message_path),
+        "summary": "",
+        "error": execution["error"],
+        "execution": execution,
+    }
+
+
 def run_agent_lane(
     lane_name: str,
     failures: list[dict[str, Any]],
@@ -970,41 +1093,50 @@ def run_agent_lane(
     unsafe_bypass_sandbox: bool,
     timeout_seconds: int,
 ) -> dict[str, Any]:
-    prompt = build_agent_prompt(repo_root, lane_name, failures)
-    prompt_path = iteration_dir / "prompts" / f"{slugify(lane_name)}.md"
-    output_message_path = iteration_dir / "agents" / f"{slugify(lane_name)}-last-message.txt"
-    log_path = iteration_dir / "logs" / f"agent-{slugify(lane_name)}.log"
-    write_text(prompt_path, prompt)
+    prompt_path, output_message_path, log_path = agent_artifact_paths(iteration_dir, lane_name)
+    try:
+        prompt = build_agent_prompt(repo_root, lane_name, failures)
+        write_text(prompt_path, prompt)
 
-    command = build_codex_exec_command(
-        repo_root=repo_root,
-        model=model,
-        prompt=prompt,
-        output_message_path=output_message_path,
-        unsafe_bypass_sandbox=unsafe_bypass_sandbox,
-    )
-    result = run_materialized_command(
-        MaterializedCommand(
-            name=f"agent-{lane_name}",
-            cwd=repo_root,
-            command=tuple(command),
+        command = build_codex_exec_command(
+            repo_root=repo_root,
+            model=model,
+            prompt=prompt,
+            output_message_path=output_message_path,
+            unsafe_bypass_sandbox=unsafe_bypass_sandbox,
+        )
+        result = run_materialized_command(
+            MaterializedCommand(
+                name=f"agent-{lane_name}",
+                cwd=repo_root,
+                command=tuple(command),
+                timeout_seconds=timeout_seconds,
+                env_overrides={},
+            ),
+            log_path,
+        )
+        last_message = ""
+        if output_message_path.exists():
+            last_message = output_message_path.read_text(encoding="utf-8", errors="replace").strip()
+        return {
+            "lane": lane_name,
+            "status": result["status"],
+            "failures": [failure["name"] for failure in failures],
+            "prompt_path": str(prompt_path),
+            "output_message_path": str(output_message_path),
+            "summary": last_message,
+            "error": result.get("error"),
+            "execution": result,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return build_agent_exception_result(
+            lane_name,
+            failures,
+            repo_root,
+            iteration_dir,
             timeout_seconds=timeout_seconds,
-            env_overrides={},
-        ),
-        log_path,
-    )
-    last_message = ""
-    if output_message_path.exists():
-        last_message = output_message_path.read_text(encoding="utf-8", errors="replace").strip()
-    return {
-        "lane": lane_name,
-        "status": result["status"],
-        "failures": [failure["name"] for failure in failures],
-        "prompt_path": str(prompt_path),
-        "output_message_path": str(output_message_path),
-        "summary": last_message,
-        "execution": result,
-    }
+            error=exc,
+        )
 
 
 def build_failure_lanes(module_results: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
@@ -1182,6 +1314,25 @@ def summarize_command_metadata(
     return ", ".join(parts)
 
 
+def command_error_lines(
+    command: dict[str, Any],
+    baseline_command: dict[str, Any] | None,
+    verification_command: dict[str, Any] | None,
+) -> list[str]:
+    lines: list[str] = []
+    baseline_error = baseline_command.get("error") if baseline_command is not None else None
+    verification_error = verification_command.get("error") if verification_command is not None else None
+    if verification_command is not None:
+        if baseline_error:
+            lines.append(f"Baseline Error: `{baseline_error}`")
+        if verification_error:
+            lines.append(f"Verify Error: `{verification_error}`")
+        return lines
+    if command.get("error"):
+        lines.append(f"Error: `{command['error']}`")
+    return lines
+
+
 def command_log_lines(
     command: dict[str, Any],
     baseline_command: dict[str, Any] | None,
@@ -1226,9 +1377,17 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Baseline Issue Count: {baseline_issue_count}",
         f"- Verification Issue Count: {verification_issue_count}",
         f"- Final Issue Count: {report['issue_count']}",
-        "",
-        "## Modules",
     ]
+    if report.get("report_error"):
+        lines.append(f"- Report Error: `{report['report_error']}`")
+    if report.get("report_error_log_path"):
+        lines.append(f"- Report Error Log: `{report['report_error_log_path']}`")
+    lines.extend(
+        [
+            "",
+            "## Modules",
+        ]
+    )
     for module in report["modules"]:
         baseline_module = baseline_modules.get(module["name"])
         verification_module = verification_modules.get(module["name"])
@@ -1248,6 +1407,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             )
             lines.append(f"    - `{rendered}`")
             lines.append(f"    - {summarize_command_metadata(command, verification_command)}")
+            for error_line in command_error_lines(command, baseline_command, verification_command):
+                lines.append(f"    - {error_line}")
             for log_line in command_log_lines(command, baseline_command, verification_command):
                 lines.append(f"    - {log_line}")
     lines.append("")
@@ -1266,6 +1427,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                 execution_parts.append(f"duration={duration}")
             if execution_parts:
                 lines.append(f"  - Execution: {', '.join(execution_parts)}")
+            if agent.get("error") or execution.get("error"):
+                lines.append(f"  - Error: `{agent.get('error') or execution.get('error')}`")
             if execution.get("log_path"):
                 lines.append(f"  - Log: `{execution['log_path']}`")
             if agent["summary"]:
@@ -1273,16 +1436,41 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_report_files(report_dir: Path, iteration_slug: str, report: dict[str, Any]) -> None:
-    latest_json = report_dir / "latest.json"
-    latest_md = report_dir / "latest.md"
+def write_iteration_report_files(
+    report_dir: Path,
+    iteration_slug: str,
+    report: dict[str, Any],
+    *,
+    markdown: str | None = None,
+) -> None:
     iteration_json = report_dir / "iterations" / f"{iteration_slug}.json"
     iteration_md = report_dir / "iterations" / f"{iteration_slug}.md"
-    write_json(latest_json, report)
+    rendered_markdown = render_markdown(report) if markdown is None else markdown
     write_json(iteration_json, report)
+    write_text(iteration_md, rendered_markdown)
+
+
+def write_latest_report_files(report_dir: Path, report: dict[str, Any], *, markdown: str | None = None) -> None:
+    latest_json = report_dir / "latest.json"
+    latest_md = report_dir / "latest.md"
+    rendered_markdown = render_markdown(report) if markdown is None else markdown
+    write_json(latest_json, report)
+    write_text(latest_md, rendered_markdown)
+
+
+def write_report_error_log(iteration_dir: Path, error_message: str) -> str | None:
+    log_path = iteration_dir / "logs" / "report-write-error.log"
+    try:
+        write_text(log_path, error_message + "\n")
+    except OSError:
+        return None
+    return str(log_path)
+
+
+def write_report_files(report_dir: Path, iteration_slug: str, report: dict[str, Any]) -> None:
     markdown = render_markdown(report)
-    write_text(latest_md, markdown)
-    write_text(iteration_md, markdown)
+    write_iteration_report_files(report_dir, iteration_slug, report, markdown=markdown)
+    write_latest_report_files(report_dir, report, markdown=markdown)
 
 
 def select_modules(modules: list[ModuleSpec], selected_names: list[str] | None) -> list[ModuleSpec]:
@@ -1320,7 +1508,7 @@ def run_iteration(
 
     if failure_lanes and not skip_agent_optimize:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_parallel_agents) as executor:
-            futures = [
+            futures = {
                 executor.submit(
                     run_agent_lane,
                     lane_name,
@@ -1330,11 +1518,24 @@ def run_iteration(
                     model=model,
                     unsafe_bypass_sandbox=unsafe_bypass_sandbox,
                     timeout_seconds=agent_timeout_seconds,
-                )
+                ): (lane_name, failures)
                 for lane_name, failures in failure_lanes
-            ]
+            }
             for future in concurrent.futures.as_completed(futures):
-                agents.append(future.result())
+                lane_name, failures = futures[future]
+                try:
+                    agents.append(future.result())
+                except Exception as exc:  # noqa: BLE001
+                    agents.append(
+                        build_agent_exception_result(
+                            lane_name,
+                            failures,
+                            repo_root,
+                            iteration_dir,
+                            timeout_seconds=agent_timeout_seconds,
+                            error=exc,
+                        )
+                    )
 
         verification_targets = {
             failure["name"]: failed_command_names(failure)
@@ -1365,8 +1566,24 @@ def run_iteration(
         "agents": sorted(agents, key=lambda item: item["lane"]),
         "issue_count": sum(1 for result in final_results if result["status"] == "failed"),
         "module_inventory": build_module_inventory(modules, repo_root),
+        "report_error": None,
+        "report_error_log_path": None,
     }
-    write_report_files(report_dir, iteration_slug, report)
+    try:
+        write_report_files(report_dir, iteration_slug, report)
+    except Exception as exc:  # noqa: BLE001
+        report["report_error"] = f"report persistence failed: {format_exception(exc)}"
+        report["report_error_log_path"] = write_report_error_log(iteration_dir, report["report_error"])
+        print(f"[report-error] {report['report_error']}", file=sys.stderr)
+        if report["report_error_log_path"]:
+            print(f"[report-error] log={report['report_error_log_path']}", file=sys.stderr)
+        try:
+            write_iteration_report_files(report_dir, iteration_slug, report)
+        except Exception as fallback_exc:  # noqa: BLE001
+            print(
+                f"[report-error] fallback iteration persistence failed: {format_exception(fallback_exc)}",
+                file=sys.stderr,
+            )
     return report
 
 

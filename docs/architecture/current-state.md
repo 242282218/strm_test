@@ -82,8 +82,8 @@
 | --- | ---: | --- |
 | `tests/test_emby_proxy_routing.py` | 3431 | Emby 路由回归面极大，改动成本高 |
 | `tests/test_emby_gateway.py` | 2020 | Gateway 契约已形成大型保护网 |
+| `tests/test_continuous_optimize_contract.py` | 927 | 持续优化 loop 的模块清单、异常容错、verify 合并和报告 contract 已形成专用保护网 |
 | `tests/test_db.py` | 675 | 数据库真相源收敛时需优先关注 |
-| `tests/test_continuous_optimize_contract.py` | 614 | 持续优化 loop 的模块清单、verify 合并和报告 contract 已形成专用保护网 |
 | `tests/test_dependencies.py` | 611 | 依赖注入边界测试面在持续扩大 |
 | `tests/test_db_pool.py` | 550 | 数据库连接池回归面仍不小 |
 | `tests/test_lru_cache.py` | 546 | 缓存基础设施测试规模已接近数据库热点 |

@@ -1,6 +1,6 @@
 # Codex 工作约定
 
-**最后校验**: 2026-04-20  
+**最后校验**: 2026-04-25
 **适用范围**: `quark_strm/` 当前审查与收敛阶段  
 **配套基线**: [`../architecture/current-state.md`](../architecture/current-state.md)、[`./compatibility-inventory.md`](./compatibility-inventory.md)、[`../plans/2026-04-20-codex-project-audit-optimization-plan.md`](../plans/2026-04-20-codex-project-audit-optimization-plan.md)
 
@@ -72,8 +72,11 @@
   - `target/continuous/agents/`
 - 调度 / 报告规则：
   - failing lane 默认按失败命令的最长 timeout、累计 timeout、最高风险排序，避免受限并发时把最重 lane 排到最后
+  - agent lane 或单条命令的编排若抛异常，不得中断整轮；必须转成 failed 记录，继续其他 lane 与 verify
   - `latest.md` / iteration markdown 必须暴露模块的 `baseline -> verify -> final` 状态变化
   - 对失败或已恢复的命令，markdown 必须能直接看到日志位置，以及 return code / duration 等关键执行元数据
+  - 对 agent lane / command orchestration 异常，markdown 必须显式显示 error 文本，不能只剩空 summary 或隐式 traceback
+  - report 文件落盘若失败，不得丢弃内存中的本轮结果；至少要把 `report persistence failed` 写进 iteration snapshot 或 stderr
 - verify / skip / stop 规则：
   - baseline 某模块失败后，agent 优化完成的本轮 verify 只回跑该模块里 baseline 失败的命令
   - targeted verify 若返回 `skipped`，不得覆盖同命令的 baseline failed，避免把“不可复跑”误记成绿色

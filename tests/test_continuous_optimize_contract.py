@@ -304,6 +304,69 @@ def test_run_module_can_target_specific_commands(tmp_path: Path, monkeypatch) ->
     assert [command["name"] for command in result["commands"]] == ["baseline-fail"]
 
 
+def test_run_module_converts_orchestration_exception_into_failed_command_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = load_module()
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    iteration_dir = tmp_path / "report"
+    module_spec = module.ModuleSpec(
+        name="orchestration-contract-lane",
+        category="contracts",
+        description="command orchestration failure",
+        risk="medium",
+        optimization_lane="repo-contracts",
+        ownership_paths=("tests/",),
+        command_plans=(
+            module.command_plan("broken-command", ["echo", "broken"]),
+            module.command_plan("healthy-command", ["echo", "healthy"]),
+        ),
+    )
+    executed: list[str] = []
+
+    def fake_materialize(plan, _repo_root):
+        if plan.name == "broken-command":
+            raise RuntimeError("materialize exploded")
+        return module.MaterializedCommand(
+            name=plan.name,
+            cwd=_repo_root,
+            command=(plan.name,),
+            timeout_seconds=plan.timeout_seconds,
+            env_overrides={},
+        )
+
+    def fake_run(command, log_path):
+        executed.append(command.name)
+        return {
+            "name": command.name,
+            "status": "passed",
+            "command": list(command.command),
+            "cwd": str(command.cwd),
+            "timeout_seconds": command.timeout_seconds,
+            "log_path": str(log_path),
+            "log_tail": "",
+            "return_code": 0,
+            "duration_seconds": 0.01,
+            "started_at": "2026-04-25T00:00:00Z",
+            "ended_at": "2026-04-25T00:00:00Z",
+            "error": None,
+        }
+
+    monkeypatch.setattr(module, "materialize_command", fake_materialize)
+    monkeypatch.setattr(module, "run_materialized_command", fake_run)
+
+    result = module.run_module(module_spec, repo_root, iteration_dir, "baseline")
+
+    assert executed == ["healthy-command"]
+    assert result["status"] == "failed"
+    assert [command["status"] for command in result["commands"]] == ["failed", "passed"]
+    assert result["commands"][0]["error"] == "command orchestration failed: RuntimeError: materialize exploded"
+    assert "command orchestration failed: RuntimeError: materialize exploded" in result["commands"][0]["log_tail"]
+    assert Path(result["commands"][0]["log_path"]).exists()
+
+
 def test_build_failure_lanes_prioritizes_longer_higher_risk_lanes() -> None:
     module = load_module()
     module_results = [
@@ -508,6 +571,179 @@ def test_run_iteration_only_verifies_failed_commands_and_merges_results(tmp_path
     assert [command["status"] for command in report["modules"][0]["commands"]] == ["passed", "passed"]
 
 
+def test_run_iteration_records_agent_lane_exceptions_and_continues_verify(tmp_path: Path, monkeypatch) -> None:
+    module = load_module()
+    repo_root = tmp_path / "repo"
+    report_dir = tmp_path / "report"
+    stop_file = report_dir / module.STOP_FILE_NAME
+    repo_root.mkdir()
+    module_spec = module.ModuleSpec(
+        name="contracts-frontend-build-startup",
+        category="contracts",
+        description="frontend startup contract",
+        risk="high",
+        optimization_lane="repo-contracts",
+        ownership_paths=("web/",),
+        command_plans=(
+            module.command_plan("lint", ["pnpm", "lint"]),
+            module.command_plan("build", ["pnpm", "build"]),
+        ),
+    )
+    verify_calls: list[set[str] | None] = []
+
+    def fake_run_module(current_module, _repo_root, iteration_dir, phase, *, command_names=None):
+        assert current_module.name == module_spec.name
+        assert _repo_root == repo_root
+        assert iteration_dir.name.startswith("2026")
+        verify_calls.append(command_names)
+        if phase == "baseline":
+            return {
+                "name": current_module.name,
+                "category": current_module.category,
+                "description": current_module.description,
+                "risk": current_module.risk,
+                "optimization_lane": current_module.optimization_lane,
+                "ownership_paths": list(current_module.ownership_paths),
+                "status": "failed",
+                "commands": [
+                    {"name": "lint", "status": "passed", "command": ["pnpm", "lint"]},
+                    {"name": "build", "status": "failed", "command": ["pnpm", "build"]},
+                ],
+            }
+        assert phase == "verify"
+        assert command_names == {"build"}
+        return {
+            "name": current_module.name,
+            "category": current_module.category,
+            "description": current_module.description,
+            "risk": current_module.risk,
+            "optimization_lane": current_module.optimization_lane,
+            "ownership_paths": list(current_module.ownership_paths),
+            "status": "passed",
+            "commands": [
+                {"name": "build", "status": "passed", "command": ["pnpm", "build"]},
+            ],
+        }
+
+    times = iter(
+        [
+            module.dt.datetime(2026, 4, 25, 0, 0, 0, tzinfo=module.dt.timezone.utc),
+            module.dt.datetime(2026, 4, 25, 0, 0, 1, tzinfo=module.dt.timezone.utc),
+            module.dt.datetime(2026, 4, 25, 0, 0, 4, tzinfo=module.dt.timezone.utc),
+            module.dt.datetime(2026, 4, 25, 0, 0, 5, tzinfo=module.dt.timezone.utc),
+        ]
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "run_module", fake_run_module)
+    monkeypatch.setattr(module, "run_agent_lane", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("lane crash")))
+    monkeypatch.setattr(module, "utc_now", lambda: next(times))
+    monkeypatch.setattr(
+        module,
+        "write_report_files",
+        lambda _report_dir, _iteration_slug, report: captured.setdefault("report", report),
+    )
+    monkeypatch.setattr(module, "collect_git_state", lambda _repo_root: {"dirty_count": 1})
+    monkeypatch.setattr(module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules])
+
+    report = module.run_iteration(
+        iteration=1,
+        modules=[module_spec],
+        repo_root=repo_root,
+        report_dir=report_dir,
+        stop_file=stop_file,
+        model=module.DEFAULT_AGENT_MODEL,
+        skip_agent_optimize=False,
+        unsafe_bypass_sandbox=False,
+        max_parallel_agents=1,
+        agent_timeout_seconds=60,
+    )
+
+    assert verify_calls == [None, {"build"}]
+    assert report["issue_count"] == 0
+    assert report["agents"][0]["status"] == "failed"
+    assert report["agents"][0]["error"] == "agent lane crashed: RuntimeError: lane crash"
+    assert "agent lane crashed: RuntimeError: lane crash" in report["agents"][0]["execution"]["log_tail"]
+    assert Path(report["agents"][0]["execution"]["log_path"]).exists()
+    assert captured["report"] == report
+    assert [command["status"] for command in report["modules"][0]["commands"]] == ["passed", "passed"]
+
+
+def test_run_iteration_returns_report_error_and_fallback_snapshot_when_report_write_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = load_module()
+    repo_root = tmp_path / "repo"
+    report_dir = tmp_path / "report"
+    stop_file = report_dir / module.STOP_FILE_NAME
+    repo_root.mkdir()
+    module_spec = module.ModuleSpec(
+        name="contracts-runtime-probes-docs",
+        category="contracts",
+        description="report persistence fallback",
+        risk="medium",
+        optimization_lane="repo-contracts",
+        ownership_paths=("tests/",),
+        command_plans=(),
+    )
+    times = iter(
+        [
+            module.dt.datetime(2026, 4, 25, 0, 0, 0, tzinfo=module.dt.timezone.utc),
+            module.dt.datetime(2026, 4, 25, 0, 0, 3, tzinfo=module.dt.timezone.utc),
+        ]
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        module,
+        "run_module",
+        lambda *args, **kwargs: {
+            "name": module_spec.name,
+            "category": module_spec.category,
+            "description": module_spec.description,
+            "risk": module_spec.risk,
+            "optimization_lane": module_spec.optimization_lane,
+            "ownership_paths": list(module_spec.ownership_paths),
+            "status": "passed",
+            "commands": [],
+        },
+    )
+    monkeypatch.setattr(module, "utc_now", lambda: next(times))
+    monkeypatch.setattr(
+        module,
+        "write_report_files",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    monkeypatch.setattr(
+        module,
+        "write_iteration_report_files",
+        lambda _report_dir, _iteration_slug, report, markdown=None: captured.setdefault("report", report),
+    )
+    monkeypatch.setattr(module, "collect_git_state", lambda _repo_root: {"dirty_count": 1})
+    monkeypatch.setattr(module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules])
+
+    report = module.run_iteration(
+        iteration=1,
+        modules=[module_spec],
+        repo_root=repo_root,
+        report_dir=report_dir,
+        stop_file=stop_file,
+        model=module.DEFAULT_AGENT_MODEL,
+        skip_agent_optimize=False,
+        unsafe_bypass_sandbox=False,
+        max_parallel_agents=1,
+        agent_timeout_seconds=60,
+    )
+
+    assert report["report_error"] == "report persistence failed: OSError: disk full"
+    assert Path(report["report_error_log_path"]).exists()
+    assert "report persistence failed: OSError: disk full" in Path(report["report_error_log_path"]).read_text(
+        encoding="utf-8"
+    )
+    assert captured["report"] == report
+
+
 def test_write_report_files_emits_latest_and_iteration_reports(tmp_path: Path) -> None:
     module = load_module()
     report = {
@@ -612,3 +848,80 @@ def test_write_report_files_emits_latest_and_iteration_reports(tmp_path: Path) -
     assert "Execution: rc=0, duration=15.0s" in markdown
     assert "Log: `logs/agent-repo-contracts.log`" in markdown
     assert "Summary: fixed the failing lane" in markdown
+
+
+def test_write_report_files_surfaces_explicit_command_and_agent_errors(tmp_path: Path) -> None:
+    module = load_module()
+    report = {
+        "iteration": 1,
+        "started_at": "2026-04-20T00:00:00Z",
+        "ended_at": "2026-04-20T00:00:03Z",
+        "agent_model": "gpt-5.5",
+        "stop_file": "target/continuous/STOP_CONTINUOUS_LOOP",
+        "git_state": {"dirty_count": 7},
+        "issue_count": 1,
+        "report_error": "report persistence failed: OSError: disk full",
+        "report_error_log_path": "logs/report-write-error.log",
+        "modules": [
+            {
+                "name": "contracts-runtime-probes-docs",
+                "status": "failed",
+                "risk": "high",
+                "commands": [
+                    {
+                        "name": "contracts-runtime-probes-docs",
+                        "status": "failed",
+                        "command": [],
+                        "log_tail": "command orchestration failed: RuntimeError: boom",
+                        "log_path": "logs/baseline-main.log",
+                        "return_code": None,
+                        "duration_seconds": 0.0,
+                        "error": "command orchestration failed: RuntimeError: boom",
+                    }
+                ],
+            }
+        ],
+        "baseline_modules": [
+            {
+                "name": "contracts-runtime-probes-docs",
+                "status": "failed",
+                "commands": [
+                    {
+                        "name": "contracts-runtime-probes-docs",
+                        "status": "failed",
+                        "command": [],
+                        "log_tail": "command orchestration failed: RuntimeError: boom",
+                        "log_path": "logs/baseline-main.log",
+                        "return_code": None,
+                        "duration_seconds": 0.0,
+                        "error": "command orchestration failed: RuntimeError: boom",
+                    }
+                ],
+            }
+        ],
+        "verification_modules": [],
+        "agents": [
+            {
+                "lane": "repo-contracts",
+                "status": "failed",
+                "failures": ["contracts-runtime-probes-docs"],
+                "summary": "",
+                "error": "agent lane crashed: RuntimeError: lane crash",
+                "execution": {
+                    "return_code": None,
+                    "duration_seconds": 0.0,
+                    "log_path": "logs/agent-repo-contracts.log",
+                    "error": "agent lane crashed: RuntimeError: lane crash",
+                },
+            }
+        ],
+    }
+
+    module.write_report_files(tmp_path, "20260420T000000Z-iter-0001", report)
+
+    markdown = (tmp_path / "latest.md").read_text(encoding="utf-8")
+
+    assert "Report Error: `report persistence failed: OSError: disk full`" in markdown
+    assert "Report Error Log: `logs/report-write-error.log`" in markdown
+    assert "Error: `command orchestration failed: RuntimeError: boom`" in markdown
+    assert "Error: `agent lane crashed: RuntimeError: lane crash`" in markdown
