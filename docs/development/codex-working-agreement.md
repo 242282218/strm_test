@@ -70,7 +70,9 @@
   - `target/continuous/logs/`
   - `target/continuous/prompts/`
   - `target/continuous/agents/`
-- skip / stop 规则：
+- verify / skip / stop 规则：
+  - baseline 某模块失败后，agent 优化完成的本轮 verify 只回跑该模块里 baseline 失败的命令
+  - targeted verify 若返回 `skipped`，不得覆盖同命令的 baseline failed，避免把“不可复跑”误记成绿色
   - pytest 命令没有匹配文件时，记录 `no matching pytest targets` 并把命令标记为 `skipped`
   - frontend `pnpm-files` 命令没有匹配文件时，记录 `no matching frontend targets` 并把命令标记为 `skipped`
   - 某个模块所有命令都被跳过时，模块状态也必须是 `skipped`
