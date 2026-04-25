@@ -70,6 +70,10 @@
   - `target/continuous/logs/`
   - `target/continuous/prompts/`
   - `target/continuous/agents/`
+- 调度 / 报告规则：
+  - failing lane 默认按失败命令的最长 timeout、累计 timeout、最高风险排序，避免受限并发时把最重 lane 排到最后
+  - `latest.md` / iteration markdown 必须暴露模块的 `baseline -> verify -> final` 状态变化
+  - 对失败或已恢复的命令，markdown 必须能直接看到日志位置，以及 return code / duration 等关键执行元数据
 - verify / skip / stop 规则：
   - baseline 某模块失败后，agent 优化完成的本轮 verify 只回跑该模块里 baseline 失败的命令
   - targeted verify 若返回 `skipped`，不得覆盖同命令的 baseline failed，避免把“不可复跑”误记成绿色

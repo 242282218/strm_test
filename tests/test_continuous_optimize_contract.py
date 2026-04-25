@@ -517,18 +517,55 @@ def test_write_report_files_emits_latest_and_iteration_reports(tmp_path: Path) -
         "agent_model": "gpt-5.5",
         "stop_file": "target/continuous/STOP_CONTINUOUS_LOOP",
         "git_state": {"dirty_count": 7},
-        "issue_count": 1,
+        "issue_count": 0,
         "modules": [
             {
                 "name": "contracts-runtime-probes-docs",
-                "status": "failed",
+                "status": "passed",
                 "risk": "high",
+                "commands": [
+                    {
+                        "name": "contracts-runtime-probes-docs",
+                        "status": "passed",
+                        "command": ["python", "-m", "pytest", "tests/test_main_entrypoint.py"],
+                        "log_tail": "",
+                        "log_path": "logs/verify-main.log",
+                        "return_code": 0,
+                        "duration_seconds": 7.25,
+                    }
+                ],
+            }
+        ],
+        "baseline_modules": [
+            {
+                "name": "contracts-runtime-probes-docs",
+                "status": "failed",
                 "commands": [
                     {
                         "name": "contracts-runtime-probes-docs",
                         "status": "failed",
                         "command": ["python", "-m", "pytest", "tests/test_main_entrypoint.py"],
                         "log_tail": "failure tail",
+                        "log_path": "logs/baseline-main.log",
+                        "return_code": 1,
+                        "duration_seconds": 11.5,
+                    }
+                ],
+            }
+        ],
+        "verification_modules": [
+            {
+                "name": "contracts-runtime-probes-docs",
+                "status": "passed",
+                "commands": [
+                    {
+                        "name": "contracts-runtime-probes-docs",
+                        "status": "passed",
+                        "command": ["python", "-m", "pytest", "tests/test_main_entrypoint.py"],
+                        "log_tail": "",
+                        "log_path": "logs/verify-main.log",
+                        "return_code": 0,
+                        "duration_seconds": 7.25,
                     }
                 ],
             }
@@ -539,6 +576,11 @@ def test_write_report_files_emits_latest_and_iteration_reports(tmp_path: Path) -
                 "status": "passed",
                 "failures": ["contracts-runtime-probes-docs"],
                 "summary": "fixed the failing lane",
+                "execution": {
+                    "return_code": 0,
+                    "duration_seconds": 15.0,
+                    "log_path": "logs/agent-repo-contracts.log",
+                },
             }
         ],
     }
@@ -559,6 +601,14 @@ def test_write_report_files_emits_latest_and_iteration_reports(tmp_path: Path) -
 
     markdown = latest_md.read_text(encoding="utf-8")
     assert "# quark_strm Continuous Optimization Report" in markdown
-    assert "- Final Issue Count: 1" in markdown
-    assert "- `contracts-runtime-probes-docs`: failed (high)" in markdown
+    assert "- Baseline Issue Count: 1" in markdown
+    assert "- Verification Issue Count: 0" in markdown
+    assert "- Final Issue Count: 0" in markdown
+    assert "- `contracts-runtime-probes-docs` (high): final=passed, baseline=failed, verify=passed" in markdown
+    assert "`contracts-runtime-probes-docs`: failed -> passed" in markdown
+    assert "source=verify, rc=0, duration=7.25s" in markdown
+    assert "Baseline Log: `logs/baseline-main.log`" in markdown
+    assert "Verify Log: `logs/verify-main.log`" in markdown
+    assert "Execution: rc=0, duration=15.0s" in markdown
+    assert "Log: `logs/agent-repo-contracts.log`" in markdown
     assert "Summary: fixed the failing lane" in markdown

@@ -1129,7 +1129,91 @@ def build_module_inventory(modules: list[ModuleSpec], repo_root: Path) -> list[d
     return inventory
 
 
+def index_by_name(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {item["name"]: item for item in items}
+
+
+def format_duration_seconds(value: Any) -> str | None:
+    if not isinstance(value, (int, float)):
+        return None
+    return f"{value}s"
+
+
+def summarize_module_report_status(
+    module: dict[str, Any],
+    baseline_module: dict[str, Any] | None,
+    verification_module: dict[str, Any] | None,
+) -> str:
+    parts = [f"final={module['status']}"]
+    if baseline_module is not None:
+        parts.append(f"baseline={baseline_module['status']}")
+    if verification_module is not None:
+        parts.append(f"verify={verification_module['status']}")
+    elif baseline_module is not None:
+        parts.append("verify=n/a")
+    return ", ".join(parts)
+
+
+def summarize_command_report_status(
+    command: dict[str, Any],
+    baseline_command: dict[str, Any] | None,
+    verification_command: dict[str, Any] | None,
+) -> str:
+    if verification_command is not None and verification_command["status"] != "skipped":
+        baseline_status = baseline_command["status"] if baseline_command is not None else "n/a"
+        return f"{baseline_status} -> {verification_command['status']}"
+    if verification_command is not None and verification_command["status"] == "skipped" and baseline_command is not None:
+        reason = verification_command.get("log_tail") or "skipped"
+        return f"{baseline_command['status']} (verify skipped: {reason})"
+    return command["status"]
+
+
+def summarize_command_metadata(
+    command: dict[str, Any],
+    verification_command: dict[str, Any] | None,
+) -> str:
+    source = "verify" if verification_command is not None and verification_command["status"] != "skipped" else "baseline"
+    parts = [f"source={source}"]
+    if command.get("return_code") is not None:
+        parts.append(f"rc={command['return_code']}")
+    duration = format_duration_seconds(command.get("duration_seconds"))
+    if duration is not None:
+        parts.append(f"duration={duration}")
+    return ", ".join(parts)
+
+
+def command_log_lines(
+    command: dict[str, Any],
+    baseline_command: dict[str, Any] | None,
+    verification_command: dict[str, Any] | None,
+) -> list[str]:
+    lines: list[str] = []
+    baseline_log = baseline_command.get("log_path") if baseline_command is not None else None
+    verification_log = verification_command.get("log_path") if verification_command is not None else None
+    if verification_command is not None and verification_command["status"] != "skipped":
+        if baseline_log:
+            lines.append(f"Baseline Log: `{baseline_log}`")
+        if verification_log:
+            lines.append(f"Verify Log: `{verification_log}`")
+        return lines
+
+    if verification_command is not None and verification_command["status"] == "skipped":
+        reason = verification_command.get("log_tail") or "skipped"
+        if baseline_log:
+            lines.append(f"Baseline Log: `{baseline_log}`")
+        lines.append(f"Verify Skip Reason: `{reason}`")
+        return lines
+
+    if command["status"] != "passed" and command.get("log_path"):
+        lines.append(f"Log: `{command['log_path']}`")
+    return lines
+
+
 def render_markdown(report: dict[str, Any]) -> str:
+    baseline_modules = index_by_name(report.get("baseline_modules", []))
+    verification_modules = index_by_name(report.get("verification_modules", []))
+    baseline_issue_count = sum(1 for result in report.get("baseline_modules", []) if result["status"] == "failed")
+    verification_issue_count = sum(1 for result in report.get("verification_modules", []) if result["status"] == "failed")
     lines = [
         "# quark_strm Continuous Optimization Report",
         "",
@@ -1139,17 +1223,33 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Agent Model: {report['agent_model']}",
         f"- Stop File: `{report['stop_file']}`",
         f"- Dirty Files: {report['git_state']['dirty_count']}",
+        f"- Baseline Issue Count: {baseline_issue_count}",
+        f"- Verification Issue Count: {verification_issue_count}",
         f"- Final Issue Count: {report['issue_count']}",
         "",
         "## Modules",
     ]
     for module in report["modules"]:
-        lines.append(f"- `{module['name']}`: {module['status']} ({module['risk']})")
+        baseline_module = baseline_modules.get(module["name"])
+        verification_module = verification_modules.get(module["name"])
+        lines.append(
+            f"- `{module['name']}` ({module['risk']}): "
+            f"{summarize_module_report_status(module, baseline_module, verification_module)}"
+        )
+        baseline_commands = index_by_name(baseline_module["commands"]) if baseline_module is not None else {}
+        verification_commands = index_by_name(verification_module["commands"]) if verification_module is not None else {}
         for command in module["commands"]:
-            status = command["status"]
-            rendered = quote_command(command["command"]) if command["command"] else command["log_tail"]
-            lines.append(f"  - `{command['name']}`: {status}")
+            baseline_command = baseline_commands.get(command["name"])
+            verification_command = verification_commands.get(command["name"])
+            rendered = quote_command(command["command"]) if command["command"] else (command.get("log_tail") or "(no command)")
+            lines.append(
+                f"  - `{command['name']}`: "
+                f"{summarize_command_report_status(command, baseline_command, verification_command)}"
+            )
             lines.append(f"    - `{rendered}`")
+            lines.append(f"    - {summarize_command_metadata(command, verification_command)}")
+            for log_line in command_log_lines(command, baseline_command, verification_command):
+                lines.append(f"    - {log_line}")
     lines.append("")
     lines.append("## Agents")
     if not report["agents"]:
@@ -1157,6 +1257,17 @@ def render_markdown(report: dict[str, Any]) -> str:
     else:
         for agent in report["agents"]:
             lines.append(f"- `{agent['lane']}`: {agent['status']} ({', '.join(agent['failures'])})")
+            execution = agent.get("execution") or {}
+            execution_parts: list[str] = []
+            if execution.get("return_code") is not None:
+                execution_parts.append(f"rc={execution['return_code']}")
+            duration = format_duration_seconds(execution.get("duration_seconds"))
+            if duration is not None:
+                execution_parts.append(f"duration={duration}")
+            if execution_parts:
+                lines.append(f"  - Execution: {', '.join(execution_parts)}")
+            if execution.get("log_path"):
+                lines.append(f"  - Log: `{execution['log_path']}`")
             if agent["summary"]:
                 lines.append(f"  - Summary: {agent['summary']}")
     return "\n".join(lines) + "\n"

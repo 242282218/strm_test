@@ -83,13 +83,13 @@
 | `tests/test_emby_proxy_routing.py` | 3431 | Emby 路由回归面极大，改动成本高 |
 | `tests/test_emby_gateway.py` | 2020 | Gateway 契约已形成大型保护网 |
 | `tests/test_db.py` | 675 | 数据库真相源收敛时需优先关注 |
+| `tests/test_continuous_optimize_contract.py` | 614 | 持续优化 loop 的模块清单、verify 合并和报告 contract 已形成专用保护网 |
 | `tests/test_dependencies.py` | 611 | 依赖注入边界测试面在持续扩大 |
 | `tests/test_db_pool.py` | 550 | 数据库连接池回归面仍不小 |
 | `tests/test_lru_cache.py` | 546 | 缓存基础设施测试规模已接近数据库热点 |
 | `tests/test_strm_service.py` | 540 | STRM 服务回归面与 API 热点并行增长 |
 | `tests/test_auth_middleware.py` | 535 | 认证中间件契约测试已形成较大保护网 |
 | `tests/test_notification_service.py` | 523 | 通知服务行为覆盖开始进入大型测试模块 |
-| `tests/test_strm_api.py` | 519 | STRM API 已去掉无效数据库兼容层假设，但仍是接口层回归锚点 |
 
 ## 4. 当前已确认约束
 
