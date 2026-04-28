@@ -38,7 +38,7 @@ class FieldExpr:
     def __init__(self, name: str) -> None:
         self.name = name
 
-    def __eq__(self, other: Any) -> tuple[str, str, Any]:
+    def __eq__(self, other: object) -> tuple[str, str, Any]:
         return ("eq", self.name, other)
 
 
@@ -63,7 +63,7 @@ class FakeQuery:
         self.deleted = 0
         self._filter_expr: tuple[str, str, Any] | None = None
 
-    def filter_by(self, **kwargs: Any) -> "FakeQuery":
+    def filter_by(self, **kwargs: Any) -> FakeQuery:
         self._filter_by = kwargs
         return self
 
@@ -88,7 +88,7 @@ class FakeQuery:
         self.deleted = before - len(self.records)
         return self.deleted
 
-    def filter(self, expr: tuple[str, str, Any]) -> "FakeQuery":
+    def filter(self, expr: tuple[str, str, Any]) -> FakeQuery:
         self._filter_expr = expr
         return self
 

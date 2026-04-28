@@ -29,9 +29,7 @@ def _build_transfer_service(
 ) -> tuple[ts.TransferService, AsyncMock, list[SimpleNamespace]]:
     service = ts.TransferService(db_session=object())
     service.cloud_drive_service = SimpleNamespace(get_drive=lambda _drive_id: drive)
-    service._resolve_target_directory = AsyncMock(
-        return_value=target or SimpleNamespace(fid="target-fid", is_dir=True)
-    )  # type: ignore[method-assign]
+    service._resolve_target_directory = AsyncMock(return_value=target or SimpleNamespace(fid="target-fid", is_dir=True))  # type: ignore[method-assign]
 
     config = SimpleNamespace(quark=SimpleNamespace(cookie=config_cookie))
     monkeypatch.setattr(ts, "get_config_service", lambda: SimpleNamespace(get_config=lambda: config))
@@ -214,7 +212,7 @@ async def test_transfer_share_auto_organize_skips_when_drive_id_missing(
 
 
 @pytest.mark.asyncio
-async def test_transfer_share_auto_organize_creates_task_and_starts_runner(
+async def test_transfer_share_auto_organize_queues_task_without_background_runner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     drive = SimpleNamespace(drive_type="quark", cookie="drive-cookie")
@@ -234,14 +232,10 @@ async def test_transfer_share_auto_organize_creates_task_and_starts_runner(
             created_tasks.append(task_in)
             return SimpleNamespace(id=99)
 
-    class FakeTaskRunner:
-        @staticmethod
-        def run_task(task_id: int) -> None:
-            return None
-
     monkeypatch.setitem(sys.modules, "app.schemas.task", types.SimpleNamespace(TaskCreate=FakeTaskCreate))
-    monkeypatch.setitem(sys.modules, "app.services.platform.task_queue", types.SimpleNamespace(TaskService=FakeTaskService))
-    monkeypatch.setitem(sys.modules, "app.services.platform.task_runner", types.SimpleNamespace(TaskRunner=FakeTaskRunner))
+    monkeypatch.setitem(
+        sys.modules, "app.services.platform.task_queue", types.SimpleNamespace(TaskService=FakeTaskService)
+    )
 
     await service.transfer_share(9, "abcdef123456", "/target", auto_organize=True, background_tasks=background_tasks)
 
@@ -249,17 +243,16 @@ async def test_transfer_share_auto_organize_creates_task_and_starts_runner(
     params = created_tasks[0].kwargs["params"]
     assert params["drive_id"] == 9
     assert params["source_dir"] == "/target"
-    assert background_tasks.calls == [(FakeTaskRunner.run_task, 99)]
+    assert background_tasks.calls == []
     assert instances[0].closed is True
 
 
 @pytest.mark.asyncio
-async def test_transfer_share_auto_organize_logs_when_background_tasks_missing(
+async def test_transfer_share_auto_organize_queues_task_when_background_tasks_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     drive = SimpleNamespace(drive_type="quark", cookie="drive-cookie")
     service, _save_share, _instances = _build_transfer_service(monkeypatch, drive=drive)
-    warnings: list[str] = []
     created_tasks: list[object] = []
 
     class FakeTaskCreate:
@@ -274,17 +267,11 @@ async def test_transfer_share_auto_organize_logs_when_background_tasks_missing(
             created_tasks.append(task_in)
             return SimpleNamespace(id=7)
 
-    class FakeTaskRunner:
-        @staticmethod
-        def run_task(task_id: int) -> None:
-            return None
-
     monkeypatch.setitem(sys.modules, "app.schemas.task", types.SimpleNamespace(TaskCreate=FakeTaskCreate))
-    monkeypatch.setitem(sys.modules, "app.services.platform.task_queue", types.SimpleNamespace(TaskService=FakeTaskService))
-    monkeypatch.setitem(sys.modules, "app.services.platform.task_runner", types.SimpleNamespace(TaskRunner=FakeTaskRunner))
-    monkeypatch.setattr(ts.logger, "warning", lambda message: warnings.append(message))
+    monkeypatch.setitem(
+        sys.modules, "app.services.platform.task_queue", types.SimpleNamespace(TaskService=FakeTaskService)
+    )
 
     await service.transfer_share(9, "abcdef123456", "/target", auto_organize=True, background_tasks=None)
 
     assert len(created_tasks) == 1
-    assert any("not started immediately" in message for message in warnings)

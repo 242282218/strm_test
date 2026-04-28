@@ -4,6 +4,18 @@ import { describe, expect, it } from 'vitest'
 import { createPlaywrightWebServers, resolvePlaywrightRuntimeConfig } from '../playwright.config'
 
 describe('playwright e2e startup contract', () => {
+  it('uses isolated default e2e ports when no overrides are provided', () => {
+    const runtime = resolvePlaywrightRuntimeConfig({})
+    const [backend, frontend] = createPlaywrightWebServers(runtime, {})
+
+    expect(runtime).toMatchObject({
+      apiTarget: 'http://127.0.0.1:18000',
+      baseURL: 'http://127.0.0.1:18099',
+    })
+    expect(backend.command).toContain('uvicorn app.main:app --host 127.0.0.1 --port 18000')
+    expect(frontend.command).toContain('npm run dev -- --host 127.0.0.1 --port 18099')
+  })
+
   it('auto-starts backend and frontend with aligned targets', () => {
     const env = {
       PLAYWRIGHT_BASE_URL: 'http://127.0.0.1:3001',

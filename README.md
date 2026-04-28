@@ -36,5 +36,26 @@ pnpm run test:run
 - Frontend unit tests: `cd web && pnpm run test:run`
 - Frontend E2E: `cd web && pnpm run test:e2e`
 
+## Continuous Optimization
+
+The repo now includes a local continuous optimization loop at
+`scripts/continuous_optimize.py`. It defines backend, frontend, and
+contract-focused module slices, writes reports to `target/continuous/`,
+and uses `gpt-5.5` for Codex optimization lanes by default.
+
+Observe-only dry baseline:
+
+```bash
+python scripts/continuous_optimize.py --skip-agent-optimize --max-iterations 1
+```
+
+Continuous multi-agent optimization:
+
+```bash
+python scripts/continuous_optimize.py
+```
+
+To stop the loop, create `target/continuous/STOP_CONTINUOUS_LOOP`.
+
 The workspace-level overview and user-facing documentation remain in
 `../README.md`.

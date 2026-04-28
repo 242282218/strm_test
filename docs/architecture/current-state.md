@@ -50,16 +50,16 @@
 
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
-| `app/api/emby.py` | 1153 | Emby 路由仍是最大的单体 API 模块 |
-| `app/api/quark.py` | 1055 | 夸克入口仍聚合多类能力 |
+| `app/api/emby.py` | 1152 | Emby 路由仍是最大的单体 API 模块 |
+| `app/api/quark.py` | 1056 | 夸克入口仍聚合多类能力 |
 | `app/services/media/scrape.py` | 968 | 刮削流程与媒体领域逻辑耦合度高 |
 | `app/core/cache_manager.py` | 934 | 核心缓存协调入口仍偏重 |
 | `app/api/monitoring.py` | 892 | 监控 API 体量仍偏大 |
 | `app/services/media/smart_rename.py` | 860 | 智能重命名服务职责偏多 |
 | `app/api/scrape.py` | 820 | 刮削 API 仍较重 |
-| `app/api/proxy.py` | 772 | 代理路由仍是后端入口热点 |
+| `app/config/settings.py` | 782 | 配置 schema 聚合仍偏重，但 env/runtime helper 已拆出 |
+| `app/api/proxy.py` | 780 | 代理路由仍是后端入口热点 |
 | `app/services/security_audit_service.py` | 753 | 安全审计服务已形成新的大模块 |
-| `app/config/settings.py` | 714 | 配置 schema 聚合仍偏重，但 env/runtime helper 已拆出 |
 
 ### 前端热点（`web/src/`）
 
@@ -80,15 +80,15 @@
 
 | 路径 | 行数 | 说明 |
 | --- | ---: | --- |
-| `tests/test_emby_proxy_routing.py` | 3431 | Emby 路由回归面极大，改动成本高 |
-| `tests/test_emby_gateway.py` | 2020 | Gateway 契约已形成大型保护网 |
-| `tests/test_continuous_optimize_contract.py` | 927 | 持续优化 loop 的模块清单、异常容错、verify 合并和报告 contract 已形成专用保护网 |
-| `tests/test_db.py` | 675 | 数据库真相源收敛时需优先关注 |
+| `tests/test_emby_proxy_routing.py` | 3451 | Emby 路由回归面极大，改动成本高 |
+| `tests/test_emby_gateway.py` | 2026 | Gateway 契约已形成大型保护网 |
+| `tests/test_continuous_optimize_contract.py` | 936 | 持续优化 loop 的模块清单、异常容错、verify 合并和报告 contract 已形成专用保护网 |
+| `tests/test_db.py` | 679 | 数据库真相源收敛时需优先关注 |
 | `tests/test_dependencies.py` | 611 | 依赖注入边界测试面在持续扩大 |
-| `tests/test_db_pool.py` | 550 | 数据库连接池回归面仍不小 |
-| `tests/test_lru_cache.py` | 546 | 缓存基础设施测试规模已接近数据库热点 |
-| `tests/test_strm_service.py` | 540 | STRM 服务回归面与 API 热点并行增长 |
-| `tests/test_auth_middleware.py` | 535 | 认证中间件契约测试已形成较大保护网 |
+| `tests/test_db_pool.py` | 546 | 数据库连接池回归面仍不小 |
+| `tests/test_strm_api.py` | 535 | STRM API 回归面与服务热点并行增长 |
+| `tests/test_lru_cache.py` | 533 | 缓存基础设施测试规模已接近数据库热点 |
+| `tests/test_baseline_docs_contract.py` | 532 | 文档清单和热点表 contract 已形成较大保护网 |
 | `tests/test_notification_service.py` | 523 | 通知服务行为覆盖开始进入大型测试模块 |
 
 ## 4. 当前已确认约束

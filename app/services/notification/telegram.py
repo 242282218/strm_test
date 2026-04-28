@@ -5,9 +5,11 @@ Telegram通知模块
 """
 
 import aiohttp
-from typing import Optional
+
 from app.core.logging import get_logger
+
 from .base import BaseNotifier, NotificationMessage, NotificationPriority
+
 
 logger = get_logger(__name__)
 
@@ -36,12 +38,7 @@ class TelegramNotifier(BaseNotifier):
         ))
     """
 
-    def __init__(
-        self,
-        token: str,
-        chat_id: str,
-        proxy_url: Optional[str] = None
-    ):
+    def __init__(self, token: str, chat_id: str, proxy_url: str | None = None):
         """
         初始化Telegram通知器
 
@@ -95,24 +92,20 @@ class TelegramNotifier(BaseNotifier):
             "chat_id": self.chat_id,
             "text": text,
             "parse_mode": "Markdown",
-            "disable_notification": message.priority == NotificationPriority.LOW
+            "disable_notification": message.priority == NotificationPriority.LOW,
         }
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url,
-                    json=payload,
-                    proxy=self.proxy_url,
-                    timeout=aiohttp.ClientTimeout(total=30)
-                ) as resp:
-                    if resp.status == 200:
-                        logger.info(f"Telegram notification sent: {message.title}")
-                        return True
-                    else:
-                        error_text = await resp.text()
-                        logger.error(f"Telegram API error: {resp.status} - {error_text}")
-                        return False
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(url, json=payload, proxy=self.proxy_url, timeout=aiohttp.ClientTimeout(total=30)) as resp,
+            ):
+                if resp.status == 200:
+                    logger.info(f"Telegram notification sent: {message.title}")
+                    return True
+                error_text = await resp.text()
+                logger.error(f"Telegram API error: {resp.status} - {error_text}")
+                return False
         except aiohttp.ClientError as e:
             logger.error(f"Telegram request failed: {e}")
             return False
@@ -135,13 +128,11 @@ class TelegramNotifier(BaseNotifier):
         url = f"{self._api_base}/getMe"
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url,
-                    proxy=self.proxy_url,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    return resp.status == 200
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(url, proxy=self.proxy_url, timeout=aiohttp.ClientTimeout(total=10)) as resp,
+            ):
+                return resp.status == 200
         except Exception as e:
             logger.debug(f"Telegram health check failed: {e}")
             return False
@@ -159,7 +150,7 @@ class TelegramNotifier(BaseNotifier):
         Returns:
             str: 转义后的文本
         """
-        chars_to_escape = r'_*[]()~`>#+-=|{}.!'
+        chars_to_escape = r"_*[]()~`>#+-=|{}.!"
         for char in chars_to_escape:
-            text = text.replace(char, f'\\{char}')
+            text = text.replace(char, f"\\{char}")
         return text

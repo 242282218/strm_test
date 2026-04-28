@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+
 # aioredis has import-time incompatibility on some Python 3.11 builds.
 # Inject a minimal stub so module logic can be tested deterministically.
 if "aioredis" not in sys.modules:

@@ -1,13 +1,14 @@
-import re
 import asyncio
-from typing import Optional, List
-from app.services.cloud_drive_service import CloudDriveService
-from app.services.quark_service import QuarkService
-from app.services.config_service import get_config_service
+import re
 
 from app.core.logging import get_logger
+from app.services.cloud_drive_service import CloudDriveService
+from app.services.config_service import get_config_service
+from app.services.quark_service import QuarkService
+
 
 logger = get_logger(__name__)
+
 
 class TransferService:
     def __init__(self, db_session):
@@ -15,13 +16,13 @@ class TransferService:
         self.cloud_drive_service = CloudDriveService(db_session)
 
     async def transfer_share(
-        self, 
-        drive_id: Optional[int],
-        share_url: str, 
-        target_dir: str, 
+        self,
+        drive_id: int | None,
+        share_url: str,
+        target_dir: str,
         password: str = "",
         auto_organize: bool = False,
-        background_tasks = None
+        background_tasks=None,
     ):
         # 1. 解析 share_url
         pwd_id = self._extract_pwd_id(share_url)
@@ -47,7 +48,7 @@ class TransferService:
                 raise ValueError("No quark drive configured and quark.cookie is empty")
 
         quark_service = QuarkService(cookie)
-        
+
         try:
             # 3. Get share token
             stoken = await quark_service.client.get_share_token(pwd_id, password)
@@ -59,57 +60,48 @@ class TransferService:
             files = await quark_service.client.get_share_files(pwd_id, stoken)
             if not files:
                 raise ValueError("No files found in share")
-            
+
             fid_list = [f["fid"] for f in files]
-            
+
             # 5. Get target fid
             target_file = await self._resolve_target_directory(quark_service, target_dir)
             if not target_file:
-                 raise ValueError(f"Target directory {target_dir} not found")
+                raise ValueError(f"Target directory {target_dir} not found")
             if not target_file.is_dir:
-                 raise ValueError(f"Target path {target_dir} is not a directory")
-            
+                raise ValueError(f"Target path {target_dir} is not a directory")
+
             target_fid = target_file.fid
-            
+
             # 6. Save
             await quark_service.client.save_share(pwd_id, stoken, fid_list, target_fid)
             logger.info(f"Transferred share {pwd_id} to {target_dir}")
-            
+
             # 7. Auto Organize
             if auto_organize:
                 if drive_id is None:
                     logger.warning("Auto-organize skipped because drive_id is missing")
                     return
 
-                from app.services.task_queue_service import TaskService
                 from app.schemas.task import TaskCreate
-                from app.services.task_runner import TaskRunner
-                
+                from app.services.platform.task_queue import TaskService
+
                 task_service = TaskService(self.db)
                 task_in = TaskCreate(
                     task_type="strm_generation",
                     params={
                         "drive_id": drive_id,
                         "source_dir": target_dir,
-                        "target_dir": "data/media", # 默认
-                        "media_type": "auto"
-                    }
+                        "target_dir": "data/media",  # 默认
+                        "media_type": "auto",
+                    },
                 )
                 task = task_service.create_task(task_in)
-                
-                if background_tasks:
-                    background_tasks.add_task(TaskRunner.run_task, task.id)
-                else:
-                    logger.warning("Background tasks handler not provided, auto-organize task created but not started immediately")
+                logger.info(f"Auto-organize task {task.id} queued for persistent worker")
         finally:
             await quark_service.close()
 
     async def _resolve_target_directory(
-        self,
-        quark_service: QuarkService,
-        target_dir: str,
-        retries: int = 5,
-        retry_delay_seconds: float = 0.5
+        self, quark_service: QuarkService, target_dir: str, retries: int = 5, retry_delay_seconds: float = 0.5
     ):
         """
         Resolve target directory with bounded retries.
@@ -123,13 +115,13 @@ class TransferService:
                 await asyncio.sleep(retry_delay_seconds)
         return None
 
-    def _extract_pwd_id(self, url: str) -> Optional[str]:
+    def _extract_pwd_id(self, url: str) -> str | None:
         # Supported formats:
         # https://pan.quark.cn/s/abcdef123456
-        match = re.search(r'/s/([a-zA-Z0-9]+)', url)
+        match = re.search(r"/s/([a-zA-Z0-9]+)", url)
         if match:
             return match.group(1)
         # Maybe handle raw pwd_id input
-        if re.match(r'^[a-zA-Z0-9]{12,32}$', url):
+        if re.match(r"^[a-zA-Z0-9]{12,32}$", url):
             return url
         return None

@@ -31,6 +31,14 @@ COPY web/ ./
 RUN npm run build
 
 # =============================================================================
+# Stage 1b: Frontend Runtime (Nginx)
+# =============================================================================
+FROM nginx:1.27-alpine AS frontend-runtime
+
+COPY --from=frontend-builder /build/dist /usr/share/nginx/html
+COPY docs/operations/nginx-spa.conf /etc/nginx/conf.d/default.conf
+
+# =============================================================================
 # Stage 2: Python Dependencies Builder
 # =============================================================================
 FROM python:3.11-slim AS python-builder
@@ -89,9 +97,6 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy application code
 COPY app ./app
 
-# Copy frontend build from frontend-builder
-COPY --from=frontend-builder /build/dist ./web/dist
-
 # Copy configuration files
 COPY config.example.yaml ./config.example.yaml
 COPY pyproject.toml ./pyproject.toml
@@ -106,7 +111,7 @@ USER appuser
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    WEB_CONCURRENCY=2 \
+    WEB_CONCURRENCY=1 \
     PORT=8000
 
 # Expose port
@@ -117,4 +122,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/ready || exit 1
 
 # Default command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

@@ -14,11 +14,11 @@ class DummyStatement:
         self.options_calls: list[tuple[object, ...]] = []
         self.filter_by_calls: list[dict[str, object]] = []
 
-    def options(self, *options: object) -> "DummyStatement":
+    def options(self, *options: object) -> DummyStatement:
         self.options_calls.append(options)
         return self
 
-    def filter_by(self, **kwargs: object) -> "DummyStatement":
+    def filter_by(self, **kwargs: object) -> DummyStatement:
         self.filter_by_calls.append(kwargs)
         return self
 

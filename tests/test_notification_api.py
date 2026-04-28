@@ -19,8 +19,10 @@ from app.api.notification import (
     get_logs,
     list_channels,
     list_rules,
-    test_channel as send_test_channel,
     update_channel,
+)
+from app.api.notification import (
+    test_channel as send_test_channel,
 )
 
 

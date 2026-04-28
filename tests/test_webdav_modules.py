@@ -345,9 +345,7 @@ def test_get_webdav_app_returns_none_when_disabled(monkeypatch: pytest.MonkeyPat
 
 def test_get_webdav_app_returns_none_when_credentials_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     errors: list[str] = []
-    config = SimpleNamespace(
-        webdav=SimpleNamespace(enabled=True, mount_path="/dav", username=" ", password="")
-    )
+    config = SimpleNamespace(webdav=SimpleNamespace(enabled=True, mount_path="/dav", username=" ", password=""))
     monkeypatch.setattr(service_mod, "get_config_service", lambda: SimpleNamespace(get_config=lambda: config))
     monkeypatch.setattr(service_mod.logger, "error", lambda message: errors.append(message))
 

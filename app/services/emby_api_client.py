@@ -4,10 +4,13 @@ Emby API客户端模块
 参考: go-emby2openlist internal/service/emby/api.go
 """
 
+from typing import Any
+
 import aiohttp
-from typing import Optional, Dict, Any, List
+
 from app.core.logging import get_logger
-from app.core.retry import retry_on_transient, TransientError
+from app.core.retry import TransientError, retry_on_transient
+
 
 logger = get_logger(__name__)
 
@@ -15,12 +18,7 @@ logger = get_logger(__name__)
 class EmbyAPIClient:
     """Emby API客户端"""
 
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        timeout: int = 30
-    ):
+    def __init__(self, base_url: str, api_key: str, timeout: int = 30):
         """
         初始化Emby API客户端
 
@@ -29,10 +27,10 @@ class EmbyAPIClient:
             api_key: Emby API密钥
             timeout: 请求超时时间
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = aiohttp.ClientTimeout(total=timeout)
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.session: aiohttp.ClientSession | None = None
         logger.info(f"EmbyAPIClient initialized: {self.base_url}")
 
     async def __aenter__(self):
@@ -45,16 +43,12 @@ class EmbyAPIClient:
         if self.session:
             await self.session.close()
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """获取请求头"""
-        return {
-            "X-Emby-Token": self.api_key,
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
+        return {"X-Emby-Token": self.api_key, "Accept": "application/json", "Content-Type": "application/json"}
 
     @retry_on_transient()
-    async def _request_json(self, method: str, url: str, **kwargs) -> Dict[str, Any]:
+    async def _request_json(self, method: str, url: str, **kwargs) -> dict[str, Any]:
         if not self.session:
             raise RuntimeError("Emby client session not initialized")
         async with self.session.request(method, url, headers=self._get_headers(), **kwargs) as response:
@@ -64,10 +58,10 @@ class EmbyAPIClient:
                 raise Exception(f"Emby API error: {response.status}")
             return await response.json()
 
-    async def get_views(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_views(self, user_id: str | None = None) -> list[dict[str, Any]]:
         """获取用户视图（媒体库）"""
         url = f"{self.base_url}/Users/{user_id}/Views" if user_id else f"{self.base_url}/Library/MediaFolders"
-        
+
         try:
             data = await self._request_json("GET", url)
             return data.get("Items", [])
@@ -77,16 +71,16 @@ class EmbyAPIClient:
 
     async def get_items_by_query(
         self,
-        user_id: Optional[str] = None,
-        parent_id: Optional[str] = None,
+        user_id: str | None = None,
+        parent_id: str | None = None,
         recursive: bool = True,
-        include_item_types: Optional[str] = None,
-        fields: Optional[str] = "Path,MediaSources"
-    ) -> List[Dict[str, Any]]:
+        include_item_types: str | None = None,
+        fields: str | None = "Path,MediaSources",
+    ) -> list[dict[str, Any]]:
         """通用查询获取项目"""
         endpoint = f"/Users/{user_id}/Items" if user_id else "/Items"
         url = f"{self.base_url}{endpoint}"
-        
+
         params = {
             "Recursive": str(recursive).lower(),
             "Fields": fields,
@@ -95,7 +89,7 @@ class EmbyAPIClient:
             params["ParentId"] = parent_id
         if include_item_types:
             params["IncludeItemTypes"] = include_item_types
-            
+
         try:
             data = await self._request_json("GET", url, params=params)
             return data.get("Items", [])
@@ -103,15 +97,11 @@ class EmbyAPIClient:
             logger.error(f"Failed to query items: {e}")
             return []
 
-    async def get_items(
-        self,
-        item_id: str,
-        user_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def get_items(self, item_id: str, user_id: str | None = None) -> dict[str, Any]:
         """
         获取项目信息
 
-        参考: go-emby2openlist internal/service/emby/items.go
+        兼容部分 Emby 服务器不支持 /Items/{id} 的情况，统一走 /Items?Ids=...
 
         Args:
             item_id: 项目ID
@@ -120,25 +110,29 @@ class EmbyAPIClient:
         Returns:
             项目信息字典
         """
-        url = f"{self.base_url}/Users/{user_id}/Items/{item_id}" if user_id else f"{self.base_url}/Items/{item_id}"
-        params = {}
+        url = f"{self.base_url}/Users/{user_id}/Items" if user_id else f"{self.base_url}/Items"
+        params: dict[str, Any] = {"Ids": item_id, "Fields": "Path,MediaSources"}
         if user_id:
             params["UserId"] = user_id
 
         try:
-            return await self._request_json("GET", url, params=params)
+            data = await self._request_json("GET", url, params=params)
+            items = data.get("Items", [])
+            if not items:
+                raise Exception(f"Emby item not found: {item_id}")
+            return items[0]
         except Exception as e:
-            logger.error(f"Failed to get item {item_id}: {str(e)}")
+            logger.error(f"Failed to get item {item_id}: {e!s}")
             raise
 
     async def get_playback_info(
         self,
         item_id: str,
         user_id: str,
-        media_source_id: Optional[str] = None,
+        media_source_id: str | None = None,
         max_static_bitrate: int = 140000000,
-        max_streaming_bitrate: int = 140000000
-    ) -> Dict[str, Any]:
+        max_streaming_bitrate: int = 140000000,
+    ) -> dict[str, Any]:
         """
         获取播放信息
 
@@ -155,25 +149,26 @@ class EmbyAPIClient:
             播放信息字典
         """
         url = f"{self.base_url}/Items/{item_id}/PlaybackInfo"
-        params = {
+        params: dict[str, Any] = {
             "UserId": user_id,
             "MaxStaticBitrate": max_static_bitrate,
             "MaxStreamingBitrate": max_streaming_bitrate,
-            "MediaSourceId": media_source_id
         }
+        if media_source_id is not None:
+            params["MediaSourceId"] = media_source_id
 
         try:
             return await self._request_json("GET", url, params=params)
         except Exception as e:
-            logger.error(f"Failed to get playback info for {item_id}: {str(e)}")
+            logger.error(f"Failed to get playback info for {item_id}: {e!s}")
             raise
 
     async def post_playback_info(
         self,
         item_id: str,
         user_id: str,
-        device_profile: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        device_profile: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         POST请求获取播放信息
 
@@ -188,17 +183,16 @@ class EmbyAPIClient:
             播放信息字典
         """
         url = f"{self.base_url}/Items/{item_id}/PlaybackInfo?UserId={user_id}"
-
         if device_profile is None:
             device_profile = self._get_default_device_profile()
 
         try:
             return await self._request_json("POST", url, json=device_profile)
         except Exception as e:
-            logger.error(f"Failed to post playback info for {item_id}: {str(e)}")
+            logger.error(f"Failed to post playback info for {item_id}: {e!s}")
             raise
 
-    def _get_default_device_profile(self) -> Dict[str, Any]:
+    def _get_default_device_profile(self) -> dict[str, Any]:
         """
         获取默认设备配置文件
 
@@ -217,79 +211,32 @@ class EmbyAPIClient:
                         "Container": "mp4,m4v",
                         "Type": "Video",
                         "VideoCodec": "h264,h265,hevc,av1,vp8,vp9",
-                        "AudioCodec": "mp3,aac,opus,flac,vorbis"
+                        "AudioCodec": "mp3,aac,opus,flac,vorbis",
                     },
                     {
                         "Container": "mkv",
                         "Type": "Video",
                         "VideoCodec": "h264,h265,hevc,av1,vp8,vp9",
-                        "AudioCodec": "mp3,aac,opus,flac,vorbis"
+                        "AudioCodec": "mp3,aac,opus,flac,vorbis",
                     },
-                    {
-                        "Container": "flv",
-                        "Type": "Video",
-                        "VideoCodec": "h264",
-                        "AudioCodec": "aac,mp3"
-                    },
-                    {
-                        "Container": "3gp",
-                        "Type": "Video",
-                        "VideoCodec": "",
-                        "AudioCodec": "mp3,aac,opus,flac,vorbis"
-                    },
+                    {"Container": "flv", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac,mp3"},
+                    {"Container": "3gp", "Type": "Video", "VideoCodec": "", "AudioCodec": "mp3,aac,opus,flac,vorbis"},
                     {
                         "Container": "mov",
                         "Type": "Video",
                         "VideoCodec": "h264",
-                        "AudioCodec": "mp3,aac,opus,flac,vorbis"
+                        "AudioCodec": "mp3,aac,opus,flac,vorbis",
                     },
-                    {
-                        "Container": "opus",
-                        "Type": "Audio"
-                    },
-                    {
-                        "Container": "mp3",
-                        "Type": "Audio",
-                        "AudioCodec": "mp3"
-                    },
-                    {
-                        "Container": "mp2,mp3",
-                        "Type": "Audio",
-                        "AudioCodec": "mp2"
-                    },
-                    {
-                        "Container": "m4a",
-                        "AudioCodec": "aac",
-                        "Type": "Audio"
-                    },
-                    {
-                        "Container": "mp4",
-                        "AudioCodec": "aac",
-                        "Type": "Audio"
-                    },
-                    {
-                        "Container": "flac",
-                        "Type": "Audio"
-                    },
-                    {
-                        "Container": "webma,webm",
-                        "Type": "Audio"
-                    },
-                    {
-                        "Container": "wav",
-                        "Type": "Audio",
-                        "AudioCodec": "PCM_S16LE,PCM_S24LE"
-                    },
-                    {
-                        "Container": "ogg",
-                        "Type": "Audio"
-                    },
-                    {
-                        "Container": "webm",
-                        "Type": "Video",
-                        "AudioCodec": "vorbis,opus",
-                        "VideoCodec": "av1,VP8,VP9"
-                    }
+                    {"Container": "opus", "Type": "Audio"},
+                    {"Container": "mp3", "Type": "Audio", "AudioCodec": "mp3"},
+                    {"Container": "mp2,mp3", "Type": "Audio", "AudioCodec": "mp2"},
+                    {"Container": "m4a", "AudioCodec": "aac", "Type": "Audio"},
+                    {"Container": "mp4", "AudioCodec": "aac", "Type": "Audio"},
+                    {"Container": "flac", "Type": "Audio"},
+                    {"Container": "webma,webm", "Type": "Audio"},
+                    {"Container": "wav", "Type": "Audio", "AudioCodec": "PCM_S16LE,PCM_S24LE"},
+                    {"Container": "ogg", "Type": "Audio"},
+                    {"Container": "webm", "Type": "Video", "AudioCodec": "vorbis,opus", "VideoCodec": "av1,VP8,VP9"},
                 ],
                 "TranscodingProfiles": [
                     {
@@ -300,7 +247,7 @@ class EmbyAPIClient:
                         "Protocol": "hls",
                         "MaxAudioChannels": "2",
                         "MinSegments": "1",
-                        "BreakOnNonKeyFrames": True
+                        "BreakOnNonKeyFrames": True,
                     },
                     {
                         "Container": "aac",
@@ -308,7 +255,7 @@ class EmbyAPIClient:
                         "AudioCodec": "aac",
                         "Context": "Streaming",
                         "Protocol": "http",
-                        "MaxAudioChannels": "2"
+                        "MaxAudioChannels": "2",
                     },
                     {
                         "Container": "mp3",
@@ -316,7 +263,7 @@ class EmbyAPIClient:
                         "AudioCodec": "mp3",
                         "Context": "Streaming",
                         "Protocol": "http",
-                        "MaxAudioChannels": "2"
+                        "MaxAudioChannels": "2",
                     },
                     {
                         "Container": "opus",
@@ -324,7 +271,7 @@ class EmbyAPIClient:
                         "AudioCodec": "opus",
                         "Context": "Streaming",
                         "Protocol": "http",
-                        "MaxAudioChannels": "2"
+                        "MaxAudioChannels": "2",
                     },
                     {
                         "Container": "wav",
@@ -332,7 +279,7 @@ class EmbyAPIClient:
                         "AudioCodec": "wav",
                         "Context": "Streaming",
                         "Protocol": "http",
-                        "MaxAudioChannels": "2"
+                        "MaxAudioChannels": "2",
                     },
                     {
                         "Container": "opus",
@@ -340,7 +287,7 @@ class EmbyAPIClient:
                         "AudioCodec": "opus",
                         "Context": "Static",
                         "Protocol": "http",
-                        "MaxAudioChannels": "2"
+                        "MaxAudioChannels": "2",
                     },
                     {
                         "Container": "mp3",
@@ -348,9 +295,9 @@ class EmbyAPIClient:
                         "AudioCodec": "mp3",
                         "Context": "Static",
                         "Protocol": "http",
-                        "MaxAudioChannels": "2"
-                    }
-                ]
+                        "MaxAudioChannels": "2",
+                    },
+                ],
             }
         }
 

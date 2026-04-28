@@ -4,18 +4,21 @@ STRM有效性检查模块
 参考: alist-strm strm_validator.py
 """
 
-import os
 import asyncio
-import aiohttp
-from typing import List, Dict, Set, Optional
+import os
 from enum import Enum
+
+import aiohttp
+
 from app.core.logging import get_logger
+
 
 logger = get_logger(__name__)
 
 
 class ScanMode(Enum):
     """扫描模式"""
+
     QUICK = "quick"
     SLOW = "slow"
 
@@ -24,11 +27,7 @@ class ValidationResult:
     """验证结果"""
 
     def __init__(
-        self,
-        valid_files: List[str],
-        invalid_files: List[str],
-        missing_files: List[str],
-        extra_files: List[str]
+        self, valid_files: list[str], invalid_files: list[str], missing_files: list[str], extra_files: list[str]
     ):
         """
         初始化验证结果
@@ -44,7 +43,7 @@ class ValidationResult:
         self.missing_files = missing_files
         self.extra_files = extra_files
 
-    def to_dict(self) -> Dict[str, any]:
+    def to_dict(self) -> dict[str, any]:
         """转换为字典"""
         return {
             "valid_count": len(self.valid_files),
@@ -55,7 +54,7 @@ class ValidationResult:
             "valid_files": self.valid_files[:10],  # 只返回前10个
             "invalid_files": self.invalid_files[:10],
             "missing_files": self.missing_files[:10],
-            "extra_files": self.extra_files[:10]
+            "extra_files": self.extra_files[:10],
         }
 
 
@@ -66,9 +65,9 @@ class StrmValidator:
         self,
         target_directory: str,
         remote_base: str,
-        video_formats: Set[str],
+        video_formats: set[str],
         size_threshold_mb: int = 100,
-        cache_file: Optional[str] = None
+        cache_file: str | None = None,
     ):
         """
         初始化STRM有效性检查器
@@ -81,14 +80,14 @@ class StrmValidator:
             cache_file: 缓存文件路径
         """
         self.target_directory = target_directory
-        self.remote_base = remote_base.rstrip('/')
+        self.remote_base = remote_base.rstrip("/")
         self.video_formats = video_formats
         self.size_threshold_bytes = size_threshold_mb * 1024 * 1024
         self.cache_file = cache_file
-        self.cached_tree: Optional[Dict] = None
+        self.cached_tree: dict | None = None
         logger.info(f"StrmValidator initialized: {target_directory}")
 
-    def load_cached_tree(self) -> Optional[Dict]:
+    def load_cached_tree(self) -> dict | None:
         """
         加载缓存的目录树
 
@@ -98,15 +97,16 @@ class StrmValidator:
         if self.cache_file and os.path.exists(self.cache_file):
             try:
                 import json
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
+
+                with open(self.cache_file, encoding="utf-8") as f:
                     self.cached_tree = json.load(f)
                     logger.info(f"Loaded cached tree from: {self.cache_file}")
                     return self.cached_tree
             except Exception as e:
-                logger.error(f"Failed to load cached tree: {str(e)}")
+                logger.error(f"Failed to load cached tree: {e!s}")
         return None
 
-    def list_local_strm_files(self) -> List[str]:
+    def list_local_strm_files(self) -> list[str]:
         """
         列出本地STRM文件
 
@@ -116,13 +116,13 @@ class StrmValidator:
         strm_files = []
         for root, dirs, files in os.walk(self.target_directory):
             for file in files:
-                if file.lower().endswith('.strm'):
+                if file.lower().endswith(".strm"):
                     full_path = os.path.abspath(os.path.join(root, file))
                     strm_files.append(full_path)
         logger.info(f"Found {len(strm_files)} local .strm files")
         return strm_files
 
-    def build_expected_strm_set(self, file_tree: Dict, current_path: str = '') -> Set[str]:
+    def build_expected_strm_set(self, file_tree: dict, current_path: str = "") -> set[str]:
         """
         构建期望的STRM文件集合
 
@@ -135,7 +135,7 @@ class StrmValidator:
         """
         expected_strm_set = set()
 
-        def process_node(node: Dict, path: str):
+        def process_node(node: dict, path: str):
             """递归处理节点"""
             if not isinstance(node, dict):
                 return
@@ -163,7 +163,7 @@ class StrmValidator:
                             continue
 
                         # 检查文件扩展名
-                        file_extension = os.path.splitext(file_name)[1].lower().lstrip('.')
+                        file_extension = os.path.splitext(file_name)[1].lower().lstrip(".")
                         if file_extension in self.video_formats:
                             # 生成STRM文件路径
                             relative_path = os.path.relpath(file_name, self.remote_base)
@@ -179,7 +179,7 @@ class StrmValidator:
         process_node(file_tree, current_path)
         return expected_strm_set
 
-    async def fast_scan(self, local_strm_files: List[str]) -> ValidationResult:
+    async def fast_scan(self, local_strm_files: list[str]) -> ValidationResult:
         """
         快速扫描模式
 
@@ -198,12 +198,7 @@ class StrmValidator:
 
         if not cached_tree:
             logger.warning("No cached tree found, treating all local .strm files as invalid")
-            return ValidationResult(
-                valid_files=[],
-                invalid_files=local_strm_files,
-                missing_files=[],
-                extra_files=[]
-            )
+            return ValidationResult(valid_files=[], invalid_files=local_strm_files, missing_files=[], extra_files=[])
 
         # 构建期望的STRM文件集合
         expected_strm_files = self.build_expected_strm_set(cached_tree)
@@ -223,14 +218,11 @@ class StrmValidator:
             valid_files=valid_files,
             invalid_files=invalid_files,
             missing_files=list(missing_files_in_local),
-            extra_files=list(extra_local_files)
+            extra_files=list(extra_local_files),
         )
 
     async def slow_scan(
-        self,
-        local_strm_files: List[str],
-        concurrent_limit: int = 5,
-        download_interval: tuple = (1, 3)
+        self, local_strm_files: list[str], concurrent_limit: int = 5, download_interval: tuple = (1, 3)
     ) -> ValidationResult:
         """
         慢速扫描模式
@@ -258,7 +250,7 @@ class StrmValidator:
             async with semaphore:
                 try:
                     # 读取STRM文件内容
-                    with open(strm_file, 'r', encoding='utf-8') as f:
+                    with open(strm_file, encoding="utf-8") as f:
                         url = f.read().strip()
 
                     if not url:
@@ -278,7 +270,7 @@ class StrmValidator:
                                 invalid_files.append(strm_file)
 
                 except Exception as e:
-                    logger.error(f"Error validating .strm file: {strm_file}, error: {str(e)}")
+                    logger.error(f"Error validating .strm file: {strm_file}, error: {e!s}")
                     invalid_files.append(strm_file)
 
         # 并发验证
@@ -290,18 +282,10 @@ class StrmValidator:
         await asyncio.gather(*tasks)
 
         logger.info(f"Slow scan completed: {len(valid_files)} valid, {len(invalid_files)} invalid")
-        return ValidationResult(
-            valid_files=valid_files,
-            invalid_files=invalid_files,
-            missing_files=[],
-            extra_files=[]
-        )
+        return ValidationResult(valid_files=valid_files, invalid_files=invalid_files, missing_files=[], extra_files=[])
 
     async def validate(
-        self,
-        mode: ScanMode,
-        concurrent_limit: int = 5,
-        download_interval: tuple = (1, 3)
+        self, mode: ScanMode, concurrent_limit: int = 5, download_interval: tuple = (1, 3)
     ) -> ValidationResult:
         """
         验证STRM文件
@@ -318,7 +302,6 @@ class StrmValidator:
 
         if mode == ScanMode.QUICK:
             return await self.fast_scan(local_strm_files)
-        elif mode == ScanMode.SLOW:
+        if mode == ScanMode.SLOW:
             return await self.slow_scan(local_strm_files, concurrent_limit, download_interval)
-        else:
-            raise ValueError(f"Unknown scan mode: {mode}")
+        raise ValueError(f"Unknown scan mode: {mode}")

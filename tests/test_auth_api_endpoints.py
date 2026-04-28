@@ -12,8 +12,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.auth import router as auth_router
-from app.services.auth_service import AuthService, JWT_ACCESS_TOKEN_EXPIRE_HOURS
 from app.core.db import Base
+from app.services.auth_service import JWT_ACCESS_TOKEN_EXPIRE_HOURS
 
 
 @pytest.fixture(scope="function")
@@ -152,7 +152,6 @@ def test_init_admin_preserves_forbidden_status_for_untrusted_bootstrap() -> None
     db.close.assert_called_once()
 
 
-
 def test_init_admin_still_rejects_untrusted_bootstrap_when_allow_public_env_enabled() -> None:
     app = create_auth_app()
     client = TestClient(app)
@@ -173,16 +172,14 @@ def test_init_admin_rejects_missing_password_configuration() -> None:
     client = TestClient(app)
     db = MagicMock()
 
-    with patch.dict(os.environ, {}, clear=True):
-        with patch("app.api.auth.SessionLocal", return_value=db):
-            with patch("app.models.user.User.has_admin", return_value=False):
-                with patch("app.api.auth._can_bootstrap_init_admin", return_value=True):
-                    response = client.post("/api/auth/init-admin")
+    with patch.dict(os.environ, {}, clear=True), patch("app.api.auth.SessionLocal", return_value=db):
+        with patch("app.models.user.User.has_admin", return_value=False):
+            with patch("app.api.auth._can_bootstrap_init_admin", return_value=True):
+                response = client.post("/api/auth/init-admin")
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Admin bootstrap password is not configured"}
     db.close.assert_called_once()
-
 
 
 def test_init_admin_does_not_return_plaintext_password_when_env_password_configured() -> None:
@@ -208,7 +205,6 @@ def test_init_admin_does_not_return_plaintext_password_when_env_password_configu
     db.close.assert_called_once()
 
 
-
 def test_init_admin_does_not_leak_internal_error_details() -> None:
     app = create_auth_app()
     client = TestClient(app)
@@ -218,7 +214,10 @@ def test_init_admin_does_not_leak_internal_error_details() -> None:
         with patch("app.api.auth.SessionLocal", return_value=db):
             with patch("app.models.user.User.has_admin", return_value=False):
                 with patch("app.api.auth._can_bootstrap_init_admin", return_value=True):
-                    with patch("app.api.auth.AuthService.create_user", side_effect=RuntimeError("db exploded: admin secret path")):
+                    with patch(
+                        "app.api.auth.AuthService.create_user",
+                        side_effect=RuntimeError("db exploded: admin secret path"),
+                    ):
                         response = client.post("/api/auth/init-admin")
 
     assert response.status_code == 500
@@ -250,7 +249,6 @@ def test_login_expires_in_matches_access_token_lifetime() -> None:
     assert response.status_code == 200
     assert response.json()["expires_in"] == JWT_ACCESS_TOKEN_EXPIRE_HOURS * 3600
     assert f"Max-Age={JWT_ACCESS_TOKEN_EXPIRE_HOURS * 3600}" in response.headers["set-cookie"]
-
 
 
 def test_api_key_login_exchanges_key_for_session_token() -> None:
@@ -299,10 +297,9 @@ def test_api_key_login_prefers_canonical_security_env_over_legacy_aliases() -> N
             "API_KEY": "legacy-key",
         },
         clear=True,
-    ):
-        with patch("app.api.auth.SessionLocal", return_value=MagicMock()):
-            canonical = client.post("/api/auth/login", json={"api_key": "canonical-env-key"})
-            legacy = client.post("/api/auth/login", json={"api_key": "legacy-smart-key"})
+    ), patch("app.api.auth.SessionLocal", return_value=MagicMock()):
+        canonical = client.post("/api/auth/login", json={"api_key": "canonical-env-key"})
+        legacy = client.post("/api/auth/login", json={"api_key": "legacy-smart-key"})
 
     assert canonical.status_code == 200
     assert legacy.status_code == 403
@@ -363,7 +360,9 @@ def test_refresh_supports_api_key_session_tokens() -> None:
 
     with patch("app.api.auth.SessionLocal", return_value=db):
         with patch("app.api.auth.AuthService.verify_refresh_token", return_value=0):
-            with patch("app.api.auth.AuthService.create_access_token", return_value="api-key-access-token") as create_access_token:
+            with patch(
+                "app.api.auth.AuthService.create_access_token", return_value="api-key-access-token"
+            ) as create_access_token:
                 response = client.post(
                     "/api/auth/refresh",
                     json={"refresh_token": "api-key-refresh-token"},

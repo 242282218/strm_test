@@ -1,18 +1,23 @@
-# -*- coding: utf-8 -*-
 """
 夸克网盘文件大小获取器
 
 用于获取夸克分享链接的文件大小信息
+
+优化:
+- 使用全局 HTTP 连接池，实现连接复用
+- 降低 TCP 握手开销，减少延迟
+- 统一管理 HTTP 客户端，降低内存占用
 """
 
-import re
 import asyncio
-from typing import Dict, Optional, List
-from functools import lru_cache
+import re
 from datetime import datetime, timedelta
 
 import httpx
+
+from app.core.http_pool import ClientType, get_http_pool
 from app.core.logging import get_logger
+
 
 logger = get_logger(__name__)
 
@@ -27,10 +32,10 @@ class QuarkSizeCache:
         Args:
             ttl_seconds: 缓存有效期（秒）
         """
-        self._cache: Dict[str, tuple[int, datetime]] = {}
+        self._cache: dict[str, tuple[int, datetime]] = {}
         self._ttl = ttl_seconds
 
-    def get(self, share_key: str) -> Optional[int]:
+    def get(self, share_key: str) -> int | None:
         """
         获取缓存的大小
 
@@ -69,9 +74,7 @@ class QuarkSizeFetcher:
     """夸克网盘文件大小获取器"""
 
     # 夸克分享链接正则
-    SHARE_URL_PATTERN = re.compile(
-        r'https?://pan\.quark\.cn/s/([a-zA-Z0-9_-]+)'
-    )
+    SHARE_URL_PATTERN = re.compile(r"https?://pan\.quark\.cn/s/([a-zA-Z0-9_-]+)")
 
     def __init__(self, max_concurrent: int = 5):
         """
@@ -83,8 +86,10 @@ class QuarkSizeFetcher:
         self._cache = QuarkSizeCache(ttl_seconds=3600)
         self._max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        # 不再创建独立客户端，使用全局连接池
+        self._pool = None
 
-    def extract_share_key(self, url: str) -> Optional[str]:
+    def extract_share_key(self, url: str) -> str | None:
         """
         从分享链接中提取分享密钥
 
@@ -99,19 +104,13 @@ class QuarkSizeFetcher:
             return match.group(1)
         return None
 
-    async def get_share_size(
-        self,
-        share_key: str,
-        password: str = "",
-        client: Optional[httpx.AsyncClient] = None
-    ) -> Optional[int]:
+    async def get_share_size(self, share_key: str, password: str = "") -> int | None:
         """
         获取分享的总大小
 
         Args:
             share_key: 分享密钥
             password: 提取码
-            client: HTTP客户端（可选）
 
         Returns:
             总大小（字节），获取失败返回 None
@@ -123,8 +122,12 @@ class QuarkSizeFetcher:
 
         async with self._semaphore:
             try:
+                # 从连接池获取客户端
+                if self._pool is None:
+                    self._pool = await get_http_pool()
+                client = await self._pool.get_client(ClientType.QUARK)
+
                 # 调用夸克 API 获取分享详情
-                # 注意：这里使用夸克的公开 API，不需要登录
                 size = await self._fetch_share_size(share_key, password, client)
 
                 if size is not None:
@@ -136,19 +139,14 @@ class QuarkSizeFetcher:
                 logger.warning(f"获取夸克分享大小失败: {share_key}, error: {e}")
                 return None
 
-    async def _fetch_share_size(
-        self,
-        share_key: str,
-        password: str = "",
-        client: Optional[httpx.AsyncClient] = None
-    ) -> Optional[int]:
+    async def _fetch_share_size(self, share_key: str, password: str, client: httpx.AsyncClient) -> int | None:
         """
         实际获取分享大小的 HTTP 请求
 
         Args:
             share_key: 分享密钥
             password: 提取码
-            client: HTTP客户端
+            client: HTTP客户端（来自连接池，不手动关闭）
 
         Returns:
             总大小（字节）
@@ -157,14 +155,7 @@ class QuarkSizeFetcher:
         api_url = "https://pan.quark.cn/share/sharepage/token"
 
         # 构建请求参数
-        params = {
-            "share_key": share_key,
-            "passcode": password or ""
-        }
-
-        should_close_client = client is None
-        if client is None:
-            client = httpx.AsyncClient(timeout=10.0, follow_redirects=True)
+        params = {"share_key": share_key, "passcode": password or ""}
 
         # 模拟浏览器的请求头
         headers = {
@@ -204,14 +195,10 @@ class QuarkSizeFetcher:
                     "passcode": password or "",
                     "page": page,
                     "size": 100,
-                    "fetch_total": "true"
+                    "fetch_total": "true",
                 }
 
-                list_response = await client.get(
-                    list_url,
-                    params=list_params,
-                    headers=headers
-                )
+                list_response = await client.get(list_url, params=list_params, headers=headers)
                 list_response.raise_for_status()
                 list_data = list_response.json()
 
@@ -229,8 +216,7 @@ class QuarkSizeFetcher:
                     elif item.get("file_type") == "1":  # 文件夹
                         # 递归获取文件夹内容
                         folder_size = await self._get_folder_size(
-                            client, token, share_key, password,
-                            item.get("fid", ""), item.get("pdir_fid", "0")
+                            client, token, share_key, password, item.get("fid", ""), item.get("pdir_fid", "0")
                         )
                         total_size += folder_size
 
@@ -247,10 +233,6 @@ class QuarkSizeFetcher:
             logger.error(f"获取分享大小异常: {e}")
             return None
 
-        finally:
-            if should_close_client:
-                await client.aclose()
-
     async def _get_folder_size(
         self,
         client: httpx.AsyncClient,
@@ -259,7 +241,7 @@ class QuarkSizeFetcher:
         password: str,
         fid: str,
         pdir_fid: str,
-        max_depth: int = 10
+        max_depth: int = 10,
     ) -> int:
         """
         迭代获取文件夹大小（避免递归深度问题）
@@ -297,16 +279,14 @@ class QuarkSizeFetcher:
             page = 1
             while True:
                 list_url = "https://pan.quark.cn/share/sharepage/detail"
-                headers = {
-                    "Authorization": f"Bearer {token}"
-                }
+                headers = {"Authorization": f"Bearer {token}"}
 
                 params = {
                     "share_key": share_key,
                     "passcode": password or "",
                     "page": page,
                     "size": 100,
-                    "pdir_fid": current_fid
+                    "pdir_fid": current_fid,
                 }
 
                 try:
@@ -341,11 +321,7 @@ class QuarkSizeFetcher:
 
         return total_size
 
-    async def batch_get_sizes(
-        self,
-        share_items: List[Dict[str, str]],
-        min_size_bytes: int = 0
-    ) -> Dict[str, int]:
+    async def batch_get_sizes(self, share_items: list[dict[str, str]], min_size_bytes: int = 0) -> dict[str, int]:
         """
         批量获取分享大小
 
@@ -358,28 +334,31 @@ class QuarkSizeFetcher:
         """
         results = {}
 
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            tasks = []
+        # 从连接池获取客户端
+        if self._pool is None:
+            self._pool = await get_http_pool()
 
-            for item in share_items:
-                url = item.get("url", "")
-                password = item.get("password", "")
+        tasks = []
 
-                share_key = self.extract_share_key(url)
-                if not share_key:
-                    continue
+        for item in share_items:
+            url = item.get("url", "")
+            password = item.get("password", "")
 
-                task = self.get_share_size(share_key, password, client)
-                tasks.append((share_key, task))
+            share_key = self.extract_share_key(url)
+            if not share_key:
+                continue
 
-            # 并发执行
-            for share_key, task in tasks:
-                try:
-                    size = await task
-                    if size is not None and size >= min_size_bytes:
-                        results[share_key] = size
-                except Exception as e:
-                    logger.warning(f"批量获取大小失败: {share_key}, error: {e}")
+            task = self.get_share_size(share_key, password)
+            tasks.append((share_key, task))
+
+        # 并发执行
+        for share_key, task in tasks:
+            try:
+                size = await task
+                if size is not None and size >= min_size_bytes:
+                    results[share_key] = size
+            except Exception as e:
+                logger.warning(f"批量获取大小失败: {share_key}, error: {e}")
 
         return results
 
@@ -408,7 +387,7 @@ class QuarkSizeFetcher:
 
 
 # 全局单例
-_size_fetcher: Optional[QuarkSizeFetcher] = None
+_size_fetcher: QuarkSizeFetcher | None = None
 
 
 def get_size_fetcher() -> QuarkSizeFetcher:

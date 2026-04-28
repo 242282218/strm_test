@@ -9,6 +9,7 @@ from typing import Any
 import matplotlib
 import pytest
 
+
 matplotlib.use("Agg", force=True)
 
 from app.services import cache_statistics
@@ -167,7 +168,18 @@ def test_export_stats_json_and_clear_history(monkeypatch: pytest.MonkeyPatch) ->
         "miss_rate": 50.0,
         "eviction_rate": 0.0,
     }
-    history = [{"timestamp": 1.0, "datetime": "x", "hits": 1, "misses": 1, "hit_rate": 50.0, "size": 2, "evictions": 0, "memory_usage_mb": 1.1}]
+    history = [
+        {
+            "timestamp": 1.0,
+            "datetime": "x",
+            "hits": 1,
+            "misses": 1,
+            "hit_rate": 50.0,
+            "size": 2,
+            "evictions": 0,
+            "memory_usage_mb": 1.1,
+        }
+    ]
     hourly = cache_statistics.CachePerformanceReport(
         period="hour",
         total_requests=2,

@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import app.config.lifecycle as lifecycle
+from app.config import lifecycle
 
 
 class DummyConfigService:
@@ -32,14 +32,29 @@ class DummyContainer:
         self.stop_calls += 1
 
 
+class DummyTaskWorker:
+    owner = "test-worker"
+
+    def __init__(self) -> None:
+        self.stop_calls = 0
+
+    async def stop(self) -> None:
+        self.stop_calls += 1
+
+
+def _migration_result(version: int = 2) -> SimpleNamespace:
+    return SimpleNamespace(current_version=version, target_version=version, applied_versions=())
+
+
 def _patch_lifecycle_dependencies(monkeypatch: pytest.MonkeyPatch, *, fail_on_start: bool) -> DummyContainer:
     container = DummyContainer()
 
     monkeypatch.setattr(lifecycle, "mount_webdav", lambda app, config: None)
-    monkeypatch.setattr(lifecycle, "initialize_database", lambda: None)
+    monkeypatch.setattr(lifecycle, "initialize_database", lambda: _migration_result())
     monkeypatch.setattr(lifecycle, "initialize_auth_system", lambda: None)
     monkeypatch.setattr(lifecycle, "configure_emby_cron", lambda _container: (True, None))
     monkeypatch.setattr(lifecycle, "initialize_monitoring", lambda: (True, None))
+    monkeypatch.setattr(lifecycle, "start_task_worker", lambda app: _async_worker(app))
 
     async def fake_get_http_pool() -> object:
         return object()
@@ -54,8 +69,14 @@ def _patch_lifecycle_dependencies(monkeypatch: pytest.MonkeyPatch, *, fail_on_st
     return container
 
 
+async def _async_worker(app: FastAPI) -> DummyTaskWorker:
+    worker = DummyTaskWorker()
+    app.state.task_worker = worker
+    return worker
+
+
 def _build_app(config_service: DummyConfigService) -> FastAPI:
-    config = SimpleNamespace(webdav=SimpleNamespace(enabled=False))
+    config = SimpleNamespace(webdav=SimpleNamespace(enabled=False), validate_production_requirements=list)
     app = FastAPI(lifespan=lifecycle.create_lifespan_context(config_service, config))
 
     @app.get("/ping")
@@ -63,6 +84,38 @@ def _build_app(config_service: DummyConfigService) -> FastAPI:
         return {"ok": True}
 
     return app
+
+
+def test_validate_production_security_skips_non_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "development")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+
+    status, detail = lifecycle.validate_production_security(None)
+
+    assert status == "skipped"
+    assert detail == "not production"
+
+
+def test_validate_production_security_reports_failed_requirements(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "production")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    config = SimpleNamespace(validate_production_requirements=lambda: ["missing api key", "missing jwt"])
+
+    status, detail = lifecycle.validate_production_security(config)
+
+    assert status == "failed"
+    assert detail == "missing api key; missing jwt"
+
+
+def test_validate_production_security_passes_complete_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "production")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    config = SimpleNamespace(validate_production_requirements=list)
+
+    status, detail = lifecycle.validate_production_security(config)
+
+    assert status == "ok"
+    assert detail is None
 
 
 def test_lifespan_releases_resources_and_avoids_deprecation_warning(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,6 +134,7 @@ def test_lifespan_releases_resources_and_avoids_deprecation_warning(monkeypatch:
     assert config_service.start_calls == 1
     assert config_service.stop_calls == 1
     assert container.stop_calls == 1
+    assert app.state.task_worker.stop_calls == 1
     assert app.state.ready is False
     assert not any("async generator function lifespans are deprecated" in str(item.message) for item in captured)
 
@@ -90,9 +144,8 @@ def test_lifespan_stops_watcher_when_startup_fails(monkeypatch: pytest.MonkeyPat
     _patch_lifecycle_dependencies(monkeypatch, fail_on_start=True)
     app = _build_app(config_service)
 
-    with pytest.raises(RuntimeError, match="startup exploded"):
-        with TestClient(app):
-            pass
+    with pytest.raises(RuntimeError, match="startup exploded"), TestClient(app):
+        pass
 
     assert config_service.start_calls == 1
     assert config_service.stop_calls == 1
@@ -100,17 +153,12 @@ def test_lifespan_stops_watcher_when_startup_fails(monkeypatch: pytest.MonkeyPat
 
 
 def test_initialize_database_uses_resolved_engine(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured_bind = {"value": None}
-    monkeypatch.setattr(lifecycle, "get_engine", lambda: "fake-engine")
-    monkeypatch.setattr(
-        lifecycle.Base.metadata,
-        "create_all",
-        lambda **kwargs: captured_bind.update(value=kwargs.get("bind")),
-    )
+    result = _migration_result(version=7)
+    monkeypatch.setattr(lifecycle, "init_db", lambda: result)
 
-    lifecycle.initialize_database()
+    resolved = lifecycle.initialize_database()
 
-    assert captured_bind["value"] == "fake-engine"
+    assert resolved is result
 
 
 def test_initialize_auth_system_calls_initializer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,10 +258,11 @@ def test_lifespan_records_degraded_optional_components(monkeypatch: pytest.Monke
     container = DummyContainer()
 
     monkeypatch.setattr(lifecycle, "mount_webdav", lambda app, config: None)
-    monkeypatch.setattr(lifecycle, "initialize_database", lambda: None)
+    monkeypatch.setattr(lifecycle, "initialize_database", lambda: _migration_result())
     monkeypatch.setattr(lifecycle, "initialize_auth_system", lambda: None)
     monkeypatch.setattr(lifecycle, "configure_emby_cron", lambda _container: (False, "cron setup failed"))
     monkeypatch.setattr(lifecycle, "initialize_monitoring", lambda: (False, "monitor exploded"))
+    monkeypatch.setattr(lifecycle, "start_task_worker", lambda app: _async_worker(app))
 
     async def fake_get_http_pool() -> object:
         return object()
@@ -228,8 +277,10 @@ def test_lifespan_records_degraded_optional_components(monkeypatch: pytest.Monke
     with TestClient(app):
         pass
 
+    assert app.state.startup_components["database_migrations"]["status"] == "ok"
     assert app.state.startup_components["emby_cron"]["status"] == "degraded"
     assert app.state.startup_components["monitoring"]["status"] == "degraded"
+    assert app.state.startup_components["task_worker"]["status"] == "ok"
     assert "emby_cron: cron setup failed" in app.state.startup_warnings
     assert "monitoring: monitor exploded" in app.state.startup_warnings
 
@@ -240,7 +291,7 @@ def test_lifespan_resets_startup_tracking_each_boot(monkeypatch: pytest.MonkeyPa
     fail_once = {"value": True}
 
     monkeypatch.setattr(lifecycle, "mount_webdav", lambda app, config: None)
-    monkeypatch.setattr(lifecycle, "initialize_database", lambda: None)
+    monkeypatch.setattr(lifecycle, "initialize_database", lambda: _migration_result())
     monkeypatch.setattr(lifecycle, "initialize_auth_system", lambda: None)
     monkeypatch.setattr(
         lifecycle,
@@ -248,6 +299,7 @@ def test_lifespan_resets_startup_tracking_each_boot(monkeypatch: pytest.MonkeyPa
         lambda _container: (False, "cron setup failed") if fail_once["value"] else (True, None),
     )
     monkeypatch.setattr(lifecycle, "initialize_monitoring", lambda: (True, None))
+    monkeypatch.setattr(lifecycle, "start_task_worker", lambda app: _async_worker(app))
 
     async def fake_get_http_pool() -> object:
         return object()
@@ -271,6 +323,25 @@ def test_lifespan_resets_startup_tracking_each_boot(monkeypatch: pytest.MonkeyPa
 
     assert app.state.startup_components["emby_cron"]["status"] == "ok"
     assert app.state.startup_warnings == []
+
+
+def test_lifespan_records_failed_database_migrations(monkeypatch: pytest.MonkeyPatch) -> None:
+    config_service = DummyConfigService()
+
+    monkeypatch.setattr(lifecycle, "mount_webdav", lambda app, config: None)
+
+    def fail_migrations():
+        raise RuntimeError("migration failed")
+
+    monkeypatch.setattr(lifecycle, "initialize_database", fail_migrations)
+
+    app = _build_app(config_service)
+    with pytest.raises(RuntimeError, match="migration failed"), TestClient(app):
+        pass
+
+    assert app.state.startup_components["database_migrations"]["status"] == "failed"
+    assert "database_migrations: migration failed" in app.state.startup_warnings
+    assert getattr(app.state, "ready", False) is False
 
 
 def test_mount_webdav_mounts_once_and_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -325,7 +396,7 @@ def test_mount_webdav_skips_when_webdav_app_is_missing(monkeypatch: pytest.Monke
 
 def test_create_lifespan_context_uses_initializer_when_inputs_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     config_service = DummyConfigService()
-    config = SimpleNamespace(webdav=SimpleNamespace(enabled=False))
+    config = SimpleNamespace(webdav=SimpleNamespace(enabled=False), validate_production_requirements=list)
     _patch_lifecycle_dependencies(monkeypatch, fail_on_start=False)
     app = FastAPI(lifespan=lifecycle.create_lifespan_context(None, None, initializer=lambda: (config_service, config)))
 

@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 
+import app.core.exception_handler as exception_handler_module
 from app.core.constants import REQUEST_ID_HEADER
 from app.core.error_codes import ErrorCode
 from app.core.exception_handler import (
@@ -20,7 +21,6 @@ from app.core.exception_handler import (
 )
 from app.core.exceptions import AppException, ExternalServiceException
 from app.core.validators import InputValidationError
-import app.core.exception_handler as exception_handler_module
 
 
 def _request(request_id: str | None = "rid-123") -> SimpleNamespace:

@@ -8,11 +8,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class NotificationPriority(str, Enum):
     """通知优先级枚举"""
+
     HIGH = "high"
     NORMAL = "normal"
     LOW = "low"
@@ -30,10 +31,11 @@ class NotificationMessage:
         metadata: 附加元数据
         timestamp: 消息创建时间
     """
+
     title: str
     content: str
     priority: NotificationPriority = NotificationPriority.NORMAL
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -65,7 +67,6 @@ class BaseNotifier(ABC):
         Returns:
             bool: 发送是否成功
         """
-        pass
 
     @property
     @abstractmethod
@@ -76,7 +77,6 @@ class BaseNotifier(ABC):
         Returns:
             str: 通知器标识名称
         """
-        pass
 
     async def is_healthy(self) -> bool:
         """

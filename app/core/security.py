@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+
 from app.core.constants import SENSITIVE_FIELD_NAMES
 
 

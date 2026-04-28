@@ -4,17 +4,17 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
-from websockets.exceptions import ConnectionClosedOK
-from websockets.frames import Close
 from fastapi import FastAPI, HTTPException, WebSocketDisconnect
 from fastapi.responses import Response
 from fastapi.testclient import TestClient
 from starlette.requests import Request
+from websockets.exceptions import ConnectionClosedOK
+from websockets.frames import Close
 
 import app.api.emby_gateway as emby_gateway_module
-from app.api.emby_gateway import router as emby_gateway_router
+
 # root handler is defined in app.main, import emby_gateway for proxy checks
-from app.api import emby_gateway as emby_gateway_main
+from app.api.emby_gateway import router as emby_gateway_router
 
 
 class _FakeEmbyProxyService:
@@ -185,7 +185,10 @@ class _FakeUpstreamWebSocket:
 
     async def send(self, message: str | bytes) -> None:
         if self._send_exception is not None:
-            for close_frame in (getattr(self._send_exception, "rcvd", None), getattr(self._send_exception, "sent", None)):
+            for close_frame in (
+                getattr(self._send_exception, "rcvd", None),
+                getattr(self._send_exception, "sent", None),
+            ):
                 if close_frame is not None and getattr(close_frame, "code", None) is not None:
                     self.close_code = int(close_frame.code)
                     self.close_reason = getattr(close_frame, "reason", "") or None
@@ -201,7 +204,10 @@ class _FakeUpstreamWebSocket:
         if self._incoming_messages:
             return self._incoming_messages.pop(0)
         if self._close_exception is not None:
-            for close_frame in (getattr(self._close_exception, "rcvd", None), getattr(self._close_exception, "sent", None)):
+            for close_frame in (
+                getattr(self._close_exception, "rcvd", None),
+                getattr(self._close_exception, "sent", None),
+            ):
                 if close_frame is not None and getattr(close_frame, "code", None) is not None:
                     self.close_code = int(close_frame.code)
                     self.close_reason = getattr(close_frame, "reason", "") or None
@@ -469,8 +475,7 @@ def test_gateway_playbackinfo_when_native_authorization_header_present_then_uses
             headers={
                 "host": "proxy.example:18097",
                 "Authorization": (
-                    'Emby Token="native-emby-api-key", UserId="user123", '
-                    'Client="Emby Web", Device="Chrome on Windows"'
+                    'Emby Token="native-emby-api-key", UserId="user123", Client="Emby Web", Device="Chrome on Windows"'
                 ),
                 "User-Agent": "Mozilla/5.0",
             },
@@ -1115,7 +1120,10 @@ async def test_gateway_websocket_when_emby_override_header_present_then_targets_
     assert ws.accepted == 1
     assert ws.closed_codes == [None]
     assert upstream_ws.closed is True
-    assert mock_connect.await_args.args[0] == "wss://alt.emby.example:8920/base/embywebsocket?api_key=emby-api-key&device=pytest"
+    assert (
+        mock_connect.await_args.args[0]
+        == "wss://alt.emby.example:8920/base/embywebsocket?api_key=emby-api-key&device=pytest"
+    )
 
 
 @pytest.mark.asyncio
@@ -1140,7 +1148,10 @@ async def test_gateway_websocket_when_emby_override_header_uses_uppercase_scheme
     assert ws.accepted == 1
     assert ws.closed_codes == [None]
     assert upstream_ws.closed is True
-    assert mock_connect.await_args.args[0] == "wss://alt.emby.example:8920/base/embywebsocket?api_key=emby-api-key&device=pytest"
+    assert (
+        mock_connect.await_args.args[0]
+        == "wss://alt.emby.example:8920/base/embywebsocket?api_key=emby-api-key&device=pytest"
+    )
 
 
 @pytest.mark.asyncio
@@ -1834,10 +1845,7 @@ async def test_forward_to_emby_when_internal_override_headers_present_then_does_
         response = await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
 
     assert response.status_code == 200
-    forwarded_headers = {
-        key.lower(): value
-        for key, value in fake_client.request.await_args.kwargs["headers"].items()
-    }
+    forwarded_headers = {key.lower(): value for key, value in fake_client.request.await_args.kwargs["headers"].items()}
     assert "x-emby-server-url" not in forwarded_headers
     assert "x-proxy-server-url" not in forwarded_headers
     assert forwarded_headers["x-request-id"] == "req-1"
@@ -1974,10 +1982,9 @@ async def test_forward_to_emby_when_upstream_connect_error_then_raises_502_http_
     with (
         patch("app.api.emby_gateway.get_http_pool_sync", new=Mock(return_value=fake_pool)),
         patch.object(emby_gateway_module, "_forward_pool", None),
-        patch.object(emby_gateway_module, "_forward_client", None),
+        patch.object(emby_gateway_module, "_forward_client", None),pytest.raises(HTTPException) as exc_info
     ):
-        with pytest.raises(HTTPException) as exc_info:
-            await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
+        await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
 
     assert exc_info.value.status_code == 502
     assert exc_info.value.detail == "Failed to proxy Emby request"
@@ -2011,10 +2018,9 @@ async def test_forward_to_emby_when_upstream_timeout_then_raises_504_http_except
     with (
         patch("app.api.emby_gateway.get_http_pool_sync", new=Mock(return_value=fake_pool)),
         patch.object(emby_gateway_module, "_forward_pool", None),
-        patch.object(emby_gateway_module, "_forward_client", None),
+        patch.object(emby_gateway_module, "_forward_client", None),pytest.raises(HTTPException) as exc_info
     ):
-        with pytest.raises(HTTPException) as exc_info:
-            await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
+        await emby_gateway_module._forward_to_emby(request, app_config, "web/index.html")
 
     assert exc_info.value.status_code == 504
     assert exc_info.value.detail == "Emby upstream timeout"

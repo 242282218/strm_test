@@ -4,10 +4,10 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from app.config.settings import AppConfig
+from app.services import unified_ai_service as unified_ai_service_module
 from app.services.ai_parser_service import AIParseResult as ParserAIParseResult
 from app.services.ai_parser_service import AIParserService
 from app.utils.media_parser import MediaParser
-from app.services import unified_ai_service as unified_ai_service_module
 
 
 class _FakeConfigService:

@@ -5,14 +5,13 @@ Freshness calculator - 新鲜度计算器
 """
 
 import math
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 
 class FreshnessCalculator:
     """新鲜度计算器"""
 
-    def calculate(self, pub_date: Optional[str]) -> float:
+    def calculate(self, pub_date: str | None) -> float:
         """
         计算新鲜度
 
@@ -28,12 +27,12 @@ class FreshnessCalculator:
         try:
             # 解析日期
             dt = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
 
             # 计算天数差
             days = (now - dt).total_seconds() / 86400
 
             # 指数衰减，60天为半衰期
             return math.exp(-max(0, days) / 60)
-        except:
+        except (ValueError, TypeError, OverflowError):
             return 0.5

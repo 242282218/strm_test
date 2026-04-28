@@ -13,7 +13,7 @@ class FakeQuery:
         self._all_provider = all_provider
         self._first_provider = first_provider
 
-    def filter(self, *_args, **_kwargs) -> "FakeQuery":
+    def filter(self, *_args, **_kwargs) -> FakeQuery:
         return self
 
     def all(self):

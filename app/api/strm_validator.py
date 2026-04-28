@@ -5,9 +5,10 @@ STRM验证API路由
 """
 
 from fastapi import APIRouter, HTTPException
-from app.services.strm_validator import StrmValidator, ScanMode
+
 from app.core.logging import get_logger
-from typing import Optional
+from app.services.strm_validator import ScanMode, StrmValidator
+
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/strm", tags=["STRM验证"])
@@ -20,8 +21,8 @@ async def validate_strm_files(
     video_formats: str,
     mode: str = "quick",
     size_threshold_mb: int = 100,
-    cache_file: Optional[str] = None,
-    concurrent_limit: int = 5
+    cache_file: str | None = None,
+    concurrent_limit: int = 5,
 ):
     """
     验证STRM文件
@@ -48,7 +49,7 @@ async def validate_strm_files(
             raise HTTPException(status_code=400, detail=f"Invalid scan mode: {mode}")
 
         # 解析视频格式
-        video_format_set = set(fmt.strip().lower() for fmt in video_formats.split(','))
+        video_format_set = set(fmt.strip().lower() for fmt in video_formats.split(","))
 
         # 创建验证器
         validator = StrmValidator(
@@ -56,24 +57,21 @@ async def validate_strm_files(
             remote_base=remote_base,
             video_formats=video_format_set,
             size_threshold_mb=size_threshold_mb,
-            cache_file=cache_file
+            cache_file=cache_file,
         )
 
         # 执行验证
         if scan_mode == ScanMode.QUICK:
             result = await validator.validate(scan_mode)
         else:
-            result = await validator.validate(
-                scan_mode,
-                concurrent_limit=concurrent_limit
-            )
+            result = await validator.validate(scan_mode, concurrent_limit=concurrent_limit)
 
         return result.to_dict()
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to validate STRM files: {str(e)}")
+        logger.error(f"Failed to validate STRM files: {e!s}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -85,7 +83,4 @@ async def get_validation_status():
     Returns:
         验证状态
     """
-    return {
-        "status": "ready",
-        "message": "STRM validation service is ready"
-    }
+    return {"status": "ready", "message": "STRM validation service is ready"}

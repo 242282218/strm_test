@@ -1,25 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
-import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.constants import MAX_PATH_LENGTH
 from app.core.db import SessionLocal, get_db
-from app.core.dependencies import require_api_key
 from app.core.logging import get_logger
 from app.core.validators import InputValidationError, validate_identifier, validate_path
 from app.models.scrape import CategoryStrategy, ScrapeJob, ScrapePath, ScrapeRecord
 from app.services.cron_service import get_cron_service
 from app.services.scrape_service import ScrapeService, get_scrape_service
+
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/scrape", tags=["scrape"])
@@ -40,12 +40,12 @@ def _get_path_job_lock(path_id: str) -> asyncio.Lock:
 class ScrapeOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source_path: Optional[str] = Field(default=None, max_length=MAX_PATH_LENGTH)
-    dest_path: Optional[str] = Field(default=None, max_length=MAX_PATH_LENGTH)
+    source_path: str | None = Field(default=None, max_length=MAX_PATH_LENGTH)
+    dest_path: str | None = Field(default=None, max_length=MAX_PATH_LENGTH)
     force_overwrite: bool = False
     generate_nfo: bool = True
     download_images: bool = True
-    emby_library_id: Optional[str] = Field(default=None, max_length=128)
+    emby_library_id: str | None = Field(default=None, max_length=128)
     scrape_mode: Literal["only_scrape", "scrape_and_rename", "only_rename"] = "scrape_and_rename"
     rename_mode: Literal["move", "copy", "hardlink", "softlink"] = "move"
     max_threads: int = Field(default=1, ge=1, le=32)
@@ -56,7 +56,7 @@ class ScrapeJobCreateRequest(BaseModel):
 
     target_path: str = Field(..., max_length=MAX_PATH_LENGTH)
     media_type: Literal["auto", "movie", "tv"] = "auto"
-    options: Optional[ScrapeOptions] = None
+    options: ScrapeOptions | None = None
 
     @field_validator("target_path")
     @classmethod
@@ -76,8 +76,8 @@ class ScrapeJobResponse(BaseModel):
     success_items: int
     failed_items: int
     created_at: datetime
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    started_at: datetime | None
+    completed_at: datetime | None
 
 
 class ScrapePathCreateRequest(BaseModel):
@@ -89,7 +89,7 @@ class ScrapePathCreateRequest(BaseModel):
     scrape_mode: Literal["only_scrape", "scrape_and_rename", "only_rename"] = "scrape_and_rename"
     rename_mode: Literal["move", "copy", "hardlink", "softlink"] = "move"
     max_threads: int = Field(default=1, ge=1, le=32)
-    cron: Optional[str] = Field(default=None, max_length=120)
+    cron: str | None = Field(default=None, max_length=120)
     enabled: bool = True
     enable_secondary_category: bool = True
 
@@ -105,7 +105,7 @@ class ScrapePathCreateRequest(BaseModel):
 
     @field_validator("cron")
     @classmethod
-    def validate_cron(cls, value: Optional[str]) -> Optional[str]:
+    def validate_cron(cls, value: str | None) -> str | None:
         if not value:
             return None
         cron = value.strip()
@@ -118,33 +118,33 @@ class ScrapePathCreateRequest(BaseModel):
 class ScrapePathUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source_path: Optional[str] = Field(default=None, max_length=MAX_PATH_LENGTH)
-    dest_path: Optional[str] = Field(default=None, max_length=MAX_PATH_LENGTH)
-    media_type: Optional[Literal["auto", "movie", "tv"]] = None
-    scrape_mode: Optional[Literal["only_scrape", "scrape_and_rename", "only_rename"]] = None
-    rename_mode: Optional[Literal["move", "copy", "hardlink", "softlink"]] = None
-    max_threads: Optional[int] = Field(default=None, ge=1, le=32)
-    cron: Optional[str] = Field(default=None, max_length=120)
-    enabled: Optional[bool] = None
-    enable_secondary_category: Optional[bool] = None
+    source_path: str | None = Field(default=None, max_length=MAX_PATH_LENGTH)
+    dest_path: str | None = Field(default=None, max_length=MAX_PATH_LENGTH)
+    media_type: Literal["auto", "movie", "tv"] | None = None
+    scrape_mode: Literal["only_scrape", "scrape_and_rename", "only_rename"] | None = None
+    rename_mode: Literal["move", "copy", "hardlink", "softlink"] | None = None
+    max_threads: int | None = Field(default=None, ge=1, le=32)
+    cron: str | None = Field(default=None, max_length=120)
+    enabled: bool | None = None
+    enable_secondary_category: bool | None = None
 
     @field_validator("source_path")
     @classmethod
-    def validate_source_path(cls, value: Optional[str]) -> Optional[str]:
+    def validate_source_path(cls, value: str | None) -> str | None:
         if value is None:
             return value
         return validate_path(value, "source_path", allow_absolute=True)
 
     @field_validator("dest_path")
     @classmethod
-    def validate_dest_path(cls, value: Optional[str]) -> Optional[str]:
+    def validate_dest_path(cls, value: str | None) -> str | None:
         if value is None:
             return value
         return validate_path(value, "dest_path", allow_absolute=True)
 
     @field_validator("cron")
     @classmethod
-    def validate_cron(cls, value: Optional[str]) -> Optional[str]:
+    def validate_cron(cls, value: str | None) -> str | None:
         if value is None:
             return value
         cron = value.strip()
@@ -165,18 +165,18 @@ class ScrapePathDto(BaseModel):
     scrape_mode: str
     rename_mode: str
     max_threads: int
-    cron: Optional[str]
+    cron: str | None
     enabled: bool
     cron_enabled: bool
     enable_secondary_category: bool
     status: str
-    last_job_id: Optional[str]
+    last_job_id: str | None
     created_at: datetime
     updated_at: datetime
 
 
 class ScrapePathListResponse(BaseModel):
-    items: List[ScrapePathDto]
+    items: list[ScrapePathDto]
     total: int
 
 
@@ -188,7 +188,7 @@ class ScrapePathActionRequest(BaseModel):
 class ScrapePathToggleCronRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path_id: str = Field(..., max_length=64)
-    enabled: Optional[bool] = None
+    enabled: bool | None = None
 
 
 class ScrapeRecordDto(BaseModel):
@@ -197,43 +197,43 @@ class ScrapeRecordDto(BaseModel):
     id: int
     record_id: str
     job_id: str
-    path_id: Optional[str]
-    item_id: Optional[int]
+    path_id: str | None
+    item_id: int | None
     source_file: str
-    target_file: Optional[str]
-    media_type: Optional[str]
-    tmdb_id: Optional[int]
-    title: Optional[str]
-    year: Optional[int]
+    target_file: str | None
+    media_type: str | None
+    tmdb_id: int | None
+    title: str | None
+    year: int | None
     status: str
-    error_code: Optional[str]
-    error_message: Optional[str]
-    recognition_result: Optional[Dict[str, Any]]
+    error_code: str | None
+    error_message: str | None
+    recognition_result: dict[str, Any] | None
     created_at: datetime
-    updated_at: Optional[datetime]
+    updated_at: datetime | None
 
 
 class ScrapeRecordListResponse(BaseModel):
-    items: List[ScrapeRecordDto]
+    items: list[ScrapeRecordDto]
     total: int
 
 
 class RecordIdsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    record_ids: List[str] = Field(default_factory=list)
+    record_ids: list[str] = Field(default_factory=list)
 
 
 class CategoryStrategyDto(BaseModel):
     enabled: bool
-    anime_keywords: List[str]
-    folder_names: Dict[str, str]
+    anime_keywords: list[str]
+    folder_names: dict[str, str]
 
 
 class CategoryStrategyUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = True
-    anime_keywords: List[str] = Field(default_factory=list)
-    folder_names: Dict[str, str] = Field(
+    anime_keywords: list[str] = Field(default_factory=list)
+    folder_names: dict[str, str] = Field(
         default_factory=lambda: {
             "anime": "动漫文件夹",
             "movie": "电影",
@@ -280,7 +280,7 @@ def _refresh_path_status(db: Session, path: ScrapePath) -> None:
         db.commit()
 
 
-def _build_path_options(path: ScrapePath) -> Dict[str, Any]:
+def _build_path_options(path: ScrapePath) -> dict[str, Any]:
     return {
         "path_id": path.path_id,
         "source_path": path.source_path,
@@ -341,11 +341,11 @@ def _classify_file_name(
     return "movie"
 
 
-async def _start_path_job(path_id: str) -> Dict[str, Any]:
+async def _start_path_job(path_id: str) -> dict[str, Any]:
     """启动路径刮削任务，使用锁防止竞态条件"""
     # 获取该 path_id 的专用锁
     lock = _get_path_job_lock(path_id)
-    
+
     # 使用锁确保同一时间只有一个请求在检查状态和启动任务
     async with lock:
         db = SessionLocal()
@@ -410,7 +410,6 @@ def _ensure_scrape_path_cron_handler_registered() -> None:
 @router.post("/jobs", response_model=ScrapeJobResponse)
 async def create_scrape_job(
     request: ScrapeJobCreateRequest,
-    _auth: None = Depends(require_api_key),
     service: ScrapeService = Depends(get_scrape_service),
 ):
     try:
@@ -430,7 +429,6 @@ async def create_scrape_job(
 @router.post("/jobs/{job_id}/start")
 async def start_scrape_job(
     job_id: str,
-    _auth: None = Depends(require_api_key),
     service: ScrapeService = Depends(get_scrape_service),
 ):
     job_id = validate_identifier(job_id, "job_id")
@@ -449,28 +447,22 @@ async def get_job_status(job_id: str, db: Session = Depends(get_db)):
     return job
 
 
-@router.get("/jobs", response_model=List[ScrapeJobResponse])
+@router.get("/jobs", response_model=list[ScrapeJobResponse])
 async def list_jobs(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
-    jobs = (
-        db.query(ScrapeJob)
-        .order_by(ScrapeJob.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    jobs = db.query(ScrapeJob).order_by(ScrapeJob.created_at.desc()).offset(skip).limit(limit).all()
     return jobs
 
 
 @router.get("/paths", response_model=ScrapePathListResponse)
 @router.get("/pathes", response_model=ScrapePathListResponse, include_in_schema=False)  # 保留旧路由以兼容
 async def list_scrape_paths(
-    keyword: Optional[str] = Query(default=None),
-    status: Optional[str] = Query(default=None),
-    enabled: Optional[bool] = Query(default=None),
+    keyword: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    enabled: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -491,12 +483,7 @@ async def list_scrape_paths(
         query = query.filter(ScrapePath.enabled == enabled)
 
     total = query.count()
-    items = (
-        query.order_by(ScrapePath.updated_at.desc())
-        .offset((page - 1) * size)
-        .limit(size)
-        .all()
-    )
+    items = query.order_by(ScrapePath.updated_at.desc()).offset((page - 1) * size).limit(size).all()
     for path in items:
         _refresh_path_status(db, path)
     return ScrapePathListResponse(items=items, total=total)
@@ -506,7 +493,6 @@ async def list_scrape_paths(
 @router.post("/pathes", response_model=ScrapePathDto, include_in_schema=False)  # 保留旧路由以兼容
 async def create_scrape_path(
     request: ScrapePathCreateRequest,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     path = ScrapePath(
@@ -544,7 +530,6 @@ async def get_scrape_path(path_id: str, db: Session = Depends(get_db)):
 async def update_scrape_path(
     path_id: str,
     request: ScrapePathUpdateRequest,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     path = db.query(ScrapePath).filter(ScrapePath.path_id == path_id).first()
@@ -564,7 +549,6 @@ async def update_scrape_path(
 @router.delete("/pathes/{path_id}", include_in_schema=False)  # 保留旧路由以兼容
 async def delete_scrape_path(
     path_id: str,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     path = db.query(ScrapePath).filter(ScrapePath.path_id == path_id).first()
@@ -583,7 +567,6 @@ async def delete_scrape_path(
 @router.post("/pathes/start", include_in_schema=False)  # 保留旧路由以兼容
 async def start_scrape_path(
     body: ScrapePathActionRequest,
-    _auth: None = Depends(require_api_key),
 ):
     result = await _start_path_job(body.path_id)
     if not result.get("ok"):
@@ -597,7 +580,6 @@ async def start_scrape_path(
 @router.post("/pathes/stop", include_in_schema=False)  # 保留旧路由以兼容
 async def stop_scrape_path(
     body: ScrapePathActionRequest,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     path = db.query(ScrapePath).filter(ScrapePath.path_id == body.path_id).first()
@@ -621,7 +603,6 @@ async def stop_scrape_path(
 @router.post("/pathes/toggle-cron", include_in_schema=False)  # 保留旧路由以兼容
 async def toggle_scrape_path_cron(
     body: ScrapePathToggleCronRequest,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     path = db.query(ScrapePath).filter(ScrapePath.path_id == body.path_id).first()
@@ -662,7 +643,6 @@ async def get_category_strategy(db: Session = Depends(get_db)):
 @router.put("/category-strategy", response_model=CategoryStrategyDto)
 async def update_category_strategy(
     body: CategoryStrategyUpdateRequest,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     row = db.query(CategoryStrategy).order_by(CategoryStrategy.id.asc()).first()
@@ -696,8 +676,8 @@ async def preview_category_strategy(
 
 @router.get("/records", response_model=ScrapeRecordListResponse)
 async def list_scrape_records(
-    keyword: Optional[str] = Query(default=None),
-    status: Optional[str] = Query(default=None),
+    keyword: str | None = Query(default=None),
+    status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -738,7 +718,6 @@ async def get_scrape_record(record_id: str, db: Session = Depends(get_db)):
 @router.post("/re-scrape")
 async def re_scrape_records(
     body: RecordIdsRequest,
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     if not body.record_ids:
@@ -787,32 +766,24 @@ async def re_scrape_records(
 
 class ClearRecordsRequest(BaseModel):
     """清理记录请求"""
+
     model_config = ConfigDict(extra="forbid")
-    confirm: bool = Field(
-        default=False,
-        description="必须设置为 true 以确认删除操作"
-    )
+    confirm: bool = Field(default=False, description="必须设置为 true 以确认删除操作")
 
 
 @router.post("/clear-failed")
 async def clear_failed_records(
     body: ClearRecordsRequest = Body(...),
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     """清理失败的刮削记录
-    
+
     需要设置 confirm=true 来确认删除操作
     """
     if not body.confirm:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing confirmation. Set confirm=true to proceed with deletion."
-        )
-    
-    failed_query = db.query(ScrapeRecord).filter(
-        ScrapeRecord.status.in_(["scrape_failed", "rename_failed"])
-    )
+        raise HTTPException(status_code=400, detail="Missing confirmation. Set confirm=true to proceed with deletion.")
+
+    failed_query = db.query(ScrapeRecord).filter(ScrapeRecord.status.in_(["scrape_failed", "rename_failed"]))
     count = failed_query.count()
     failed_query.delete(synchronize_session=False)
     db.commit()
@@ -822,29 +793,26 @@ async def clear_failed_records(
 
 class TruncateRecordsRequest(BaseModel):
     """清空记录请求"""
+
     model_config = ConfigDict(extra="forbid")
-    confirm: bool = Field(
-        default=False,
-        description="必须设置为 true 以确认删除操作"
-    )
+    confirm: bool = Field(default=False, description="必须设置为 true 以确认删除操作")
 
 
 @router.post("/truncate-all")
 async def truncate_all_records(
     body: TruncateRecordsRequest = Body(...),
-    _auth: None = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     """清空所有刮削记录
-    
+
     危险操作！需要设置 confirm=true 来确认删除操作
     """
     if not body.confirm:
         raise HTTPException(
             status_code=400,
-            detail="Missing confirmation. Set confirm=true to proceed with deletion. This is a destructive operation!"
+            detail="Missing confirmation. Set confirm=true to proceed with deletion. This is a destructive operation!",
         )
-    
+
     count = db.query(ScrapeRecord).count()
     db.query(ScrapeRecord).delete(synchronize_session=False)
     db.commit()

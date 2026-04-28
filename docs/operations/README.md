@@ -1,6 +1,6 @@
 # 运维文档
 
-**最后同步**: 2026-04-20
+**最后同步**: 2026-04-27
 **对应代码目录**: `Dockerfile`、`docker-compose.yml`、`.github/workflows/docker-deploy-test.yml`、`.github/workflows/docker-publish.yml`、`web/`
 
 ## 部署指南
@@ -25,7 +25,9 @@ cp config.example.yaml config.yaml
 
 # 3. 编辑 .env / config.yaml 填入必要配置
 # 至少按需设置 SMART_MEDIA_QUARK_COOKIE、SMART_MEDIA_SECURITY_API_KEY、
-# SMART_MEDIA_EMBY_URL、SMART_MEDIA_EMBY_API_KEY 等真实凭据
+# SMART_MEDIA_JWT_SECRET_KEY、SMART_MEDIA_EMBY_URL、SMART_MEDIA_EMBY_API_KEY 等真实凭据
+# 生产环境还必须设置 SMART_MEDIA_ENV=production、security.require_api_key=true、
+# CORS allow_origins 白名单
 
 # 4. 启动服务
 docker compose up -d
@@ -55,11 +57,51 @@ docker compose up -d
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | `QUARK_STRM_IMAGE` | 部署镜像标签 | `ghcr.io/242282218/smart_media/quark-strm:latest` |
+| `QUARK_STRM_FRONTEND_IMAGE` | 前端 Nginx 镜像标签，启用 `frontend` profile 时使用 | `quark-strm-frontend:local` |
+| `SMART_MEDIA_ENV` | 运行环境，生产使用 `production`；兼容 `ENVIRONMENT=production` | `development` |
 | `SMART_MEDIA_SECURITY_API_KEY` | 受保护接口的 canonical API Key | `` |
+| `SMART_MEDIA_JWT_SECRET_KEY` | JWT 签名密钥，生产必填 | `` |
 | `SMART_MEDIA_EMBY_PROXY_PORT` | Emby 专用代理暴露端口 | `18097` |
+| `SMART_MEDIA_FRONTEND_PORT` | 前端 Nginx 暴露端口，启用 `frontend` profile 时使用 | `18080` |
 | `SMART_MEDIA_LOG_FORMAT` | 容器日志格式 | `json` |
 | `SMART_MEDIA_LOG_LEVEL` | 应用日志级别 | `INFO` |
 | `TZ` | 容器时区 | `Asia/Shanghai` |
+
+#### 生产安全与单 worker 约束
+
+当前生产基线以单节点、单进程为默认部署形态。SQLite、进程内任务 worker、内存缓存和 WebSocket 连接状态尚未外置到共享存储或独立 worker，因此后端 Docker 镜像默认 `WEB_CONCURRENCY=1`，启动命令默认 `--workers 1`。在外部队列/锁、Redis 缓存和 WebSocket 横向扩展方案完成前，不要通过增加 Uvicorn/Gunicorn worker 做横向扩容。
+
+#### 持久任务 worker
+
+`/api/tasks` 和转存后的自动整理现在只负责创建数据库任务记录，不再依赖 FastAPI `BackgroundTasks` 执行长任务。应用启动时会启动单进程持久 worker，readiness 需要 `task_worker=ok` 才通过。worker 通过数据库 lease 获取任务、写入 heartbeat，并在启动时恢复过期 lease；如果进程崩溃，超时任务会在下次启动后进入 retry 或 failed。
+
+当前 worker 仍运行在同一个后端进程内，只解决“任务脱离请求生命周期”和“崩溃后不永久 running”的问题，不等于已经支持多进程并行消费。多 worker 部署前仍需要外部锁、队列广播和幂等副作用保护。
+
+#### 前端交付拓扑
+
+当前支持的生产前端交付方式是 **Nginx/独立前端容器托管 SPA**。后端容器只负责 API、健康探针、Emby/Jellyfin 代理和 Prometheus 指标，不内置托管 Vue SPA，也不对普通浏览器路径做 SPA fallback。这样可以避免前端路由与 Emby 专用 gateway 的 `/{path:path}` 兜底入口互相遮蔽。
+
+使用 compose 启动前端 profile：
+
+```bash
+docker compose --profile frontend up -d
+```
+
+访问入口：
+
+- 后端 API 与探针：`http://127.0.0.1:8000`
+- 前端 SPA：`http://127.0.0.1:18080`
+- Emby 专用代理：`http://127.0.0.1:18097`
+
+前端 Nginx 镜像由 `Dockerfile` 的 `frontend-runtime` target 构建，配置文件是 [`./nginx-spa.conf`](./nginx-spa.conf)。该配置负责托管 `web/dist`，并把 `/api/`、`/ws/`、`/ready`、`/health` 代理回后端服务。
+
+生产环境必须满足以下条件，否则 `/ready` 返回 503，容器 healthcheck 不应变绿：
+
+- `SMART_MEDIA_ENV=production` 或 `ENVIRONMENT=production`
+- `security.require_api_key: true`
+- `SMART_MEDIA_SECURITY_API_KEY` 或 `security.api_key` 非空
+- `SMART_MEDIA_JWT_SECRET_KEY` 或 `security.jwt_secret_key` 非空
+- `cors.allow_origins` 使用明确域名白名单，不能包含 `*`
 
 #### Compose 挂载约定
 
@@ -100,24 +142,22 @@ pip install -r requirements.txt
 # 2. 初始化数据库
 python -c "from app.core.db import init_db; init_db()"
 
-# 3. 启动服务（生产环境）
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+# 3. 启动服务（生产环境，当前默认单 worker）
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 
-# 4. 使用 Gunicorn（可选）
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+# 4. 使用 Gunicorn（可选，当前仍保持单 worker）
+gunicorn app.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 ```
 
 #### 前端部署
 
 ```bash
-# 1. 构建前端
-cd web
-npm ci
-# 或：pnpm install
-pnpm run build
+# 1. 构建前端 Nginx 镜像
+# Dockerfile 内部执行 npm ci 和 npm run build，生成 web/dist 后复制到 Nginx 镜像
+docker build --target frontend-runtime -t quark-strm-frontend:local .
 
-# 2. 配置 Nginx
-# 将 dist/ 目录部署到 Nginx
+# 2. 启动后端 + 前端 profile
+docker compose --profile frontend up -d
 ```
 
 #### Nginx 配置示例
@@ -218,21 +258,35 @@ cat logs/app.log | jq 'select(.level == "ERROR")'
 
 ## 备份与恢复
 
-### 数据库备份
+### 数据库迁移
+
+数据库使用 SQLite `PRAGMA user_version` 跟踪 schema version。部署升级前先备份，再显式执行 migration；启动阶段也会执行向前 migration，失败会阻断启动和 readiness。
 
 ```bash
-# 备份 SQLite 数据库
-cp quark_strm.db quark_strm.db.backup.$(date +%Y%m%d)
+# 查看并推进到当前 schema version
+python -m app.migrations.runner --db quark_strm.db
+```
 
-# 压缩备份
-tar -czf quark_strm.backup.$(date +%Y%m%d).tar.gz quark_strm.db config.yaml
+迁移失败时不要手工改 `PRAGMA user_version`。保留现场日志，先从备份恢复到上一版本数据库，再重新执行 migration。
+
+### 数据库备份
+
+不要在 WAL 模式下裸复制 `quark_strm.db`；只复制主文件可能丢失 `quark_strm.db-wal` 中的已提交事务。使用 SQLite online backup：
+
+```bash
+# 在线备份 SQLite 数据库，不覆盖已有备份文件
+python -m app.migrations.backup backup --db quark_strm.db --out-dir backups
+
+# 备份配置文件和 STRM 产物
+cp config.yaml "backups/config.$(date +%Y%m%dT%H%M%S).yaml"
+tar -czf "backups/strm.$(date +%Y%m%dT%H%M%S).tar.gz" strm
 ```
 
 ### 配置备份
 
 ```bash
-# 备份配置文件
-cp config.yaml config.yaml.backup.$(date +%Y%m%d)
+# 备份配置文件，不覆盖已有文件
+cp -n config.yaml "backups/config.$(date +%Y%m%dT%H%M%S).yaml"
 ```
 
 ### 恢复流程
@@ -241,13 +295,17 @@ cp config.yaml config.yaml.backup.$(date +%Y%m%d)
 # 1. 停止服务
 docker compose down
 
-# 2. 恢复数据库
-cp quark_strm.db.backup.* quark_strm.db
+# 2. 保留当前库现场
+mv quark_strm.db "quark_strm.db.before-restore.$(date +%Y%m%dT%H%M%S)"
 
-# 3. 恢复配置
-cp config.yaml.backup.* config.yaml
+# 3. 校验并恢复数据库
+python -m app.migrations.backup restore --backup backups/quark_strm.<timestamp>.db --db quark_strm.db
 
-# 4. 重启服务
+# 4. 按需恢复配置
+cp backups/config.<timestamp>.yaml config.yaml
+
+# 5. 校验 schema version 并重启服务
+python -m app.migrations.runner --db quark_strm.db
 docker compose up -d
 ```
 

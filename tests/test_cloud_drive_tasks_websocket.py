@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException, WebSocketDisconnect
+from fastapi import HTTPException, WebSocketDisconnect
 
 from app.api import cloud_drive, tasks
 from app.core.websocket_manager import WebSocketManager
@@ -141,33 +141,19 @@ async def test_tasks_websocket_endpoint_connects_and_disconnects(monkeypatch: py
     assert manager.disconnected == [websocket]
 
 
-def test_tasks_create_task_schedules_background_runner(monkeypatch: pytest.MonkeyPatch) -> None:
-    called: list[int] = []
-
-    def fake_run_task(task_id: int) -> None:
-        called.append(task_id)
-
-    monkeypatch.setattr(tasks.TaskRunner, "run_task", staticmethod(fake_run_task))
-
+def test_tasks_create_task_only_persists_task_without_background_runner() -> None:
     class FakeService:
         @staticmethod
         def create_task(task: TaskCreate) -> Any:
             return SimpleNamespace(id=123, task_type=task.task_type)
 
-    bg_tasks = BackgroundTasks()
     result = tasks.create_task(
         TaskCreate(task_type="sync", priority="normal", params={"k": "v"}),
-        bg_tasks,
         _auth=None,
         service=FakeService(),
     )
 
     assert result.id == 123
-    assert len(bg_tasks.tasks) == 1
-    scheduled = bg_tasks.tasks[0]
-    assert scheduled.func is fake_run_task
-    assert scheduled.args == (123,)
-    assert called == []
 
 
 def test_tasks_list_get_cancel_delete_and_logs_branches() -> None:
@@ -197,7 +183,9 @@ def test_tasks_list_get_cancel_delete_and_logs_branches() -> None:
 
     service = FakeService()
 
-    assert tasks.list_tasks(status="done", skip=2, limit=5, service=service) == [{"skip": 2, "limit": 5, "status": "done"}]
+    assert tasks.list_tasks(status="done", skip=2, limit=5, service=service) == [
+        {"skip": 2, "limit": 5, "status": "done"}
+    ]
     assert tasks.get_task(1, service=service) is existing
     assert tasks.cancel_task(1, _auth=None, service=service) == {"status": "success"}
     assert tasks.delete_task(1, _auth=None, service=service) == {"status": "success"}

@@ -22,8 +22,7 @@ def test_error_handler_import_emits_deprecation_warning_and_exports_aliases() ->
     module, caught = _reload_error_handler_with_warning_capture()
 
     assert any(
-        isinstance(item.message, DeprecationWarning)
-        and "app.core.error_handler 已废弃" in str(item.message)
+        isinstance(item.message, DeprecationWarning) and "app.core.error_handler 已废弃" in str(item.message)
         for item in caught
     )
     assert module.ErrorCodeCompat is module.ErrorCode
@@ -34,7 +33,7 @@ def test_log_sanitizer_masks_sensitive_data_for_info_level() -> None:
     module, _ = _reload_error_handler_with_warning_capture()
     message = (
         "email user@example.com phone 13812345678 token eyJabc.def.ghi "
-        "\"password\":\"secret\" api 0123456789abcdef0123456789abcdef ip 127.0.0.1"
+        '"password":"secret" api 0123456789abcdef0123456789abcdef ip 127.0.0.1'
     )
 
     sanitized = module.LogSanitizer.sanitize(message, level="info")

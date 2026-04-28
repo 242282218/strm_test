@@ -5,16 +5,18 @@
 """
 
 import traceback
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 
-from app.core.db import Base, get_engine
+from app.config.settings import is_production_environment
+from app.core.db import init_db
 from app.core.dependencies import initialize_service_container
 from app.core.http_pool import get_http_pool
 from app.core.logging import get_logger
+
 
 logger = get_logger(__name__)
 
@@ -44,10 +46,29 @@ def _record_startup_warning(app: FastAPI, component: str, detail: str | None) ->
         app.state.startup_warnings.append(component)
 
 
+def validate_production_security(config) -> tuple[str, str | None]:
+    """Validate production-only security requirements without aborting startup."""
+    if not is_production_environment():
+        return "skipped", "not production"
+    if config is None:
+        return "failed", "config unavailable"
+
+    validator = getattr(config, "validate_production_requirements", None)
+    if not callable(validator):
+        return "failed", "production validation unavailable"
+
+    problems = validator()
+    if problems:
+        return "failed", "; ".join(problems)
+
+    return "ok", None
+
+
 def initialize_database():
     """初始化数据库表"""
-    Base.metadata.create_all(bind=get_engine())
-    logger.info("Database tables created")
+    result = init_db()
+    logger.info(f"Database schema initialized at version {result.current_version}")
+    return result
 
 
 def initialize_auth_system():
@@ -92,6 +113,15 @@ def initialize_monitoring() -> tuple[bool, str | None]:
         return False, str(e)
 
 
+async def start_task_worker(app: FastAPI):
+    from app.services.platform.task_worker import PersistentTaskWorker
+
+    worker = PersistentTaskWorker()
+    await worker.start()
+    app.state.task_worker = worker
+    return worker
+
+
 def mount_webdav(app: FastAPI, config):
     """挂载 WebDAV 服务"""
     if config is None or not config.webdav.enabled:
@@ -114,8 +144,10 @@ def mount_webdav(app: FastAPI, config):
     logger.info(f"WebDAV mounted at {mount_path}")
 
 
-async def _cleanup_lifespan_resources(container, config_service, watcher_started: bool) -> None:
+async def _cleanup_lifespan_resources(container, config_service, watcher_started: bool, task_worker=None) -> None:
     """Release startup resources in both shutdown and startup-failure paths."""
+    if task_worker is not None:
+        await task_worker.stop()
     if container is not None:
         await container.stop_services()
     if watcher_started and config_service is not None:
@@ -133,11 +165,17 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
         config: 应用配置实例
     """
     container = None
+    task_worker = None
     watcher_started = False
     try:
         app.state.ready = False
         app.state.started_at = datetime.utcnow()
         _reset_startup_tracking_state(app)
+
+        security_status, security_detail = validate_production_security(config)
+        _record_startup_component(app, "production_security", security_status, security_detail)
+        if security_status == "failed":
+            _record_startup_warning(app, "production_security", security_detail)
 
         mount_webdav(app, config)
         webdav_enabled = bool(getattr(getattr(config, "webdav", None), "enabled", False))
@@ -157,7 +195,18 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
         else:
             _record_startup_component(app, "config_watcher", "skipped", "config service unavailable")
 
-        initialize_database()
+        try:
+            migration_result = initialize_database()
+        except Exception as exc:
+            _record_startup_component(app, "database_migrations", "failed", str(exc))
+            _record_startup_warning(app, "database_migrations", str(exc))
+            raise
+        _record_startup_component(
+            app,
+            "database_migrations",
+            "ok",
+            f"schema_version={migration_result.current_version}",
+        )
         _record_startup_component(app, "database", "ok")
         initialize_auth_system()
         _record_startup_component(app, "auth_system", "ok")
@@ -180,11 +229,18 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
 
         await get_http_pool()
         _record_startup_component(app, "http_pool", "ok")
+        try:
+            task_worker = await start_task_worker(app)
+        except Exception as exc:
+            _record_startup_component(app, "task_worker", "failed", str(exc))
+            _record_startup_warning(app, "task_worker", str(exc))
+            raise
+        _record_startup_component(app, "task_worker", "ok", f"owner={task_worker.owner}")
         app.state.ready = True
     except Exception as e:
         app.state.ready = False
         _record_startup_component(app, "startup", "failed", str(e))
-        await _cleanup_lifespan_resources(container, config_service, watcher_started)
+        await _cleanup_lifespan_resources(container, config_service, watcher_started, task_worker)
         logger.error(f"App startup failed: {e}\n{traceback.format_exc()}")
         raise
 
@@ -193,7 +249,7 @@ async def lifespan(app: FastAPI, config_service, config) -> AsyncIterator[None]:
         yield
     finally:
         app.state.ready = False
-        await _cleanup_lifespan_resources(container, config_service, watcher_started)
+        await _cleanup_lifespan_resources(container, config_service, watcher_started, task_worker)
         logger.info("Application shutting down")
 
 
@@ -209,6 +265,7 @@ def create_lifespan_context(config_service, config, initializer=None):
     Returns:
         lifespan 异步上下文管理器
     """
+
     @asynccontextmanager
     async def lifespan_context(app: FastAPI) -> AsyncIterator[None]:
         resolved_config_service = config_service

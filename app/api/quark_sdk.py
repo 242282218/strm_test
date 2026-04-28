@@ -4,11 +4,12 @@
 提供与现有API兼容的接口，同时支持SDK新功能
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import List, Optional
-from app.services.quark_sdk_service import QuarkSDKService
+from fastapi import APIRouter, Depends, HTTPException, Query
+
 from app.core.dependencies import get_quark_cookie, require_api_key
 from app.core.logging import get_logger
+from app.services.quark_sdk_service import QuarkSDKService
+
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/quark-sdk", tags=["夸克SDK服务"])
@@ -28,7 +29,7 @@ async def get_files(
     parent: str,
     page_size: int = Query(100, ge=1, le=500),
     only_video: bool = False,
-    service: QuarkSDKService = Depends(get_service)
+    service: QuarkSDKService = Depends(get_service),
 ):
     """
     获取文件列表（SDK版本）
@@ -39,22 +40,15 @@ async def get_files(
         only_video: 是否只获取视频文件
     """
     try:
-        files = await service.get_files(
-            parent=parent,
-            page_size=page_size,
-            only_video=only_video
-        )
+        files = await service.get_files(parent=parent, page_size=page_size, only_video=only_video)
         return {"files": files, "count": len(files)}
     except Exception as e:
         logger.error(f"SDK获取文件列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get files")
 
 
 @router.get("/link/{file_id}")
-async def get_download_link(
-    file_id: str,
-    service: QuarkSDKService = Depends(get_service)
-):
+async def get_download_link(file_id: str, service: QuarkSDKService = Depends(get_service)):
     """
     获取下载直链（SDK版本）
 
@@ -70,14 +64,11 @@ async def get_download_link(
         raise
     except Exception as e:
         logger.error(f"SDK获取下载链接失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get download link")
 
 
 @router.get("/transcoding/{file_id}")
-async def get_transcoding_link(
-    file_id: str,
-    service: QuarkSDKService = Depends(get_service)
-):
+async def get_transcoding_link(file_id: str, service: QuarkSDKService = Depends(get_service)):
     """
     获取转码直链（SDK版本）
 
@@ -93,16 +84,16 @@ async def get_transcoding_link(
         raise
     except Exception as e:
         logger.error(f"SDK获取转码链接失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get transcoding link")
 
 
 @router.post("/share")
 async def create_share(
-    file_ids: List[str],
-    title: Optional[str] = None,
-    password: Optional[str] = None,
+    file_ids: list[str],
+    title: str | None = None,
+    password: str | None = None,
     _auth: None = Depends(require_api_key),
-    service: QuarkSDKService = Depends(get_service)
+    service: QuarkSDKService = Depends(get_service),
 ):
     """
     创建分享（新功能）
@@ -121,17 +112,17 @@ async def create_share(
         raise
     except Exception as e:
         logger.error(f"SDK创建分享失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create share")
 
 
 @router.post("/transfer")
 async def save_share(
     share_key: str,
-    file_ids: List[str],
+    file_ids: list[str],
     target_folder: str = "0",
-    password: Optional[str] = None,
+    password: str | None = None,
     _auth: None = Depends(require_api_key),
-    service: QuarkSDKService = Depends(get_service)
+    service: QuarkSDKService = Depends(get_service),
 ):
     """
     转存分享文件（新功能）
@@ -151,7 +142,7 @@ async def save_share(
         raise
     except Exception as e:
         logger.error(f"SDK转存分享失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to save share")
 
 
 @router.get("/search")
@@ -159,7 +150,7 @@ async def search_files(
     keyword: str,
     parent: str = "0",
     page_size: int = Query(50, ge=1, le=100),
-    service: QuarkSDKService = Depends(get_service)
+    service: QuarkSDKService = Depends(get_service),
 ):
     """
     搜索文件（新功能）
@@ -174,7 +165,7 @@ async def search_files(
         return {"files": files, "count": len(files)}
     except Exception as e:
         logger.error(f"SDK搜索文件失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to search files")
 
 
 @router.get("/status")
@@ -185,7 +176,5 @@ async def get_sdk_status():
     返回SDK是否可用
     """
     from app.core.sdk_config import sdk_config
-    return {
-        "available": sdk_config.is_available(),
-        "sdk_path": str(sdk_config.__class__.__module__)
-    }
+
+    return {"available": sdk_config.is_available(), "sdk_path": str(sdk_config.__class__.__module__)}

@@ -16,8 +16,7 @@ AI_PROVIDER_API_KEY_ENV_PRIORITY = {
 }
 
 AI_PROVIDER_API_KEY_ENV_MAP = {
-    provider_name: env_names[0]
-    for provider_name, env_names in AI_PROVIDER_API_KEY_ENV_PRIORITY.items()
+    provider_name: env_names[0] for provider_name, env_names in AI_PROVIDER_API_KEY_ENV_PRIORITY.items()
 }
 
 

@@ -2,27 +2,32 @@
 统一API响应格式
 """
 
-from typing import Generic, TypeVar, Optional, Any
+from typing import Any, Generic, TypeVar
+
 from pydantic import BaseModel
 
-T = TypeVar('T')
+
+T = TypeVar("T")
 
 
 class ApiResponse(BaseModel, Generic[T]):
     """统一API响应格式"""
+
     code: int = 200
     message: str = "success"
-    data: Optional[T] = None
+    data: T | None = None
     timestamp: int = 0
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         import time
+
         self.timestamp = int(time.time())
 
 
 class PaginationResponse(BaseModel, Generic[T]):
     """分页响应格式"""
+
     items: list[T] = []
     total: int = 0
     page: int = 1
@@ -31,18 +36,20 @@ class PaginationResponse(BaseModel, Generic[T]):
 
 class ErrorResponse(BaseModel):
     """错误响应格式"""
+
     code: int
     message: str
-    detail: Optional[str] = None
-    error_code: Optional[str] = None
-    request_id: Optional[str] = None
-    errors: Optional[list[dict]] = None
-    data: Optional[Any] = None
+    detail: str | None = None
+    error_code: str | None = None
+    request_id: str | None = None
+    errors: list[dict] | None = None
+    data: Any | None = None
     timestamp: int = 0
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         import time
+
         self.timestamp = int(time.time())
 
 

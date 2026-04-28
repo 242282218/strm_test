@@ -80,7 +80,9 @@ async def test_redirect_uses_cache_hit(proxy: tuple[ps.ProxyService, _FakeLinkCa
 
 
 @pytest.mark.asyncio
-async def test_redirect_fetches_and_caches_on_miss(proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService]) -> None:
+async def test_redirect_fetches_and_caches_on_miss(
+    proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService],
+) -> None:
     service, cache, quark = proxy
 
     url = await service.redirect_302("fid2")
@@ -92,7 +94,9 @@ async def test_redirect_fetches_and_caches_on_miss(proxy: tuple[ps.ProxyService,
 
 
 @pytest.mark.asyncio
-async def test_redirect_raises_when_quark_fails(proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService]) -> None:
+async def test_redirect_raises_when_quark_fails(
+    proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService],
+) -> None:
     service, _cache, quark = proxy
     quark.fail = True
 
@@ -101,7 +105,9 @@ async def test_redirect_raises_when_quark_fails(proxy: tuple[ps.ProxyService, _F
 
 
 @pytest.mark.asyncio
-async def test_get_download_url_delegates_to_redirect(proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService]) -> None:
+async def test_get_download_url_delegates_to_redirect(
+    proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService],
+) -> None:
     service, _cache, _quark = proxy
 
     url = await service.get_download_url("fid4")
@@ -120,7 +126,9 @@ async def test_context_manager_closes_service(proxy: tuple[ps.ProxyService, _Fak
 
 
 @pytest.mark.asyncio
-async def test_clear_cache_get_stats_and_close(proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService]) -> None:
+async def test_clear_cache_get_stats_and_close(
+    proxy: tuple[ps.ProxyService, _FakeLinkCache, _FakeQuarkService],
+) -> None:
     service, cache, quark = proxy
 
     await service.clear_cache()

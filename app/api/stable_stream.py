@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from app.api.proxy import (
-    _build_stream_fallback_response,
     _build_local_download_stream_redirect,
+    _build_stream_fallback_response,
     _resolve_redirect_target,
 )
 from app.core.logging import get_logger
@@ -104,11 +104,15 @@ async def stable_media_entry(request: Request, media_id: str, display_name: str)
             try:
                 general_validator.validate(redirect_url)
             except URLValidationError as exc:
-                logger.warning("Stable media redirect failed validation for %s, fallback to local proxy: %s", resolved_file_id, exc)
+                logger.warning(
+                    "Stable media redirect failed validation for %s, fallback to local proxy: %s", resolved_file_id, exc
+                )
                 return _build_stream_fallback_response(resolved_file_id)
             return RedirectResponse(url=redirect_url, status_code=302)
 
-        logger.warning("Stable media entry could not resolve redirect for %s, fallback to local proxy", resolved_file_id)
+        logger.warning(
+            "Stable media entry could not resolve redirect for %s, fallback to local proxy", resolved_file_id
+        )
         return _build_stream_fallback_response(resolved_file_id)
     except HTTPException:
         raise

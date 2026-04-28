@@ -5,9 +5,11 @@
 """
 
 import aiohttp
-from typing import Optional
+
 from app.core.logging import get_logger
+
 from .base import BaseNotifier, NotificationMessage
+
 
 logger = get_logger(__name__)
 
@@ -68,30 +70,23 @@ class ServerChanNotifier(BaseNotifier):
             logger.error("ServerChan config invalid: send_key missing")
             return False
 
-        payload = {
-            "title": message.title,
-            "desp": message.content
-        }
+        payload = {"title": message.title, "desp": message.content}
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self._api_url,
-                    data=payload,
-                    timeout=aiohttp.ClientTimeout(total=30)
-                ) as resp:
-                    if resp.status == 200:
-                        result = await resp.json()
-                        if result.get("code") == 0:
-                            logger.info(f"ServerChan notification sent: {message.title}")
-                            return True
-                        else:
-                            logger.error(f"ServerChan API error: {result}")
-                            return False
-                    else:
-                        error_text = await resp.text()
-                        logger.error(f"ServerChan HTTP error: {resp.status} - {error_text}")
-                        return False
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(self._api_url, data=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp,
+            ):
+                if resp.status == 200:
+                    result = await resp.json()
+                    if result.get("code") == 0:
+                        logger.info(f"ServerChan notification sent: {message.title}")
+                        return True
+                    logger.error(f"ServerChan API error: {result}")
+                    return False
+                error_text = await resp.text()
+                logger.error(f"ServerChan HTTP error: {resp.status} - {error_text}")
+                return False
         except aiohttp.ClientError as e:
             logger.error(f"ServerChan request failed: {e}")
             return False
@@ -159,32 +154,23 @@ class WeChatWorkNotifier(BaseNotifier):
             logger.error("WeChatWork config invalid: webhook_url missing or invalid")
             return False
 
-        payload = {
-            "msgtype": "markdown",
-            "markdown": {
-                "content": f"**{message.title}**\n\n{message.content}"
-            }
-        }
+        payload = {"msgtype": "markdown", "markdown": {"content": f"**{message.title}**\n\n{message.content}"}}
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.webhook_url,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30)
-                ) as resp:
-                    if resp.status == 200:
-                        result = await resp.json()
-                        if result.get("errcode") == 0:
-                            logger.info(f"WeChatWork notification sent: {message.title}")
-                            return True
-                        else:
-                            logger.error(f"WeChatWork API error: {result}")
-                            return False
-                    else:
-                        error_text = await resp.text()
-                        logger.error(f"WeChatWork HTTP error: {resp.status} - {error_text}")
-                        return False
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp,
+            ):
+                if resp.status == 200:
+                    result = await resp.json()
+                    if result.get("errcode") == 0:
+                        logger.info(f"WeChatWork notification sent: {message.title}")
+                        return True
+                    logger.error(f"WeChatWork API error: {result}")
+                    return False
+                error_text = await resp.text()
+                logger.error(f"WeChatWork HTTP error: {resp.status} - {error_text}")
+                return False
         except aiohttp.ClientError as e:
             logger.error(f"WeChatWork request failed: {e}")
             return False

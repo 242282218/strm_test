@@ -1,6 +1,6 @@
+import re
 from collections.abc import Iterator
 from pathlib import Path
-import re
 
 from tests.contract_inventory import PHASE3_CONFIG_MANAGER_INVENTORY_HINTS, PHASE3_DOC_SNAPSHOT_DATE
 
@@ -59,7 +59,10 @@ DOCS_INDEX_LINKS = (
     ("architecture/core-truth-source-boundaries.md", "./architecture/core-truth-source-boundaries.md"),
     ("development/codex-working-agreement.md", "./development/codex-working-agreement.md"),
     ("development/compatibility-inventory.md", "./development/compatibility-inventory.md"),
-    ("plans/2026-04-20-codex-project-audit-optimization-plan.md", "./plans/2026-04-20-codex-project-audit-optimization-plan.md"),
+    (
+        "plans/2026-04-20-codex-project-audit-optimization-plan.md",
+        "./plans/2026-04-20-codex-project-audit-optimization-plan.md",
+    ),
 )
 DEVELOPMENT_ENTRY_DOCS = (
     PROJECT_ROOT / "docs" / "development" / "codex-working-agreement.md",
@@ -151,7 +154,9 @@ def _assert_relative_links_resolve(path: Path) -> None:
 
     for relative_target in _iter_relative_markdown_links(document):
         resolved_path = (path.parent / relative_target).resolve()
-        assert resolved_path.exists(), f"{path.relative_to(PROJECT_ROOT).as_posix()} link target missing: {relative_target}"
+        assert resolved_path.exists(), (
+            f"{path.relative_to(PROJECT_ROOT).as_posix()} link target missing: {relative_target}"
+        )
 
 
 def _assert_phase3_inventory_hints(document: str) -> None:
@@ -327,8 +332,14 @@ def test_development_and_web_readmes_match_current_command_contract() -> None:
     assert "vars.QUARK_STRM_COVERAGE_FAIL_UNDER" in development_document
     assert "回退 `66`" in development_document
     assert "../architecture/core-truth-source-boundaries.md" in development_document
-    assert "[`../api/README.md`](../api/README.md) - API 路径、认证与 canonical/compatibility 映射入口" in development_document
-    assert "[`../operations/README.md`](../operations/README.md) - 部署命令、运行目录边界和本地产物约定入口" in development_document
+    assert (
+        "[`../api/README.md`](../api/README.md) - API 路径、认证与 canonical/compatibility 映射入口"
+        in development_document
+    )
+    assert (
+        "[`../operations/README.md`](../operations/README.md) - 部署命令、运行目录边界和本地产物约定入口"
+        in development_document
+    )
     assert "npm run format" not in development_document
 
     for path in DEVELOPMENT_ENTRY_DOCS:
@@ -364,7 +375,8 @@ def test_api_and_operations_entry_docs_have_sync_dates_and_resolvable_links() ->
     ):
         document = path.read_text(encoding="utf-8")
 
-        assert "**最后同步**: 2026-04-20" in document
+        expected_sync_date = "2026-04-27" if path == OPS_DOC_PATH else "2026-04-20"
+        assert f"**最后同步**: {expected_sync_date}" in document
 
         for hint in path_hints:
             assert hint in document

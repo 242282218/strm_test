@@ -44,7 +44,7 @@ class FakeQuery:
     def __init__(self, events: list[DummyEvent]) -> None:
         self._events = events
 
-    def filter(self, *_args, **_kwargs) -> "FakeQuery":
+    def filter(self, *_args, **_kwargs) -> FakeQuery:
         return self
 
     def all(self) -> list[DummyEvent]:

@@ -8,11 +8,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import get_db
 from app.core.dependencies import require_api_key
 from app.core.logging import get_logger
-from app.core.db import get_db
-from sqlalchemy.ext.asyncio import AsyncSession
+
 
 logger = get_logger(__name__)
 
@@ -186,6 +187,7 @@ async def get_batch_operation_status(operation_id: str):
     """
     if operation_id not in _operation_status:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Operation not found")
 
     return _operation_status[operation_id]

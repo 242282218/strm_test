@@ -158,7 +158,7 @@ def test_config_service_callback_can_stop_watcher_from_current_thread() -> None:
 
 
 def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> None:
-    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", dict)
     monkeypatch.setenv("SMART_MEDIA_TMDB_API_KEY", "env-tmdb")
     monkeypatch.setenv("SMART_MEDIA_AI_API_KEY", "env-ai")
     monkeypatch.setenv("SMART_MEDIA_QUARK_COOKIE", "cookie-value")
@@ -171,7 +171,7 @@ def test_sdk_config_prefers_env_values_when_config_keys_absent(monkeypatch) -> N
 
 
 def test_sdk_config_keeps_legacy_env_aliases_as_fallback(monkeypatch) -> None:
-    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", dict)
     monkeypatch.setenv("TMDB_API_KEY", "legacy-tmdb")
     monkeypatch.setenv("AI_API_KEY", "legacy-ai")
     monkeypatch.setenv("QUARK_COOKIE", "legacy-cookie")
@@ -184,7 +184,7 @@ def test_sdk_config_keeps_legacy_env_aliases_as_fallback(monkeypatch) -> None:
 
 
 def test_sdk_config_prefers_canonical_env_over_legacy_aliases(monkeypatch) -> None:
-    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", dict)
     monkeypatch.setenv("SMART_MEDIA_TMDB_API_KEY", "canonical-tmdb")
     monkeypatch.setenv("TMDB_API_KEY", "legacy-tmdb")
     monkeypatch.setenv("SMART_MEDIA_AI_API_KEY", "canonical-ai")
@@ -200,7 +200,7 @@ def test_sdk_config_prefers_canonical_env_over_legacy_aliases(monkeypatch) -> No
 
 
 def test_create_clients_return_none_when_sdk_unavailable(monkeypatch) -> None:
-    monkeypatch.setattr(sdk_config_module, "get_api_keys", lambda: {})
+    monkeypatch.setattr(sdk_config_module, "get_api_keys", dict)
     monkeypatch.setattr(sdk_config_module, "SDK_AVAILABLE", False)
 
     config = SDKConfig()
@@ -283,5 +283,9 @@ def test_create_rename_engine_handles_success_and_failure(monkeypatch) -> None:
 
 
 def test_get_api_keys_returns_empty_dict_on_exception(monkeypatch) -> None:
-    monkeypatch.setattr(sdk_config_module, "get_config_service", lambda: SimpleNamespace(get_config=lambda: (_ for _ in ()).throw(RuntimeError("x"))))
+    monkeypatch.setattr(
+        sdk_config_module,
+        "get_config_service",
+        lambda: SimpleNamespace(get_config=lambda: (_ for _ in ()).throw(RuntimeError("x"))),
+    )
     assert get_api_keys() == {}

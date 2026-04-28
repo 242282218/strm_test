@@ -7,4 +7,5 @@ Scoring module - 评分模块
 from .engine import ScoringEngine
 from .weights import ScoringWeights
 
-__all__ = ['ScoringEngine', 'ScoringWeights']
+
+__all__ = ["ScoringEngine", "ScoringWeights"]

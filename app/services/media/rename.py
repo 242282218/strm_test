@@ -42,6 +42,7 @@ def _resolve_tmdb_api_key() -> str:
     legacy_tmdb = getattr(legacy_api_keys, "tmdb_api_key", "")
     return str(legacy_tmdb or "").strip()
 
+
 @dataclass
 class RenameItem:
     """单个重命名项目"""

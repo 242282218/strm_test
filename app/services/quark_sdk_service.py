@@ -4,9 +4,11 @@
 提供与现有QuarkService兼容的接口，同时支持SDK新功能
 """
 
-from typing import List, Dict, Any, Optional
-from app.core.sdk_config import sdk_config
+from typing import Any
+
 from app.core.logging import get_logger
+from app.core.sdk_config import sdk_config
+
 
 logger = get_logger(__name__)
 
@@ -14,7 +16,7 @@ logger = get_logger(__name__)
 class QuarkSDKService:
     """基于SDK的夸克服务"""
 
-    def __init__(self, cookie: Optional[str] = None):
+    def __init__(self, cookie: str | None = None):
         self.cookie = cookie
         self._client = None
         self._async_client = None
@@ -39,11 +41,8 @@ class QuarkSDKService:
         return self._async_client
 
     async def get_files(
-        self,
-        parent: str = "0",
-        page_size: int = 100,
-        only_video: bool = False
-    ) -> List[Dict[str, Any]]:
+        self, parent: str = "0", page_size: int = 100, only_video: bool = False
+    ) -> list[dict[str, Any]]:
         """
         获取文件列表
 
@@ -65,36 +64,31 @@ class QuarkSDKService:
             if client is None:
                 return []
 
-            params = FileListParams(
-                pdir_fid=parent,
-                page_size=page_size
-            )
+            params = FileListParams(pdir_fid=parent, page_size=page_size)
 
             response = await client.file.list(params)
 
             files = []
             for file in response.files:
                 # 获取文件属性
-                is_dir = getattr(file, 'is_dir', False) or getattr(file, 'dir', False)
-                category = getattr(file, 'category', 0)
+                is_dir = getattr(file, "is_dir", False) or getattr(file, "dir", False)
+                category = getattr(file, "category", 0)
 
                 file_dict = {
-                    "fid": getattr(file, 'fid', getattr(file, 'file_id', '')),
-                    "file_name": getattr(file, 'file_name', getattr(file, 'name', '')),
-                    "category": category.value if hasattr(category, 'value') else category,
+                    "fid": getattr(file, "fid", getattr(file, "file_id", "")),
+                    "file_name": getattr(file, "file_name", getattr(file, "name", "")),
+                    "category": category.value if hasattr(category, "value") else category,
                     "file": not is_dir,
                     "dir": is_dir,
-                    "size": getattr(file, 'size', 0),
-                    "created_at": getattr(file, 'created_at', None),
-                    "updated_at": getattr(file, 'updated_at', None),
-                    "mime_type": getattr(file, 'mime_type', ''),
+                    "size": getattr(file, "size", 0),
+                    "created_at": getattr(file, "created_at", None),
+                    "updated_at": getattr(file, "updated_at", None),
+                    "mime_type": getattr(file, "mime_type", ""),
                 }
 
                 # 视频文件过滤
                 if only_video:
-                    if is_dir:
-                        files.append(file_dict)
-                    elif file_dict.get("category") == 1:  # 1表示视频
+                    if is_dir or file_dict.get("category") == 1:
                         files.append(file_dict)
                 else:
                     files.append(file_dict)
@@ -106,7 +100,7 @@ class QuarkSDKService:
             logger.error(f"SDK获取文件列表失败: {e}")
             return []
 
-    async def get_download_link(self, file_id: str) -> Optional[Dict[str, Any]]:
+    async def get_download_link(self, file_id: str) -> dict[str, Any] | None:
         """
         获取下载直链
 
@@ -127,17 +121,17 @@ class QuarkSDKService:
             result = await client.file.get_download_link(file_id)
 
             return {
-                "url": getattr(result, 'url', ''),
-                "headers": getattr(result, 'headers', {}),
+                "url": getattr(result, "url", ""),
+                "headers": getattr(result, "headers", {}),
                 "concurrency": 3,
-                "part_size": 10 * 1024 * 1024  # 10MB
+                "part_size": 10 * 1024 * 1024,  # 10MB
             }
 
         except Exception as e:
             logger.error(f"SDK获取下载链接失败: {e}")
             return None
 
-    async def get_transcoding_link(self, file_id: str) -> Optional[Dict[str, Any]]:
+    async def get_transcoding_link(self, file_id: str) -> dict[str, Any] | None:
         """
         获取转码直链
 
@@ -158,11 +152,11 @@ class QuarkSDKService:
             result = await client.file.get_transcoding_link(file_id)
 
             return {
-                "url": getattr(result, 'url', ''),
-                "content_length": getattr(result, 'content_length', 0),
-                "headers": getattr(result, 'headers', {}),
+                "url": getattr(result, "url", ""),
+                "content_length": getattr(result, "content_length", 0),
+                "headers": getattr(result, "headers", {}),
                 "concurrency": 3,
-                "part_size": 10 * 1024 * 1024  # 10MB
+                "part_size": 10 * 1024 * 1024,  # 10MB
             }
 
         except Exception as e:
@@ -170,11 +164,8 @@ class QuarkSDKService:
             return None
 
     async def create_share(
-        self,
-        file_ids: List[str],
-        title: Optional[str] = None,
-        password: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, file_ids: list[str], title: str | None = None, password: str | None = None
+    ) -> dict[str, Any] | None:
         """
         创建分享（新功能）
 
@@ -196,21 +187,17 @@ class QuarkSDKService:
             if client is None:
                 return None
 
-            params = ShareCreateParams(
-                fid_list=file_ids,
-                title=title,
-                password=password
-            )
+            params = ShareCreateParams(fid_list=file_ids, title=title, password=password)
 
             result = await client.share.create(params)
 
             return {
-                "share_id": getattr(result, 'share_id', ''),
-                "share_key": getattr(result, 'share_key', ''),
-                "url": getattr(result, 'url', ''),
-                "password": getattr(result, 'password', ''),
-                "title": getattr(result, 'title', ''),
-                "expires_at": getattr(result, 'expires_at', None)
+                "share_id": getattr(result, "share_id", ""),
+                "share_key": getattr(result, "share_key", ""),
+                "url": getattr(result, "url", ""),
+                "password": getattr(result, "password", ""),
+                "title": getattr(result, "title", ""),
+                "expires_at": getattr(result, "expires_at", None),
             }
 
         except Exception as e:
@@ -218,12 +205,8 @@ class QuarkSDKService:
             return None
 
     async def save_share(
-        self,
-        share_key: str,
-        file_ids: List[str],
-        target_folder: str = "0",
-        password: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, share_key: str, file_ids: list[str], target_folder: str = "0", password: str | None = None
+    ) -> dict[str, Any] | None:
         """
         转存分享文件（新功能）
 
@@ -247,30 +230,22 @@ class QuarkSDKService:
                 return None
 
             params = TransferSaveParams(
-                share_key=share_key,
-                fid_list=file_ids,
-                target_pdir_fid=target_folder,
-                password=password
+                share_key=share_key, fid_list=file_ids, target_pdir_fid=target_folder, password=password
             )
 
             result = await client.transfer.save(params)
 
             return {
-                "task_id": getattr(result, 'task_id', ''),
-                "status": getattr(result, 'status', ''),
-                "message": getattr(result, 'message', '')
+                "task_id": getattr(result, "task_id", ""),
+                "status": getattr(result, "status", ""),
+                "message": getattr(result, "message", ""),
             }
 
         except Exception as e:
             logger.error(f"SDK转存分享失败: {e}")
             return None
 
-    async def search_files(
-        self,
-        keyword: str,
-        parent: str = "0",
-        page_size: int = 50
-    ) -> List[Dict[str, Any]]:
+    async def search_files(self, keyword: str, parent: str = "0", page_size: int = 50) -> list[dict[str, Any]]:
         """
         搜索文件（新功能）
 
@@ -292,24 +267,22 @@ class QuarkSDKService:
             if client is None:
                 return []
 
-            params = FileSearchParams(
-                keyword=keyword,
-                pdir_fid=parent,
-                page_size=page_size
-            )
+            params = FileSearchParams(keyword=keyword, pdir_fid=parent, page_size=page_size)
 
             response = await client.file.search(params)
 
             files = []
             for file in response.files:
-                files.append({
-                    "fid": getattr(file, 'fid', getattr(file, 'file_id', '')),
-                    "file_name": getattr(file, 'file_name', getattr(file, 'name', '')),
-                    "category": getattr(file, 'category', 0),
-                    "file": not getattr(file, 'is_dir', False),
-                    "size": getattr(file, 'size', 0),
-                    "path": getattr(file, 'path', ''),
-                })
+                files.append(
+                    {
+                        "fid": getattr(file, "fid", getattr(file, "file_id", "")),
+                        "file_name": getattr(file, "file_name", getattr(file, "name", "")),
+                        "category": getattr(file, "category", 0),
+                        "file": not getattr(file, "is_dir", False),
+                        "size": getattr(file, "size", 0),
+                        "path": getattr(file, "path", ""),
+                    }
+                )
 
             return files
 

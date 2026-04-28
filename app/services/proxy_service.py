@@ -5,12 +5,11 @@
 """
 
 import asyncio
-import aiohttp
 
-from typing import Optional, Tuple
-from app.services.quark_service import QuarkService
-from app.services.link_cache import LinkCache, get_link_cache_service
 from app.core.logging import get_logger
+from app.services.link_cache import LinkCache, get_link_cache_service
+from app.services.quark_service import QuarkService
+
 
 logger = get_logger(__name__)
 
@@ -19,11 +18,7 @@ class ProxyService:
     """代理服务"""
 
     def __init__(
-        self,
-        cookie: str,
-        cache_ttl: int = 600,
-        max_cache_size: int = 1000,
-        link_cache: Optional[LinkCache] = None
+        self, cookie: str, cache_ttl: int = 600, max_cache_size: int = 1000, link_cache: LinkCache | None = None
     ):
         """
         初始化代理服务
@@ -36,10 +31,7 @@ class ProxyService:
         """
         self.cookie = cookie
         self.quark_service = QuarkService(cookie)
-        self.link_cache = link_cache or get_link_cache_service(
-            default_ttl=cache_ttl,
-            max_size=max_cache_size
-        )
+        self.link_cache = link_cache or get_link_cache_service(default_ttl=cache_ttl, max_size=max_cache_size)
         if not hasattr(ProxyService, "_global_semaphore"):
             ProxyService._global_semaphore = asyncio.Semaphore(50)
         self.semaphore = ProxyService._global_semaphore
@@ -92,16 +84,12 @@ class ProxyService:
                 link = await self.quark_service.get_download_link(file_id)
 
             # 缓存直链
-            await self.link_cache.set(
-                file_id=file_id,
-                value=link.url,
-                headers=link.headers
-            )
+            await self.link_cache.set(file_id=file_id, value=link.url, headers=link.headers)
 
             logger.debug(f"302 redirect for {file_id} to {link.url}")
             return link.url
         except Exception as e:
-            logger.error(f"Failed to get redirect URL for {file_id}: {str(e)}")
+            logger.error(f"Failed to get redirect URL for {file_id}: {e!s}")
             raise
 
     async def clear_cache(self):

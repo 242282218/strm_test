@@ -51,9 +51,7 @@ def test_collect_metrics_and_history_limit(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_check_alerts_for_critical_and_warning(monkeypatch: pytest.MonkeyPatch) -> None:
-    monitor = db_pool_monitor.PoolMonitor(
-        db_pool_monitor.MonitorConfig(checkout_threshold=0.8, invalid_threshold=3)
-    )
+    monitor = db_pool_monitor.PoolMonitor(db_pool_monitor.MonitorConfig(checkout_threshold=0.8, invalid_threshold=3))
     monkeypatch.setattr(db_pool_monitor, "get_pool_config", lambda: types.SimpleNamespace(pool_size=10, max_overflow=0))
 
     unhealthy = db_pool_monitor.PoolMetrics(

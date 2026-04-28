@@ -613,6 +613,12 @@ watch(requestedTaskType, (taskType) => {
   immediate: true
 })
 
+watch(() => taskViewState.value.page, (normalizedPage) => {
+  if (page.value !== normalizedPage) {
+    page.value = normalizedPage
+  }
+})
+
 watch(showCreateDialog, (visible, previousVisible) => {
   if (!visible && previousVisible && requestedTaskType.value) {
     void clearTaskLaunchQuery()

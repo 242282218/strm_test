@@ -60,7 +60,9 @@ def test_root_ci_workflow_does_not_ignore_python_test_failures() -> None:
     workflow = ROOT_CI_WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert "- name: Run tests with coverage" in workflow
-    assert "continue-on-error: true" not in workflow.split("- name: Run tests with coverage", 1)[1].split("- name:", 1)[0]
+    assert (
+        "continue-on-error: true" not in workflow.split("- name: Run tests with coverage", 1)[1].split("- name:", 1)[0]
+    )
     assert "--cov-fail-under=${{ env.COVERAGE_FAIL_UNDER }}" in workflow
     assert_shared_coverage_source(workflow, minimum=66)
 

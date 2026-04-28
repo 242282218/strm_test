@@ -18,6 +18,7 @@ from app.core.env_aliases import (
     get_env_override,
 )
 
+
 # 添加SDK路径 - 优先使用环境变量，其次查找项目相对路径
 SDK_PATH = Path(os.getenv("QUARK_SDK_PATH", str(Path(__file__).resolve().parents[2] / "packages")))
 if SDK_PATH.exists() and str(SDK_PATH) not in sys.path:
@@ -53,6 +54,8 @@ except ImportError as e:
 
 if not SDK_AVAILABLE:
     logger.warning("SDK不可用，部分功能将受限")
+
+
 def get_api_keys():
     """
     从配置文件获取API密钥
@@ -71,9 +74,9 @@ def get_api_keys():
         config = config_service.get_config()
         # 从ConfigService获取API密钥
         ai_providers = config.ai.providers if getattr(config, "ai", None) else []
-        ai_api_key = next((provider.api_key for provider in ai_providers if getattr(provider, "api_key", "")), None) or (
-            config.api_keys.ai_api_key if config.api_keys else None
-        )
+        ai_api_key = next(
+            (provider.api_key for provider in ai_providers if getattr(provider, "api_key", "")), None
+        ) or (config.api_keys.ai_api_key if config.api_keys else None)
         tmdb_api_key = (config.tmdb.api_key if getattr(config, "tmdb", None) else None) or (
             config.api_keys.tmdb_api_key if config.api_keys else None
         )

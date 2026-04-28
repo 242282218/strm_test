@@ -60,7 +60,7 @@ async def test_retry_with_policy_uses_registered_policy(monkeypatch: pytest.Monk
     async def flaky_timeout() -> str:
         attempts["count"] += 1
         if attempts["count"] == 1:
-            raise asyncio.TimeoutError("slow")
+            raise TimeoutError("slow")
         return "done"
 
     assert await flaky_timeout() == "done"

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import os
 import runpy
 import sys
+from copy import deepcopy
 from datetime import datetime
 from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse, Response
+from fastapi.testclient import TestClient
 
 
 MODULE_NAME = "app.main"
@@ -37,9 +37,8 @@ def _build_root_test_config(module_globals: dict[str, object]):
 
 
 def test_main_entrypoint_uses_default_port_8000_and_single_worker() -> None:
-    with patch.dict(os.environ, {}, clear=False):
-        with patch("uvicorn.run") as mock_run:
-            _run_main_module("__main__")
+    with patch.dict(os.environ, {}, clear=False), patch("uvicorn.run") as mock_run:
+        _run_main_module("__main__")
 
     mock_run.assert_called_once()
     _, kwargs = mock_run.call_args
@@ -49,9 +48,8 @@ def test_main_entrypoint_uses_default_port_8000_and_single_worker() -> None:
 
 
 def test_main_entrypoint_respects_web_concurrency() -> None:
-    with patch.dict(os.environ, {"WEB_CONCURRENCY": "4"}, clear=False):
-        with patch("uvicorn.run") as mock_run:
-            _run_main_module("__main__")
+    with patch.dict(os.environ, {"WEB_CONCURRENCY": "4"}, clear=False), patch("uvicorn.run") as mock_run:
+        _run_main_module("__main__")
 
     _, kwargs = mock_run.call_args
     assert kwargs["workers"] == 4
@@ -126,16 +124,66 @@ async def test_ready_probe_returns_ready_when_required_components_ok() -> None:
 
     app.state.ready = True
     app.state.startup_components = {
+        "production_security": {"status": "ok", "detail": None},
+        "database_migrations": {"status": "ok", "detail": "schema_version=1"},
         "database": {"status": "ok", "detail": None},
         "auth_system": {"status": "ok", "detail": None},
         "service_container": {"status": "ok", "detail": None},
         "http_pool": {"status": "ok", "detail": None},
+        "task_worker": {"status": "ok", "detail": "owner=test-worker"},
     }
 
     payload = await ready_probe()
 
     assert payload["status"] == "ready"
     assert payload["readiness_problems"] == []
+
+
+@pytest.mark.asyncio
+async def test_ready_probe_accepts_non_production_security_skip() -> None:
+    module_globals = _run_main_module("app.main_ready_non_production_security_skipped_test")
+    app = module_globals["app"]
+    ready_probe = module_globals["ready_probe"]
+
+    app.state.ready = True
+    app.state.startup_components = {
+        "production_security": {"status": "skipped", "detail": "not production"},
+        "database_migrations": {"status": "ok", "detail": "schema_version=1"},
+        "database": {"status": "ok", "detail": None},
+        "auth_system": {"status": "ok", "detail": None},
+        "service_container": {"status": "ok", "detail": None},
+        "http_pool": {"status": "ok", "detail": None},
+        "task_worker": {"status": "ok", "detail": "owner=test-worker"},
+    }
+
+    payload = await ready_probe()
+
+    assert payload["status"] == "ready"
+    assert payload["readiness_problems"] == []
+
+
+@pytest.mark.asyncio
+async def test_ready_probe_returns_503_when_production_security_failed() -> None:
+    module_globals = _run_main_module("app.main_ready_production_security_failed_test")
+    app = module_globals["app"]
+    ready_probe = module_globals["ready_probe"]
+
+    app.state.ready = True
+    app.state.startup_components = {
+        "production_security": {"status": "failed", "detail": "Production requires security.api_key"},
+        "database_migrations": {"status": "ok", "detail": "schema_version=1"},
+        "database": {"status": "ok", "detail": None},
+        "auth_system": {"status": "ok", "detail": None},
+        "service_container": {"status": "ok", "detail": None},
+        "http_pool": {"status": "ok", "detail": None},
+        "task_worker": {"status": "ok", "detail": "owner=test-worker"},
+    }
+
+    payload = await ready_probe()
+
+    assert isinstance(payload, JSONResponse)
+    assert payload.status_code == 503
+    assert b"production_security: failed" in payload.body
 
 
 @pytest.mark.asyncio

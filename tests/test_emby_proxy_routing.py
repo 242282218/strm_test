@@ -406,7 +406,9 @@ async def test_playback_info_hook_when_remote_source_has_transcoding_then_preser
     media_source = result["MediaSources"][0]
     assert media_source["DirectStreamUrl"] == "http://proxy.example:18097/api/proxy/redirect/file123?Static=true"
     assert media_source["SupportsTranscoding"] is True
-    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    assert (
+        media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    )
     assert media_source["TranscodingSubProtocol"] == "hls"
     assert media_source["TranscodingContainer"] == "ts"
 
@@ -444,7 +446,9 @@ async def test_playback_info_hook_when_web_client_and_remote_source_then_rewrite
         "&smart_media_proxy=1&container=mkv"
     )
     assert media_source["SupportsTranscoding"] is True
-    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    assert (
+        media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    )
 
 
 @pytest.mark.asyncio
@@ -476,7 +480,9 @@ async def test_playback_info_hook_when_non_web_client_and_remote_source_then_rew
     media_source = result["MediaSources"][0]
     assert media_source["DirectStreamUrl"] == "http://proxy.example:18097/api/proxy/redirect/file123?Static=true"
     assert media_source["SupportsTranscoding"] is True
-    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    assert (
+        media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    )
 
 
 @pytest.mark.asyncio
@@ -507,7 +513,9 @@ async def test_playback_info_hook_when_remote_source_uses_uppercase_scheme_then_
 
     media_source = result["MediaSources"][0]
     assert media_source["DirectStreamUrl"] == "http://proxy.example:18097/api/proxy/redirect/file123?Static=true"
-    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    assert (
+        media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    )
 
 
 @pytest.mark.asyncio
@@ -579,7 +587,9 @@ async def test_playback_info_hook_when_web_client_and_local_strm_source_then_rew
         "http://proxy.example:18097/Videos/item1/stream?MediaSourceId=media_source_1&Static=true"
         "&smart_media_proxy=1&container=mkv"
     )
-    assert media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    assert (
+        media_source["TranscodingUrl"] == "/Videos/item1/master.m3u8?MediaSourceId=media_source_1&smart_media_proxy=1"
+    )
 
 
 @pytest.mark.asyncio
@@ -692,7 +702,9 @@ async def test_playback_info_hook_when_media_source_id_provided_then_fallback_fi
 
 
 @pytest.mark.asyncio
-async def test_resolve_media_source_file_id_when_path_is_local_strm_then_prefers_strm_content_over_proxy_placeholder(tmp_path):
+async def test_resolve_media_source_file_id_when_path_is_local_strm_then_prefers_strm_content_over_proxy_placeholder(
+    tmp_path,
+):
     strm_dir = tmp_path / "movies"
     strm_dir.mkdir()
     strm_file = strm_dir / "demo.strm"
@@ -724,7 +736,9 @@ async def test_resolve_media_source_file_id_when_path_is_local_strm_then_prefers
 
 
 @pytest.mark.asyncio
-async def test_resolve_media_source_file_id_when_item_path_is_local_strm_then_prefers_current_strm_content_over_stale_media_source(tmp_path):
+async def test_resolve_media_source_file_id_when_item_path_is_local_strm_then_prefers_current_strm_content_over_stale_media_source(
+    tmp_path,
+):
     strm_dir = tmp_path / "movies"
     strm_dir.mkdir()
     strm_file = strm_dir / "current.strm"
@@ -1309,7 +1323,9 @@ def test_get_playback_info_when_internal_error_then_does_not_leak_error_detail()
         mock_playback_hook = SimpleNamespace(
             hook_playback_info=AsyncMock(side_effect=RuntimeError("internal secret path"))
         )
-        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = SimpleNamespace(playback_hook=mock_playback_hook)
+        mock_emby_proxy_service_cls.return_value.__aenter__.return_value = SimpleNamespace(
+            playback_hook=mock_playback_hook
+        )
         mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
 
         response = client.get(
@@ -2412,7 +2428,9 @@ def test_get_master_playlist_when_internal_error_then_does_not_leak_error_detail
         patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
     ):
         mock_emby_proxy_service = AsyncMock()
-        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(side_effect=RuntimeError("internal secret path"))
+        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(
+            side_effect=RuntimeError("internal secret path")
+        )
         mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
         mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
 
@@ -3255,7 +3273,9 @@ def test_stream_video_when_internal_error_then_does_not_leak_error_detail():
         patch("app.api.emby.EmbyProxyService") as mock_emby_proxy_service_cls,
     ):
         mock_emby_proxy_service = AsyncMock()
-        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(side_effect=RuntimeError("internal secret path"))
+        mock_emby_proxy_service.resolve_media_source_file_id = AsyncMock(
+            side_effect=RuntimeError("internal secret path")
+        )
         mock_emby_proxy_service_cls.return_value.__aenter__.return_value = mock_emby_proxy_service
         mock_emby_proxy_service_cls.return_value.__aexit__.return_value = None
 

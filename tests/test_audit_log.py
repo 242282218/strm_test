@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 from datetime import datetime
 from pathlib import Path
@@ -47,7 +46,7 @@ def test_audit_record_to_dict_and_json() -> None:
     assert data["status"] == "success"
 
     as_json = record.to_json()
-    assert "\"action\": \"file_rename\"" in as_json
+    assert '"action": "file_rename"' in as_json
 
 
 @pytest.mark.asyncio
@@ -65,8 +64,8 @@ async def test_logger_worker_write_and_stop(tmp_path: Path) -> None:
     log_file = tmp_path / f"audit_{today}.log"
     assert log_file.exists()
     content = log_file.read_text(encoding="utf-8")
-    assert "\"action\": \"file_delete\"" in content
-    assert "\"resource_name\": \"demo.txt\"" in content
+    assert '"action": "file_delete"' in content
+    assert '"resource_name": "demo.txt"' in content
 
 
 @pytest.mark.asyncio

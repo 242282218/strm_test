@@ -19,26 +19,29 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
+from app.api.proxy import proxy_stream_by_file_id
 from app.core.db import get_db
 from app.core.dependencies import require_api_key
 from app.core.logging import get_logger
 from app.core.metrics_collector import MetricsCollector, get_metrics_collector
+from app.core.url_validator import URLValidationError, emby_validator
 from app.core.validators import (
     InputValidationError,
     validate_http_url,
     validate_identifier,
     validate_proxy_path,
 )
-from app.core.url_validator import URLValidationError, emby_validator
 from app.models.emby import EmbyDeletePlan, EmbyEventLog, EmbyMediaItem
 from app.services.config_service import get_config_service
 from app.services.emby_proxy_service import EmbyProxyService
 from app.services.emby_service import get_emby_service
-from app.services.proxy_service import ProxyService
-from app.api.proxy import proxy_stream_by_file_id
 from app.utils.emby_request import (
     resolve_emby_authorization_context as _resolve_emby_authorization_context,
+)
+from app.utils.emby_request import (
     resolve_emby_client_name as _resolve_requested_client_name,
+)
+from app.utils.emby_request import (
     resolve_emby_device_name as _resolve_requested_device_name,
 )
 
@@ -136,11 +139,7 @@ def _resolve_configured_emby_base_url(app_config) -> str:
 
 def _resolve_requested_emby_base_url(connection: HTTPConnection, app_config) -> str:
     requested_override = str(connection.headers.get("X-Emby-Server-Url") or "").strip()
-    emby_base_url = (
-        requested_override
-        or _resolve_configured_emby_base_url(app_config)
-        or "http://localhost:8096"
-    )
+    emby_base_url = requested_override or _resolve_configured_emby_base_url(app_config) or "http://localhost:8096"
     try:
         validate_http_url(emby_base_url, "emby_base_url")
     except InputValidationError as exc:

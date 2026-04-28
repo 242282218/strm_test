@@ -87,6 +87,7 @@ def _build_safe_quark_config() -> dict[str, Any]:
         "cookie_configured": bool(quark_config.cookie),
     }
 
+
 _cloud_workflow_tasks: dict[str, dict[str, Any]] = {}
 _cloud_workflow_handles: dict[str, asyncio.Task] = {}
 _cloud_workflow_lock = asyncio.Lock()

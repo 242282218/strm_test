@@ -28,7 +28,9 @@ def test_track_helpers_record_expected_samples(fresh_metrics_module) -> None:
     fresh_metrics_module.update_db_pool_metrics(size=10, overflow=1, checked_out=3)
     fresh_metrics_module.track_db_query("select", 0.05)
 
-    request_total = fresh_metrics_module.REQUEST_COUNT.labels(method="GET", endpoint="/health", status="200")._value.get()
+    request_total = fresh_metrics_module.REQUEST_COUNT.labels(
+        method="GET", endpoint="/health", status="200"
+    )._value.get()
     scrape_total = fresh_metrics_module.SCRAPE_ITEMS_PROCESSED.labels(source="tmdb", status="success")._value.get()
 
     assert request_total == 1.0
@@ -110,6 +112,7 @@ def test_track_helpers_swallow_metric_errors_and_log(
 @pytest.mark.asyncio
 async def test_prometheus_track_async_success_and_error(fresh_metrics_module) -> None:
     with patch.object(fresh_metrics_module, "track_request") as track_request:
+
         @fresh_metrics_module.prometheus_track("/async-ok")
         async def ok_handler():
             return "ok"
@@ -119,7 +122,9 @@ async def test_prometheus_track_async_success_and_error(fresh_metrics_module) ->
             raise RuntimeError("failed")
 
         assert await ok_handler() == "ok"
-        track_request.assert_any_call(method="INTERNAL", endpoint="/async-ok", status=200, duration=pytest.approx(0, abs=1))
+        track_request.assert_any_call(
+            method="INTERNAL", endpoint="/async-ok", status=200, duration=pytest.approx(0, abs=1)
+        )
 
         with pytest.raises(RuntimeError, match="failed"):
             await fail_handler()
@@ -133,6 +138,7 @@ async def test_prometheus_track_async_success_and_error(fresh_metrics_module) ->
 
 def test_prometheus_track_sync_success_and_error(fresh_metrics_module) -> None:
     with patch.object(fresh_metrics_module, "track_request") as track_request:
+
         @fresh_metrics_module.prometheus_track("/sync-ok")
         def ok_handler():
             return 42
@@ -142,7 +148,9 @@ def test_prometheus_track_sync_success_and_error(fresh_metrics_module) -> None:
             raise ValueError("oops")
 
         assert ok_handler() == 42
-        track_request.assert_any_call(method="INTERNAL", endpoint="/sync-ok", status=200, duration=pytest.approx(0, abs=1))
+        track_request.assert_any_call(
+            method="INTERNAL", endpoint="/sync-ok", status=200, duration=pytest.approx(0, abs=1)
+        )
 
         with pytest.raises(ValueError, match="oops"):
             fail_handler()

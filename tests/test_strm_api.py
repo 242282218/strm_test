@@ -40,13 +40,15 @@ class TestStrmScanEndpoint:
     def test_scan_directory_success(self, app, mock_cookie):
         """测试扫描目录成功"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": ["movie1.strm", "movie2.strm"],
-            "generated_count": 2,
-            "skipped_count": 0,
-            "failed_count": 0,
-            "total_files": 2,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": ["movie1.strm", "movie2.strm"],
+                "generated_count": 2,
+                "skipped_count": 0,
+                "failed_count": 0,
+                "total_files": 2,
+            }
+        )
         mock_service.close = AsyncMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -63,7 +65,7 @@ class TestStrmScanEndpoint:
                             "base_url": "http://localhost:8000",
                             "strm_url_mode": "redirect",
                             "overwrite": False,
-                        }
+                        },
                     )
 
                     assert response.status_code == 200
@@ -74,13 +76,15 @@ class TestStrmScanEndpoint:
     def test_scan_directory_with_overwrite(self, app, mock_cookie):
         """测试扫描目录并覆盖"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": ["movie.strm"],
-            "generated_count": 1,
-            "skipped_count": 0,
-            "failed_count": 0,
-            "total_files": 1,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": ["movie.strm"],
+                "generated_count": 1,
+                "skipped_count": 0,
+                "failed_count": 0,
+                "total_files": 1,
+            }
+        )
         mock_service.close = AsyncMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -97,7 +101,7 @@ class TestStrmScanEndpoint:
                             "base_url": "http://localhost:8000",
                             "strm_url_mode": "redirect",
                             "overwrite": True,
-                        }
+                        },
                     )
 
                     assert response.status_code == 200
@@ -105,13 +109,15 @@ class TestStrmScanEndpoint:
     def test_scan_directory_non_recursive(self, app, mock_cookie):
         """测试非递归扫描目录"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": [],
-            "generated_count": 0,
-            "skipped_count": 0,
-            "failed_count": 0,
-            "total_files": 0,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": [],
+                "generated_count": 0,
+                "skipped_count": 0,
+                "failed_count": 0,
+                "total_files": 0,
+            }
+        )
         mock_service.close = AsyncMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -125,7 +131,7 @@ class TestStrmScanEndpoint:
                             "local_path": tmpdir,
                             "recursive": False,
                             "concurrent_limit": 5,
-                        }
+                        },
                     )
 
                     assert response.status_code == 200
@@ -136,13 +142,15 @@ class TestStrmScanEndpoint:
 
         for mode in modes:
             mock_service = AsyncMock()
-            mock_service.scan_directory = AsyncMock(return_value={
-                "strms": [],
-                "generated_count": 0,
-                "skipped_count": 0,
-                "failed_count": 0,
-                "total_files": 0,
-            })
+            mock_service.scan_directory = AsyncMock(
+                return_value={
+                    "strms": [],
+                    "generated_count": 0,
+                    "skipped_count": 0,
+                    "failed_count": 0,
+                    "total_files": 0,
+                }
+            )
             mock_service.close = AsyncMock()
 
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -155,7 +163,7 @@ class TestStrmScanEndpoint:
                                 "remote_path": "/videos",
                                 "local_path": tmpdir,
                                 "strm_url_mode": mode,
-                            }
+                            },
                         )
 
                         assert response.status_code == 200, f"Mode {mode} failed"
@@ -172,7 +180,7 @@ class TestStrmScanValidation:
                 "/api/strm/scan",
                 params={
                     "local_path": "/tmp",
-                }
+                },
             )
 
             assert response.status_code == 422
@@ -185,7 +193,7 @@ class TestStrmScanValidation:
                 "/api/strm/scan",
                 params={
                     "remote_path": "/videos",
-                }
+                },
             )
 
             assert response.status_code == 422
@@ -206,7 +214,7 @@ class TestStrmScanValidation:
                             "remote_path": "/videos",
                             "local_path": tmpdir,
                             "concurrent_limit": 100,  # 超出最大值
-                        }
+                        },
                     )
 
                     # 应该返回验证错误
@@ -221,7 +229,7 @@ class TestStrmScanValidation:
                 params={
                     "remote_path": "",
                     "local_path": "",
-                }
+                },
             )
 
             assert response.status_code == 422
@@ -233,9 +241,7 @@ class TestStrmScanErrorHandling:
     def test_scan_service_error(self, app, mock_cookie):
         """测试服务错误"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(
-            side_effect=Exception("Service error")
-        )
+        mock_service.scan_directory = AsyncMock(side_effect=Exception("Service error"))
         mock_service.close = AsyncMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -247,7 +253,7 @@ class TestStrmScanErrorHandling:
                         params={
                             "remote_path": "/videos",
                             "local_path": tmpdir,
-                        }
+                        },
                     )
 
                     assert response.status_code == 500
@@ -255,9 +261,7 @@ class TestStrmScanErrorHandling:
     def test_scan_path_not_found(self, app, mock_cookie):
         """测试路径不存在"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(
-            side_effect=ValueError("Remote path not found")
-        )
+        mock_service.scan_directory = AsyncMock(side_effect=ValueError("Remote path not found"))
         mock_service.close = AsyncMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -269,7 +273,7 @@ class TestStrmScanErrorHandling:
                         params={
                             "remote_path": "/nonexistent",
                             "local_path": tmpdir,
-                        }
+                        },
                     )
 
                     assert response.status_code == 500
@@ -282,13 +286,15 @@ class TestStrmScanConcurrency:
         """测试不同并发限制"""
         for limit in [1, 5, 10]:
             mock_service = AsyncMock()
-            mock_service.scan_directory = AsyncMock(return_value={
-                "strms": [],
-                "generated_count": 0,
-                "skipped_count": 0,
-                "failed_count": 0,
-                "total_files": 0,
-            })
+            mock_service.scan_directory = AsyncMock(
+                return_value={
+                    "strms": [],
+                    "generated_count": 0,
+                    "skipped_count": 0,
+                    "failed_count": 0,
+                    "total_files": 0,
+                }
+            )
             mock_service.close = AsyncMock()
 
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -301,7 +307,7 @@ class TestStrmScanConcurrency:
                                 "remote_path": "/videos",
                                 "local_path": tmpdir,
                                 "concurrent_limit": limit,
-                            }
+                            },
                         )
 
                         assert response.status_code == 200
@@ -313,13 +319,15 @@ class TestStrmScanBaseUrl:
     def test_scan_with_custom_base_url(self, app, mock_cookie):
         """测试自定义 Base URL"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": [],
-            "generated_count": 0,
-            "skipped_count": 0,
-            "failed_count": 0,
-            "total_files": 0,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": [],
+                "generated_count": 0,
+                "skipped_count": 0,
+                "failed_count": 0,
+                "total_files": 0,
+            }
+        )
         mock_service.close = AsyncMock()
 
         custom_url = "http://custom.server:9000"
@@ -334,7 +342,7 @@ class TestStrmScanBaseUrl:
                             "remote_path": "/videos",
                             "local_path": tmpdir,
                             "base_url": custom_url,
-                        }
+                        },
                     )
 
                     assert response.status_code == 200
@@ -344,13 +352,15 @@ class TestStrmScanBaseUrl:
     def test_scan_with_proxy_override_header(self, app, mock_cookie):
         """测试请求头覆盖默认 Base URL"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": [],
-            "generated_count": 0,
-            "skipped_count": 0,
-            "failed_count": 0,
-            "total_files": 0,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": [],
+                "generated_count": 0,
+                "skipped_count": 0,
+                "failed_count": 0,
+                "total_files": 0,
+            }
+        )
         mock_service.close = AsyncMock()
 
         mock_config = MagicMock()
@@ -412,13 +422,15 @@ class TestStrmScanBaseUrl:
     def test_scan_with_default_base_url(self, app, mock_cookie):
         """测试默认 Base URL"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": [],
-            "generated_count": 0,
-            "skipped_count": 0,
-            "failed_count": 0,
-            "total_files": 0,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": [],
+                "generated_count": 0,
+                "skipped_count": 0,
+                "failed_count": 0,
+                "total_files": 0,
+            }
+        )
         mock_service.close = AsyncMock()
 
         mock_config = MagicMock()
@@ -437,7 +449,7 @@ class TestStrmScanBaseUrl:
                             params={
                                 "remote_path": "/videos",
                                 "local_path": tmpdir,
-                            }
+                            },
                         )
 
                         assert response.status_code == 200
@@ -451,13 +463,15 @@ class TestStrmScanResponse:
     def test_scan_response_structure(self, app, mock_cookie):
         """测试响应结构"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": ["movie1.strm", "movie2.strm", "movie3.strm"],
-            "generated_count": 3,
-            "skipped_count": 2,
-            "failed_count": 1,
-            "total_files": 6,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": ["movie1.strm", "movie2.strm", "movie3.strm"],
+                "generated_count": 3,
+                "skipped_count": 2,
+                "failed_count": 1,
+                "total_files": 6,
+            }
+        )
         mock_service.close = AsyncMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -469,7 +483,7 @@ class TestStrmScanResponse:
                         params={
                             "remote_path": "/videos",
                             "local_path": tmpdir,
-                        }
+                        },
                     )
 
                     assert response.status_code == 200
@@ -492,13 +506,15 @@ class TestStrmScanResponse:
     def test_scan_empty_result(self, app, mock_cookie):
         """测试空结果"""
         mock_service = AsyncMock()
-        mock_service.scan_directory = AsyncMock(return_value={
-            "strms": [],
-            "generated_count": 0,
-            "skipped_count": 0,
-            "failed_count": 0,
-            "total_files": 0,
-        })
+        mock_service.scan_directory = AsyncMock(
+            return_value={
+                "strms": [],
+                "generated_count": 0,
+                "skipped_count": 0,
+                "failed_count": 0,
+                "total_files": 0,
+            }
+        )
         mock_service.close = AsyncMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -510,7 +526,7 @@ class TestStrmScanResponse:
                         params={
                             "remote_path": "/empty",
                             "local_path": tmpdir,
-                        }
+                        },
                     )
 
                     assert response.status_code == 200

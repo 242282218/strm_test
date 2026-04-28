@@ -121,6 +121,8 @@ line-ending = "auto"
 [tool.coverage.run]
 source = ["app"]
 branch = true
+parallel = false
+data_file = ".coverage.pytest"
 omit = [
     "*/tests/*",
     "*/migrations/*",

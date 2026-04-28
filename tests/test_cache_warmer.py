@@ -44,12 +44,8 @@ def test_pattern_sorting_access_dependency_and_stats(monkeypatch: pytest.MonkeyP
     service = FakeCacheService()
     warmer = cache_warmer.CacheWarmer(service, max_history=2)
 
-    warmer.add_warmup_pattern(
-        cache_warmer.WarmupPattern(name="p2", pattern="movie:*", priority=2)
-    )
-    warmer.add_warmup_pattern(
-        cache_warmer.WarmupPattern(name="p1", pattern="user:*", priority=1)
-    )
+    warmer.add_warmup_pattern(cache_warmer.WarmupPattern(name="p2", pattern="movie:*", priority=2))
+    warmer.add_warmup_pattern(cache_warmer.WarmupPattern(name="p1", pattern="user:*", priority=1))
     assert [pattern.name for pattern in warmer.warmup_patterns] == ["p1", "p2"]
 
     ticks = iter([1000.0, 1001.0, 1002.0])
@@ -209,9 +205,7 @@ async def test_warmup_by_access_patterns(monkeypatch: pytest.MonkeyPatch) -> Non
     for index in range(60):
         freq = 2 if index < 30 else 1
         for _ in range(freq):
-            warmer.access_history.append(
-                cache_warmer.AccessRecord(key=f"k{index}", timestamp=float(index))
-            )
+            warmer.access_history.append(cache_warmer.AccessRecord(key=f"k{index}", timestamp=float(index)))
 
     service.fail_get = {"k0"}
     monkeypatch.setattr(cache_warmer.logger, "error", lambda message: errors.append(message))

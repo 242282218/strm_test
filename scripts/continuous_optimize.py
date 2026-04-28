@@ -11,7 +11,6 @@ import os
 import shutil
 import subprocess
 import sys
-import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,7 +66,7 @@ class ModuleSpec:
 
 
 def utc_now() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 def iso_utc(timestamp: dt.datetime) -> str:
@@ -859,7 +858,9 @@ def run_materialized_command(command: MaterializedCommand, log_path: Path) -> di
     except subprocess.TimeoutExpired as exc:
         timeout_hit = True
         return_code = 124
-        output = f"{exc.stdout or ''}\n{exc.stderr or ''}\n[timeout] command exceeded {command.timeout_seconds}s".strip()
+        output = (
+            f"{exc.stdout or ''}\n{exc.stderr or ''}\n[timeout] command exceeded {command.timeout_seconds}s".strip()
+        )
     except OSError as exc:
         return_code = 127
         error = f"{exc.__class__.__name__}: {exc}"
@@ -867,9 +868,7 @@ def run_materialized_command(command: MaterializedCommand, log_path: Path) -> di
 
     ended = utc_now()
     write_text(log_path, f"$ {quote_command(runtime_command)}\n\n{output}\n")
-    if error:
-        status = "failed"
-    elif timeout_hit:
+    if error or timeout_hit:
         status = "failed"
     elif return_code == 0:
         status = "passed"
@@ -939,7 +938,7 @@ def run_module(
         try:
             materialized = materialize_command(plan, repo_root)
             results.append(run_materialized_command(materialized, log_path))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # Why: keep one broken command orchestration path from aborting the whole iteration.
             results.append(
                 build_command_exception_result(
@@ -1128,7 +1127,7 @@ def run_agent_lane(
             "error": result.get("error"),
             "execution": result,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return build_agent_exception_result(
             lane_name,
             failures,
@@ -1200,11 +1199,7 @@ def merge_command_results(
     verification_commands: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     # Keep the baseline failure visible if a targeted verify rerun no longer has a runnable command.
-    replacements = {
-        command["name"]: command
-        for command in verification_commands
-        if command["status"] != "skipped"
-    }
+    replacements = {command["name"]: command for command in verification_commands if command["status"] != "skipped"}
     baseline_names = {command["name"] for command in baseline_commands}
     merged = [replacements.get(command["name"], command) for command in baseline_commands]
     merged.extend(
@@ -1294,7 +1289,11 @@ def summarize_command_report_status(
     if verification_command is not None and verification_command["status"] != "skipped":
         baseline_status = baseline_command["status"] if baseline_command is not None else "n/a"
         return f"{baseline_status} -> {verification_command['status']}"
-    if verification_command is not None and verification_command["status"] == "skipped" and baseline_command is not None:
+    if (
+        verification_command is not None
+        and verification_command["status"] == "skipped"
+        and baseline_command is not None
+    ):
         reason = verification_command.get("log_tail") or "skipped"
         return f"{baseline_command['status']} (verify skipped: {reason})"
     return command["status"]
@@ -1304,7 +1303,9 @@ def summarize_command_metadata(
     command: dict[str, Any],
     verification_command: dict[str, Any] | None,
 ) -> str:
-    source = "verify" if verification_command is not None and verification_command["status"] != "skipped" else "baseline"
+    source = (
+        "verify" if verification_command is not None and verification_command["status"] != "skipped" else "baseline"
+    )
     parts = [f"source={source}"]
     if command.get("return_code") is not None:
         parts.append(f"rc={command['return_code']}")
@@ -1364,7 +1365,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     baseline_modules = index_by_name(report.get("baseline_modules", []))
     verification_modules = index_by_name(report.get("verification_modules", []))
     baseline_issue_count = sum(1 for result in report.get("baseline_modules", []) if result["status"] == "failed")
-    verification_issue_count = sum(1 for result in report.get("verification_modules", []) if result["status"] == "failed")
+    verification_issue_count = sum(
+        1 for result in report.get("verification_modules", []) if result["status"] == "failed"
+    )
     lines = [
         "# quark_strm Continuous Optimization Report",
         "",
@@ -1396,11 +1399,15 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"{summarize_module_report_status(module, baseline_module, verification_module)}"
         )
         baseline_commands = index_by_name(baseline_module["commands"]) if baseline_module is not None else {}
-        verification_commands = index_by_name(verification_module["commands"]) if verification_module is not None else {}
+        verification_commands = (
+            index_by_name(verification_module["commands"]) if verification_module is not None else {}
+        )
         for command in module["commands"]:
             baseline_command = baseline_commands.get(command["name"])
             verification_command = verification_commands.get(command["name"])
-            rendered = quote_command(command["command"]) if command["command"] else (command.get("log_tail") or "(no command)")
+            rendered = (
+                quote_command(command["command"]) if command["command"] else (command.get("log_tail") or "(no command)")
+            )
             lines.append(
                 f"  - `{command['name']}`: "
                 f"{summarize_command_report_status(command, baseline_command, verification_command)}"
@@ -1525,7 +1532,7 @@ def run_iteration(
                 lane_name, failures = futures[future]
                 try:
                     agents.append(future.result())
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     agents.append(
                         build_agent_exception_result(
                             lane_name,
@@ -1538,9 +1545,7 @@ def run_iteration(
                     )
 
         verification_targets = {
-            failure["name"]: failed_command_names(failure)
-            for _, failures in failure_lanes
-            for failure in failures
+            failure["name"]: failed_command_names(failure) for _, failures in failure_lanes for failure in failures
         }
         verification_results = [
             run_module(module, repo_root, iteration_dir, "verify", command_names=verification_targets[module.name])
@@ -1571,7 +1576,7 @@ def run_iteration(
     }
     try:
         write_report_files(report_dir, iteration_slug, report)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         report["report_error"] = f"report persistence failed: {format_exception(exc)}"
         report["report_error_log_path"] = write_report_error_log(iteration_dir, report["report_error"])
         print(f"[report-error] {report['report_error']}", file=sys.stderr)
@@ -1579,7 +1584,7 @@ def run_iteration(
             print(f"[report-error] log={report['report_error_log_path']}", file=sys.stderr)
         try:
             write_iteration_report_files(report_dir, iteration_slug, report)
-        except Exception as fallback_exc:  # noqa: BLE001
+        except Exception as fallback_exc:
             print(
                 f"[report-error] fallback iteration persistence failed: {format_exception(fallback_exc)}",
                 file=sys.stderr,
@@ -1589,15 +1594,15 @@ def run_iteration(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Continuously run quark_strm module tests and dispatch Codex optimization lanes in parallel."
-        )
+        description=("Continuously run quark_strm module tests and dispatch Codex optimization lanes in parallel.")
     )
     parser.add_argument("--repo-root", type=Path, default=Path.cwd(), help="quark_strm repository root")
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR, help="report output directory")
     parser.add_argument("--stop-file", type=Path, default=None, help="stop file path")
     parser.add_argument("--max-iterations", type=int, default=0, help="0 means run until stopped")
-    parser.add_argument("--interval-seconds", type=int, default=DEFAULT_INTERVAL_SECONDS, help="sleep between iterations")
+    parser.add_argument(
+        "--interval-seconds", type=int, default=DEFAULT_INTERVAL_SECONDS, help="sleep between iterations"
+    )
     parser.add_argument("--module", action="append", dest="modules", help="run only selected module (repeatable)")
     parser.add_argument("--model", default=DEFAULT_AGENT_MODEL, help="Codex model for optimization agents")
     parser.add_argument(

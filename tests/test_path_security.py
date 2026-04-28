@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-import app.core.path_security as path_security
+from app.core import path_security
 
 
 def test_get_allowed_directories_appends_config_local_directory(
@@ -21,7 +21,11 @@ def test_get_allowed_directories_falls_back_to_default_on_config_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     warnings: list[str] = []
-    monkeypatch.setattr(path_security, "get_configured_local_directory", lambda: (_ for _ in ()).throw(RuntimeError("config load failed")))
+    monkeypatch.setattr(
+        path_security,
+        "get_configured_local_directory",
+        lambda: (_ for _ in ()).throw(RuntimeError("config load failed")),
+    )
     monkeypatch.setattr(path_security.logger, "warning", lambda msg: warnings.append(msg))
 
     allowed = path_security.get_allowed_directories()
@@ -30,9 +34,7 @@ def test_get_allowed_directories_falls_back_to_default_on_config_error(
     assert any("Failed to load allowed directories" in msg for msg in warnings)
 
 
-def test_validate_file_path_uses_default_allowed_dirs(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_validate_file_path_uses_default_allowed_dirs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     target = allowed / "file.txt"
@@ -53,9 +55,7 @@ def test_validate_file_path_rejects_invalid_inputs(tmp_path: Path) -> None:
         path_security.validate_file_path("x", allowed_dirs=[])
 
 
-def test_validate_file_path_rejects_symlink_when_not_allowed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_validate_file_path_rejects_symlink_when_not_allowed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     target = tmp_path / "a.txt"
     target.write_text("x", encoding="utf-8")
     monkeypatch.setattr(path_security.os.path, "islink", lambda _path: True)
@@ -139,9 +139,7 @@ def test_safe_rename_moves_file_and_creates_target_directory(tmp_path: Path) -> 
     assert dst.read_text(encoding="utf-8") == "rename"
 
 
-def test_safe_symlink_invokes_os_symlink_with_validated_paths(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_safe_symlink_invokes_os_symlink_with_validated_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     src = allowed / "src.txt"
@@ -158,9 +156,7 @@ def test_safe_symlink_invokes_os_symlink_with_validated_paths(
     assert calls[0][1] == os.path.realpath(str(dst))
 
 
-def test_safe_hardlink_falls_back_to_copy_on_cross_device(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_safe_hardlink_falls_back_to_copy_on_cross_device(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     src = allowed / "src.txt"
@@ -182,9 +178,7 @@ def test_safe_hardlink_falls_back_to_copy_on_cross_device(
     assert any("Cross-device link detected" in msg for msg in warnings)
 
 
-def test_safe_hardlink_reraises_non_cross_device_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_safe_hardlink_reraises_non_cross_device_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     src = allowed / "src.txt"

@@ -63,7 +63,6 @@ vi.mock('@/stores/auth', () => ({
 describe('UserDropdown', () => {
   let router: ReturnType<typeof createRouter>
   let pinia: ReturnType<typeof createPinia>
-  let messageSuccessSpy: ReturnType<typeof vi.spyOn>
 
   type UserDropdownVm = {
     handleCommand: (command: string) => void | Promise<void>
@@ -101,7 +100,7 @@ describe('UserDropdown', () => {
     vi.clearAllMocks()
     authStoreState.user = { username: '侧栏管理员' }
     authStoreState.changePasswordMock.mockResolvedValue(true)
-    messageSuccessSpy = vi.spyOn(ElMessage, 'success').mockImplementation(
+    vi.spyOn(ElMessage, 'success').mockImplementation(
       (): MessageHandler => ({ close: vi.fn() })
     )
   })
@@ -289,7 +288,7 @@ describe('UserDropdown', () => {
     await vm.submitChangePassword()
 
     expect(authStoreState.changePasswordMock).toHaveBeenCalledWith('old-pass', 'new-pass')
-    expect(messageSuccessSpy).toHaveBeenCalled()
+    expect(ElMessage.success).toHaveBeenCalled()
   })
 
   it('logs out and redirects to login after confirmation', async () => {
@@ -307,6 +306,6 @@ describe('UserDropdown', () => {
     expect(confirmSpy).toHaveBeenCalled()
     expect(authStoreState.logoutMock).toHaveBeenCalledTimes(1)
     expect(router.currentRoute.value.fullPath).toBe('/login')
-    expect(messageSuccessSpy).toHaveBeenCalled()
+    expect(ElMessage.success).toHaveBeenCalled()
   })
 })

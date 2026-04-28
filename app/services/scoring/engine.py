@@ -4,11 +4,12 @@ Scoring engine - 评分引擎
 协调各维度评分计算，生成综合评分
 """
 
-from typing import Dict, Any, Optional
+from typing import Any
+
 from .confidence import ConfidenceCalculator
-from .quality import QualityCalculator
-from .popularity import PopularityCalculator
 from .freshness import FreshnessCalculator
+from .popularity import PopularityCalculator
+from .quality import QualityCalculator
 from .tags import TagExtractor
 from .weights import ScoringWeights
 
@@ -16,7 +17,7 @@ from .weights import ScoringWeights
 class ScoringEngine:
     """评分引擎"""
 
-    def __init__(self, weights: Optional[ScoringWeights] = None):
+    def __init__(self, weights: ScoringWeights | None = None):
         """
         初始化评分引擎
 
@@ -30,7 +31,7 @@ class ScoringEngine:
         self.freshness_calc = FreshnessCalculator()
         self.tag_extractor = TagExtractor()
 
-    def score(self, query: str, result: Dict[str, Any]) -> Dict[str, float]:
+    def score(self, query: str, result: dict[str, Any]) -> dict[str, float]:
         """
         计算评分
 
@@ -41,8 +42,8 @@ class ScoringEngine:
         Returns:
             评分详情字典
         """
-        title = result.get('title', '')
-        pub_date = result.get('pub_date')
+        title = result.get("title", "")
+        pub_date = result.get("pub_date")
 
         # 提取标签
         tags = self.tag_extractor.extract(title)
@@ -59,9 +60,9 @@ class ScoringEngine:
 
         # 计算最终评分
         score = (
-            alpha * confidence +
-            (1 - alpha) * quality +
-            pr_gate * (self.weights.popularity * popularity + self.weights.freshness * freshness)
+            alpha * confidence
+            + (1 - alpha) * quality
+            + pr_gate * (self.weights.popularity * popularity + self.weights.freshness * freshness)
         )
 
         # 极低置信度直接返回
@@ -69,14 +70,14 @@ class ScoringEngine:
             score = confidence
 
         return {
-            'score': round(score, 3),
-            'confidence': round(confidence, 3),
-            'quality': round(quality, 3),
-            'popularity': round(popularity, 3),
-            'freshness': round(freshness, 3),
-            'alpha': round(alpha, 3),
-            'pr_gate': pr_gate,
-            'tags': list(tags)
+            "score": round(score, 3),
+            "confidence": round(confidence, 3),
+            "quality": round(quality, 3),
+            "popularity": round(popularity, 3),
+            "freshness": round(freshness, 3),
+            "alpha": round(alpha, 3),
+            "pr_gate": pr_gate,
+            "tags": list(tags),
         }
 
     def _calculate_alpha(self, confidence: float) -> float:
@@ -91,10 +92,9 @@ class ScoringEngine:
         """
         if confidence < 0.5:
             return 0.7
-        elif confidence < 0.8:
+        if confidence < 0.8:
             return 0.55
-        else:
-            return 0.4
+        return 0.4
 
     def _calculate_pr_gate(self, confidence: float) -> float:
         """
@@ -108,7 +108,6 @@ class ScoringEngine:
         """
         if confidence >= 0.6:
             return 1.0
-        elif confidence >= 0.4:
+        if confidence >= 0.4:
             return 0.3
-        else:
-            return 0.0
+        return 0.0

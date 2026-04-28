@@ -38,6 +38,11 @@ asgiref>=3.7.0
 # 加密
 cryptography>=41.0.0
 
+# 认证
+bcrypt>=4.1.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
 # WebDAV
 wsgidav>=4.3.0
 
@@ -55,6 +60,9 @@ lxml>=4.9.0
 
 # 指标采集
 psutil>=5.9.0
+
+# Prometheus 客户端
+prometheus-client>=0.19.0
 
 # 缓存统计图表
 matplotlib>=3.7.0

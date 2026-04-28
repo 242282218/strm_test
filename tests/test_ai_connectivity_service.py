@@ -42,7 +42,7 @@ class _FakeSession:
         self.error = error
         self.capture = {} if capture is None else capture
 
-    async def __aenter__(self) -> "_FakeSession":
+    async def __aenter__(self) -> _FakeSession:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> bool:
@@ -107,7 +107,7 @@ def test_helper_methods_cover_timeout_and_error_formatting() -> None:
     assert acs.AIConnectivityService._coerce_timeout("999") == 60
     assert acs.AIConnectivityService._coerce_timeout("abc") == 8
     assert acs.AIConnectivityService._format_exception_message(Exception(" boom ")) == "boom"
-    assert acs.AIConnectivityService._format_exception_message(asyncio.TimeoutError()) == "request timeout"
+    assert acs.AIConnectivityService._format_exception_message(TimeoutError()) == "request timeout"
     assert acs.AIConnectivityService._format_exception_message(aiohttp.ClientConnectionError()) == "connection error"
     assert acs.AIConnectivityService._format_exception_message(aiohttp.ClientPayloadError()) == "ClientPayloadError"
 
@@ -215,7 +215,7 @@ async def test_test_provider_handles_exception_and_logs(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         acs.aiohttp,
         "ClientSession",
-        lambda timeout: _FakeSession(error=asyncio.TimeoutError()),
+        lambda timeout: _FakeSession(error=TimeoutError()),
     )
     warning_calls: list[tuple[Any, ...]] = []
     monkeypatch.setattr(acs.logger, "warning", lambda *args: warning_calls.append(args))

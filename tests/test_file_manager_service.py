@@ -44,7 +44,9 @@ def test_init_keeps_local_provider_when_available(monkeypatch: pytest.MonkeyPatc
 
 def test_init_ignores_local_provider_http_5xx(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fms, "QuarkStorageProvider", lambda: _FakeProvider())
-    monkeypatch.setattr(fms, "LocalStorageProvider", lambda: (_ for _ in ()).throw(HTTPException(status_code=503, detail="down")))
+    monkeypatch.setattr(
+        fms, "LocalStorageProvider", lambda: (_ for _ in ()).throw(HTTPException(status_code=503, detail="down"))
+    )
 
     service = fms.FileManagerService()
 
@@ -54,7 +56,9 @@ def test_init_ignores_local_provider_http_5xx(monkeypatch: pytest.MonkeyPatch) -
 
 def test_init_raises_local_provider_http_4xx(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fms, "QuarkStorageProvider", lambda: _FakeProvider())
-    monkeypatch.setattr(fms, "LocalStorageProvider", lambda: (_ for _ in ()).throw(HTTPException(status_code=400, detail="bad")))
+    monkeypatch.setattr(
+        fms, "LocalStorageProvider", lambda: (_ for _ in ()).throw(HTTPException(status_code=400, detail="bad"))
+    )
 
     with pytest.raises(HTTPException):
         fms.FileManagerService()
@@ -126,7 +130,9 @@ async def test_handle_delete_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fms, "QuarkStorageProvider", lambda: _FakeProvider())
     monkeypatch.setattr(fms, "LocalStorageProvider", lambda: _FakeProvider())
     service = fms.FileManagerService()
-    request = FileOperationRequest(action=FileOperationAction.DELETE, storage=StorageType.QUARK, paths=["a"], target=None)
+    request = FileOperationRequest(
+        action=FileOperationAction.DELETE, storage=StorageType.QUARK, paths=["a"], target=None
+    )
 
     result = await service.handle_operation(request)
 
@@ -166,7 +172,9 @@ async def test_handle_mkdir_success_uses_default_parent(monkeypatch: pytest.Monk
     monkeypatch.setattr(fms, "QuarkStorageProvider", lambda: _FakeProvider())
     monkeypatch.setattr(fms, "LocalStorageProvider", lambda: _FakeProvider())
     service = fms.FileManagerService()
-    request = FileOperationRequest(action=FileOperationAction.MKDIR, storage=StorageType.QUARK, paths=[], target="folder")
+    request = FileOperationRequest(
+        action=FileOperationAction.MKDIR, storage=StorageType.QUARK, paths=[], target="folder"
+    )
 
     result = await service.handle_operation(request)
 
@@ -185,7 +193,9 @@ async def test_handle_mkdir_wraps_provider_error(monkeypatch: pytest.MonkeyPatch
         raise RuntimeError("mkdir failed")
 
     provider.mkdir = _mkdir  # type: ignore[method-assign]
-    request = FileOperationRequest(action=FileOperationAction.MKDIR, storage=StorageType.QUARK, paths=["p"], target="folder")
+    request = FileOperationRequest(
+        action=FileOperationAction.MKDIR, storage=StorageType.QUARK, paths=["p"], target="folder"
+    )
 
     with pytest.raises(HTTPException, match="mkdir failed"):
         await service.handle_operation(request)

@@ -283,7 +283,10 @@ def get_services_status(task_status: dict, cache_stats: dict, app_config: Any) -
         {"name": "API服务", "status": "running"},
         {"name": "任务调度器", "status": "running" if task_status.get("running") else "stopped"},
         {"name": "缓存服务", "status": "running" if cache_stats.get("running") else "stopped"},
-        {"name": "Emby代理", "status": "running" if getattr(getattr(app_config, "quark", None), "cookie", "") else "stopped"},
+        {
+            "name": "Emby代理",
+            "status": "running" if getattr(getattr(app_config, "quark", None), "cookie", "") else "stopped",
+        },
     ]
     return services
 

@@ -67,6 +67,8 @@ cache/
 output/
 target/
 tmp_wheel/
+tmp_config_manager_repro/
+test_quark_files.py
 .claude/
 playwright-report/
 test-results/

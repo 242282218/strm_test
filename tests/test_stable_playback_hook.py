@@ -104,7 +104,9 @@ async def test_playback_info_hook_when_force_proxy_client_then_rewrites_to_emby_
         proxy_base_url="http://proxy.example:18097",
     )
 
-    mock_config = SimpleNamespace(playback=SimpleNamespace(direct_first=True, force_proxy_clients=["infuse"], force_proxy_hosts=[]))
+    mock_config = SimpleNamespace(
+        playback=SimpleNamespace(direct_first=True, force_proxy_clients=["infuse"], force_proxy_hosts=[])
+    )
     with patch("app.services.playback_decision_service.get_config_service") as mock_get_config_service:
         mock_get_config_service.return_value.get_config.return_value = mock_config
         result = await hook.hook_playback_info(

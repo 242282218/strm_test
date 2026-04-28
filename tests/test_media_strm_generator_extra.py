@@ -151,9 +151,7 @@ async def test_get_all_files_handles_service_error(tmp_path: Path, fake_env, mon
 async def test_generate_video_url_modes(tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch) -> None:
     generator = _build_generator(tmp_path, fake_env, base_url="http://proxy.example:9000")
 
-    cfg = SimpleNamespace(
-        get_webdav_config=lambda: {"mount_path": "/dav", "username": "u", "password": "p@ss"}
-    )
+    cfg = SimpleNamespace(get_webdav_config=lambda: {"mount_path": "/dav", "username": "u", "password": "p@ss"})
     monkeypatch.setattr(sg, "get_config", lambda: cfg)
 
     try:
@@ -205,9 +203,13 @@ async def test_generate_single_strm_paths_and_overwrite(tmp_path: Path, fake_env
 
 
 @pytest.mark.asyncio
-async def test_generate_single_strm_raises_on_url_error(tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_generate_single_strm_raises_on_url_error(
+    tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
     generator = _build_generator(tmp_path, fake_env, overwrite_existing=True)
-    monkeypatch.setattr(generator, "_generate_video_url", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("url fail")))
+    monkeypatch.setattr(
+        generator, "_generate_video_url", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("url fail"))
+    )
 
     try:
         with pytest.raises(RuntimeError, match="url fail"):
@@ -219,7 +221,9 @@ async def test_generate_single_strm_raises_on_url_error(tmp_path: Path, fake_env
 
 
 @pytest.mark.asyncio
-async def test_generate_strm_files_success_and_limits(tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_generate_strm_files_success_and_limits(
+    tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
     generator = _build_generator(tmp_path, fake_env, overwrite_existing=True)
 
     fake_files = [
@@ -252,7 +256,9 @@ async def test_generate_strm_files_success_and_limits(tmp_path: Path, fake_env, 
 
 
 @pytest.mark.asyncio
-async def test_generate_strm_files_collects_exceptions(tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_generate_strm_files_collects_exceptions(
+    tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
     generator = _build_generator(tmp_path, fake_env, overwrite_existing=True)
 
     async def fake_get_all(*_args, **_kwargs):
@@ -275,7 +281,9 @@ async def test_generate_strm_files_collects_exceptions(tmp_path: Path, fake_env,
 
 
 @pytest.mark.asyncio
-async def test_generate_strm_files_top_level_exception(tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_generate_strm_files_top_level_exception(
+    tmp_path: Path, fake_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
     generator = _build_generator(tmp_path, fake_env)
 
     async def broken_get_all(*_args, **_kwargs):
@@ -347,4 +355,3 @@ async def test_generate_strm_from_quark_requires_cookie(monkeypatch: pytest.Monk
 
     with pytest.raises(ValueError, match="Cookie is required"):
         await sg.generate_strm_from_quark(cookie=None)
-

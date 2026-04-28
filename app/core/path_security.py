@@ -27,7 +27,9 @@ def get_configured_local_directory() -> str | None:
         return None
 
     first_dir = endpoint_dirs[0]
-    return first_dir.get("local_directory") if isinstance(first_dir, dict) else getattr(first_dir, "local_directory", None)
+    return (
+        first_dir.get("local_directory") if isinstance(first_dir, dict) else getattr(first_dir, "local_directory", None)
+    )
 
 
 def get_allowed_directories() -> list[str]:

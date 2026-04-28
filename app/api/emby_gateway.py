@@ -21,28 +21,27 @@ from starlette.requests import HTTPConnection
 
 from app.api.emby import (
     _is_web_client_request,
+    _normalize_proxy_base_url_candidate,
     _read_playback_request_payload,
     _resolve_emby_authorization_context,
     _resolve_playback_request_field,
-    _resolve_requested_emby_api_key,
-    _resolve_requested_emby_base_url,
     _resolve_requested_client_name,
     _resolve_requested_device_name,
+    _resolve_requested_emby_api_key,
+    _resolve_requested_emby_base_url,
     _resolve_requested_proxy_base_url,
-    _normalize_proxy_base_url_candidate,
     get_master_playlist,
     stream_video,
 )
-from app.services.playbackinfo_hook import (
-    LOCAL_PLAYBACK_PROXY_QUERY_KEY,
-    LOCAL_PLAYBACK_PROXY_QUERY_VALUE,
-)
-
 from app.core.http_pool import ClientType, get_http_pool_sync
 from app.core.logging import get_logger
 from app.core.validators import validate_identifier
 from app.services.config_service import get_config_service
 from app.services.emby_proxy_service import EmbyProxyService
+from app.services.playbackinfo_hook import (
+    LOCAL_PLAYBACK_PROXY_QUERY_KEY,
+    LOCAL_PLAYBACK_PROXY_QUERY_VALUE,
+)
 
 
 logger = get_logger(__name__)
@@ -159,7 +158,7 @@ def _rewrite_location(location: str, emby_base_url: str, proxy_base_url: str) ->
     if location_matches_emby_origin:
         location_path = parsed_location.path or ""
         if not emby_path or location_path == emby_path or location_path.startswith(f"{emby_path}/"):
-            rewritten_path = location_path[len(emby_path):] if emby_path else location_path
+            rewritten_path = location_path[len(emby_path) :] if emby_path else location_path
             parsed_proxy = urlsplit(proxy_base_url.rstrip("/"))
             return urlunsplit(
                 (
@@ -172,7 +171,7 @@ def _rewrite_location(location: str, emby_base_url: str, proxy_base_url: str) ->
             )
 
     if location.startswith(normalized_emby):
-        return f"{proxy_base_url}{location[len(normalized_emby):]}"
+        return f"{proxy_base_url}{location[len(normalized_emby) :]}"
     return location
 
 
@@ -393,9 +392,15 @@ async def _handle_gateway_request(request: Request, path: str) -> Response:
 # WebSocket proxy for /embywebsocket
 # ------------------------------------------------------------------
 
-_WS_FORWARD_HEADERS_SKIP = {"host", "connection", "upgrade", "sec-websocket-key",
-                             "sec-websocket-version", "sec-websocket-extensions",
-                             "sec-websocket-protocol"}
+_WS_FORWARD_HEADERS_SKIP = {
+    "host",
+    "connection",
+    "upgrade",
+    "sec-websocket-key",
+    "sec-websocket-version",
+    "sec-websocket-extensions",
+    "sec-websocket-protocol",
+}
 
 
 def _build_ws_target_url(app_config, client_ws: WebSocket) -> str:

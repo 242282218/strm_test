@@ -22,6 +22,7 @@ from app.core.env_aliases import QUARK_COOKIE_ENV_PRIORITY, get_env_override
 from app.core.logging import get_logger
 from app.core.service_container import ServiceContainer, get_service_container
 
+
 if TYPE_CHECKING:
     from app.models.user import User
 
@@ -292,7 +293,7 @@ async def get_current_user(
     request: Request,
     authorization: str | None = Header(default=None, alias="Authorization"),
     db: Session = Depends(get_db),
-) -> "User":
+) -> User:
     """
     获取当前登录用户
 
@@ -347,8 +348,8 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: "User" = Depends(get_current_user),
-) -> "User":
+    current_user: User = Depends(get_current_user),
+) -> User:
     """
     获取当前活跃用户
 
@@ -372,8 +373,8 @@ async def get_current_active_user(
 
 
 async def get_admin_user(
-    current_user: "User" = Depends(get_current_user),
-) -> "User":
+    current_user: User = Depends(get_current_user),
+) -> User:
     """
     获取管理员用户
 

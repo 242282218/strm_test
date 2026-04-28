@@ -5,12 +5,15 @@ STRM URL解析与构建工具
 from __future__ import annotations
 
 import re
-from typing import Optional
+from urllib.parse import parse_qs, quote, unquote, urlparse
+
 import aiofiles
-from urllib.parse import urlparse
 
 
 _PROXY_URL_RE = re.compile(r"/api/proxy/(?P<mode>redirect|stream|video)/(?P<file_id>[A-Za-z0-9]+)")
+_STABLE_MEDIA_URL_RE = re.compile(
+    r"/strm/v1/m/(?P<media_id>[A-Za-z0-9_.:-]+)/(?P<display_name>[^?#]+)",
+)
 
 
 def build_proxy_url(proxy_base_url: str, file_id: str, mode: str = "redirect") -> str:
@@ -31,7 +34,16 @@ def build_proxy_url(proxy_base_url: str, file_id: str, mode: str = "redirect") -
     return f"{base}/api/proxy/{mode}/{file_id}"
 
 
-def extract_file_id_from_proxy_url(url: str) -> Optional[str]:
+def build_stable_media_url(proxy_base_url: str, media_id: str, display_name: str) -> str:
+    """
+    构建稳定媒体入口 URL。
+    """
+    base = proxy_base_url.rstrip("/")
+    encoded_display_name = quote(display_name, safe="()[]-_.")
+    return f"{base}/strm/v1/m/{media_id}/{encoded_display_name}"
+
+
+def extract_file_id_from_proxy_url(url: str) -> str | None:
     """
     从代理URL中提取file_id
 
@@ -49,7 +61,48 @@ def extract_file_id_from_proxy_url(url: str) -> Optional[str]:
     return None
 
 
-def extract_file_id_from_strm_content(content: str) -> Optional[str]:
+def extract_media_id_from_url(url: str) -> str | None:
+    """
+    从稳定媒体入口中提取 media_id。
+    """
+    parsed = urlparse(url)
+    candidates = [parsed.path or "", (url or "").strip()]
+    for candidate in candidates:
+        match = _STABLE_MEDIA_URL_RE.search(candidate)
+        if match:
+            return match.group("media_id")
+    return None
+
+
+def extract_display_name_from_url(url: str) -> str | None:
+    """
+    从稳定媒体入口中提取展示文件名。
+    """
+    parsed = urlparse(url)
+    candidates = [parsed.path or "", (url or "").strip()]
+    for candidate in candidates:
+        match = _STABLE_MEDIA_URL_RE.search(candidate)
+        if match:
+            return unquote(match.group("display_name"))
+    return None
+
+
+def is_stable_media_url(url: str) -> bool:
+    return extract_media_id_from_url(url or "") is not None
+
+
+def extract_path_from_media_reference(reference: str) -> str | None:
+    """
+    从兼容 URL 中提取 path 查询参数。
+    """
+    parsed = urlparse(reference or "")
+    values = parse_qs(parsed.query).get("path", [])
+    if not values:
+        return None
+    return unquote(values[0]).strip() or None
+
+
+def extract_file_id_from_strm_content(content: str) -> str | None:
     """
     从STRM内容中提取file_id
 
@@ -73,6 +126,14 @@ def extract_file_id_from_strm_content(content: str) -> Optional[str]:
     return None
 
 
+def extract_media_id_from_strm_content(content: str) -> str | None:
+    """
+    从 STRM 内容中提取稳定 media_id。
+    """
+    text = content.strip()
+    return extract_media_id_from_url(text)
+
+
 async def read_strm_file_content(file_path: str) -> str:
     """
     读取STRM文件内容
@@ -85,5 +146,5 @@ async def read_strm_file_content(file_path: str) -> str:
     副作用:
         - 读取文件
     """
-    async with aiofiles.open(file_path, "r", encoding="utf-8") as handle:
+    async with aiofiles.open(file_path, encoding="utf-8") as handle:
         return (await handle.read()).strip()

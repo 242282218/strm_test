@@ -285,10 +285,7 @@ class TestValidApiKeyGrantsAccess:
 
         with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "test-key-123"}):
             client = TestClient(app)
-            response = client.get(
-                "/api/protected",
-                headers={"X-API-Key": "test-key-123"}
-            )
+            response = client.get("/api/protected", headers={"X-API-Key": "test-key-123"})
             assert response.status_code == 200
             assert response.json() == {"message": "protected"}
 
@@ -299,10 +296,7 @@ class TestValidApiKeyGrantsAccess:
 
         with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "bearer-token-456"}):
             client = TestClient(app)
-            response = client.get(
-                "/api/data",
-                headers={"Authorization": "Bearer bearer-token-456"}
-            )
+            response = client.get("/api/data", headers={"Authorization": "Bearer bearer-token-456"})
             assert response.status_code == 200
             assert response.json() == {"data": "sensitive"}
 
@@ -328,10 +322,7 @@ class TestValidApiKeyGrantsAccess:
 
         with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "SMART_MEDIA_API_KEY": "smart-key-789"}):
             client = TestClient(app)
-            response = client.get(
-                "/api/protected",
-                headers={"X-API-Key": "smart-key-789"}
-            )
+            response = client.get("/api/protected", headers={"X-API-Key": "smart-key-789"})
             assert response.status_code == 200
 
     def test_smart_media_security_api_key_env_var_works(self):
@@ -339,12 +330,11 @@ class TestValidApiKeyGrantsAccess:
         app = create_test_app()
         app.add_middleware(AuthMiddleware)
 
-        with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "SMART_MEDIA_SECURITY_API_KEY": "security-key-987"}, clear=True):
+        with patch.dict(
+            os.environ, {"REQUIRE_API_KEY": "true", "SMART_MEDIA_SECURITY_API_KEY": "security-key-987"}, clear=True
+        ):
             client = TestClient(app)
-            response = client.get(
-                "/api/protected",
-                headers={"X-API-Key": "security-key-987"}
-            )
+            response = client.get("/api/protected", headers={"X-API-Key": "security-key-987"})
             assert response.status_code == 200
 
     def test_canonical_security_api_key_env_overrides_legacy_aliases(self):
@@ -380,10 +370,7 @@ class TestInvalidApiKeyDenied:
 
         with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "correct-key"}):
             client = TestClient(app)
-            response = client.get(
-                "/api/protected",
-                headers={"X-API-Key": "wrong-key"}
-            )
+            response = client.get("/api/protected", headers={"X-API-Key": "wrong-key"})
             assert response.status_code == 403
             assert "Invalid API key" in response.json().get("detail", "")
 
@@ -394,10 +381,7 @@ class TestInvalidApiKeyDenied:
 
         with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "test-key"}):
             client = TestClient(app)
-            response = client.get(
-                "/api/protected",
-                headers={"X-API-Key": ""}
-            )
+            response = client.get("/api/protected", headers={"X-API-Key": ""})
             assert response.status_code == 401
 
     def test_malformed_bearer_token_denied(self):
@@ -407,10 +391,7 @@ class TestInvalidApiKeyDenied:
 
         with patch.dict(os.environ, {"REQUIRE_API_KEY": "true", "API_KEY": "test-key"}):
             client = TestClient(app)
-            response = client.get(
-                "/api/protected",
-                headers={"Authorization": "Basic test-key"}
-            )
+            response = client.get("/api/protected", headers={"Authorization": "Basic test-key"})
             assert response.status_code == 401
 
 
@@ -470,8 +451,9 @@ class TestTimingAttackPrevention:
         dispatch_source = inspect.getsource(AuthMiddleware.dispatch)
 
         # Verify secrets.compare_digest is used
-        assert "secrets.compare_digest" in dispatch_source, \
+        assert "secrets.compare_digest" in dispatch_source, (
             "AuthMiddleware should use secrets.compare_digest for timing-safe comparison"
+        )
 
 
 class TestConfigFileIntegration:
@@ -488,16 +470,16 @@ class TestConfigFileIntegration:
         mock_security.require_api_key = True
         mock_config.security = mock_security
 
-        with patch.dict(os.environ, {}, clear=True), patch("app.core.auth_middleware.get_config_service") as mock_get_config:
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("app.core.auth_middleware.get_config_service") as mock_get_config,
+        ):
             mock_service = MagicMock()
             mock_service.get_config.return_value = mock_config
             mock_get_config.return_value = mock_service
 
             client = TestClient(app)
-            response = client.get(
-                "/api/protected",
-                headers={"X-API-Key": "config-api-key"}
-            )
+            response = client.get("/api/protected", headers={"X-API-Key": "config-api-key"})
             assert response.status_code == 200
 
     def test_configured_proxy_base_url_allows_emby_paths_on_non_default_port(self):
@@ -519,17 +501,15 @@ class TestConfigFileIntegration:
         mock_config.security = mock_security
         mock_config.emby = mock_emby
 
-        with patch.dict(os.environ, {}, clear=True), patch(
-            "app.core.emby_proxy_request.get_config_service"
-        ) as mock_get_config:
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("app.core.emby_proxy_request.get_config_service") as mock_get_config,
+        ):
             mock_service = MagicMock()
             mock_service.get_config.return_value = mock_config
             mock_get_config.return_value = mock_service
 
             client = TestClient(app)
-            response = client.get(
-                "/emby/system/info/public",
-                headers={"host": "proxy.example:19097"}
-            )
+            response = client.get("/emby/system/info/public", headers={"host": "proxy.example:19097"})
             assert response.status_code == 200
             assert response.json() == {"ok": True}

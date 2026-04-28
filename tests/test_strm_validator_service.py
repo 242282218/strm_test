@@ -105,7 +105,9 @@ def test_build_expected_strm_set_filters_by_base_size_and_extension(tmp_path: Pa
 
 
 @pytest.mark.asyncio
-async def test_fast_scan_without_cache_marks_all_local_files_invalid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+async def test_fast_scan_without_cache_marks_all_local_files_invalid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     validator = _make_validator(tmp_path)
     monkeypatch.setattr(validator, "load_cached_tree", lambda: None)
 

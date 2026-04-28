@@ -4,6 +4,7 @@
 参考: AlistAutoStrm config.go
 """
 
+import os
 from typing import ClassVar
 
 from apscheduler.triggers.cron import CronTrigger
@@ -12,7 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.config.ai_config import AIConfig
 from app.config.metadata import (
     LEGACY_AI_SCHEMA_KEYS as APP_CONFIG_LEGACY_AI_SCHEMA_KEYS,
+)
+from app.config.metadata import (
     LEGACY_AI_SENSITIVE_KEYS as APP_CONFIG_LEGACY_AI_SENSITIVE_KEYS,
+)
+from app.config.metadata import (
     build_public_model_json_schema,
     collect_sensitive_fields_status,
 )
@@ -23,9 +28,30 @@ from app.config.runtime import (
     dump_config_to_yaml,
     replace_env_placeholders,
 )
+from app.core.auth_contract import API_KEY_ENV_PRIORITY, get_require_api_key_env_override
 from app.core.constants import MAX_TIMEOUT_SECONDS, MAX_URL_LENGTH, MIN_TIMEOUT_SECONDS
 from app.core.encryption import get_decrypted_config_value
+from app.core.env_aliases import JWT_SECRET_KEY_ENV_PRIORITY, get_env_override
 from app.core.validators import validate_http_url
+
+
+PRODUCTION_ENV_VALUES = {"production", "prod"}
+
+
+def is_production_environment() -> bool:
+    """Return true when either supported runtime env marks this process as production."""
+    return any(
+        (os.getenv(env_name) or "").strip().lower() in PRODUCTION_ENV_VALUES
+        for env_name in ("SMART_MEDIA_ENV", "ENVIRONMENT")
+    )
+
+
+def _is_blank(value: str | None) -> bool:
+    return not str(value or "").strip()
+
+
+def _allows_any_origin(origins: list[str]) -> bool:
+    return any(str(origin).strip() == "*" for origin in origins)
 
 
 class EndpointConfig(BaseModel):
@@ -445,18 +471,20 @@ class CorsConfig(BaseModel):
 
     allow_origins: list[str] = Field(default_factory=list, description="Allowed origins")
     allow_credentials: bool = Field(False, description="Allow credentials")
-    allow_methods: list[str] = Field(default_factory=lambda: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], description="Allowed methods")
-    allow_headers: list[str] = Field(default_factory=lambda: ["Authorization", "Content-Type", "X-Requested-With"], description="Allowed headers")
+    allow_methods: list[str] = Field(
+        default_factory=lambda: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], description="Allowed methods"
+    )
+    allow_headers: list[str] = Field(
+        default_factory=lambda: ["Authorization", "Content-Type", "X-Requested-With"], description="Allowed headers"
+    )
 
     @model_validator(mode="after")
     def validate_cors_config(self):
         """Validate CORS configuration for production safety."""
-        import os
-        env = os.getenv("ENVIRONMENT", "development")
-
-        if env == "production":
-            if "*" in self.allow_origins:
+        if is_production_environment():
+            if _allows_any_origin(self.allow_origins):
                 from app.core.logging import get_logger
+
                 logger = get_logger(__name__)
                 logger.warning(
                     "CORS allow_origins contains '*' in production environment. "
@@ -464,7 +492,7 @@ class CorsConfig(BaseModel):
                     "Please configure specific allowed origins."
                 )
 
-            if self.allow_credentials and "*" in self.allow_origins:
+            if self.allow_credentials and _allows_any_origin(self.allow_origins):
                 raise ValueError(
                     "CORS allow_credentials cannot be True when allow_origins contains '*' "
                     "due to browser security restrictions."
@@ -516,7 +544,6 @@ class AppConfig(BaseModel):
 
     LEGACY_AI_SCHEMA_KEYS: ClassVar[set[str]] = APP_CONFIG_LEGACY_AI_SCHEMA_KEYS
     LEGACY_AI_SENSITIVE_KEYS: ClassVar[set[str]] = APP_CONFIG_LEGACY_AI_SENSITIVE_KEYS
-
 
     model_config = ConfigDict(extra="forbid")
 
@@ -570,32 +597,46 @@ class AppConfig(BaseModel):
             normalized["ai"] = {}
 
         existing_names = {
-            str(item.get("name")).strip()
-            for item in providers_section
-            if str(item.get("name", "")).strip()
+            str(item.get("name")).strip() for item in providers_section if str(item.get("name", "")).strip()
         }
 
         legacy_sections = [
-            ("deepseek", normalized.pop("deepseek", None), {
-                "base_url": "https://api.deepseek.com/v1",
-                "model": "deepseek-chat",
-                "timeout": 20,
-            }),
-            ("glm", normalized.pop("glm", None), {
-                "base_url": "https://open.bigmodel.cn/api/paas/v4",
-                "model": "glm-4.7-flash",
-                "timeout": 8,
-            }),
-            ("kimi", normalized.pop("kimi", None), {
-                "base_url": "https://integrate.api.nvidia.com/v1",
-                "model": "moonshotai/kimi-k2.5",
-                "timeout": 15,
-            }),
-            ("zhipu", normalized.pop("zhipu", None), {
-                "base_url": "https://open.bigmodel.cn/api/paas/v4",
-                "model": "glm-4.7-flash",
-                "timeout": 8,
-            }),
+            (
+                "deepseek",
+                normalized.pop("deepseek", None),
+                {
+                    "base_url": "https://api.deepseek.com/v1",
+                    "model": "deepseek-chat",
+                    "timeout": 20,
+                },
+            ),
+            (
+                "glm",
+                normalized.pop("glm", None),
+                {
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "model": "glm-4.7-flash",
+                    "timeout": 8,
+                },
+            ),
+            (
+                "kimi",
+                normalized.pop("kimi", None),
+                {
+                    "base_url": "https://integrate.api.nvidia.com/v1",
+                    "model": "moonshotai/kimi-k2.5",
+                    "timeout": 15,
+                },
+            ),
+            (
+                "zhipu",
+                normalized.pop("zhipu", None),
+                {
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "model": "glm-4.7-flash",
+                    "timeout": 8,
+                },
+            ),
         ]
 
         priority = 100 - len(providers_section) * 10
@@ -605,14 +646,16 @@ class AppConfig(BaseModel):
             api_key = str(section.get("api_key", "")).strip()
             if not api_key:
                 continue
-            providers_section.append({
-                "name": name,
-                "api_key": api_key,
-                "base_url": section.get("base_url") or defaults["base_url"],
-                "model": section.get("model") or defaults["model"],
-                "timeout": section.get("timeout") or defaults["timeout"],
-                "priority": priority,
-            })
+            providers_section.append(
+                {
+                    "name": name,
+                    "api_key": api_key,
+                    "base_url": section.get("base_url") or defaults["base_url"],
+                    "model": section.get("model") or defaults["model"],
+                    "timeout": section.get("timeout") or defaults["timeout"],
+                    "priority": priority,
+                }
+            )
             priority -= 10
 
         if providers_section:
@@ -705,6 +748,31 @@ class AppConfig(BaseModel):
             warnings.append("API key is required but security.api_key is not set (set SMART_MEDIA_SECURITY_API_KEY)")
 
         return warnings
+
+    def validate_production_requirements(self) -> list[str]:
+        """Return production-only configuration problems that must block readiness."""
+        if not is_production_environment():
+            return []
+
+        problems: list[str] = []
+        require_api_key_override = get_require_api_key_env_override()
+        effective_require_api_key = self.security.require_api_key
+        if require_api_key_override is not None:
+            effective_require_api_key = require_api_key_override
+
+        api_key = self.security.api_key or get_env_override(*API_KEY_ENV_PRIORITY)
+        jwt_secret_key = self.security.jwt_secret_key or get_env_override(*JWT_SECRET_KEY_ENV_PRIORITY)
+
+        if not effective_require_api_key:
+            problems.append("Production requires security.require_api_key=true")
+        if _is_blank(api_key):
+            problems.append("Production requires security.api_key or SMART_MEDIA_SECURITY_API_KEY")
+        if _is_blank(jwt_secret_key):
+            problems.append("Production requires security.jwt_secret_key or SMART_MEDIA_JWT_SECRET_KEY")
+        if _allows_any_origin(self.cors.allow_origins):
+            problems.append("Production CORS allow_origins must not contain '*'")
+
+        return problems
 
     @classmethod
     def public_model_json_schema(cls) -> dict:

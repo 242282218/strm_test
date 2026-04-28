@@ -1,9 +1,9 @@
 import asyncio
 from datetime import datetime
+from unittest.mock import AsyncMock
 
 import aiosqlite
 import pytest
-from unittest.mock import AsyncMock
 
 from app.services import disk_cache as disk_cache_mod
 
@@ -50,7 +50,6 @@ async def test_start_stop_and_periodic_cleanup_loop(monkeypatch, tmp_path):
         sleep_calls["value"] += 1
         if sleep_calls["value"] >= 3:
             raise asyncio.CancelledError()
-        return None
 
     monkeypatch.setattr(disk_cache_mod.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(cache, "cleanup_expired", AsyncMock(side_effect=[2, RuntimeError("cleanup failed")]))

@@ -4,11 +4,11 @@ STRM数据模型
 参考: AlistAutoStrm strm.go:14-19
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
 import hashlib
 import os
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class StrmModel(BaseModel):
@@ -17,12 +17,13 @@ class StrmModel(BaseModel):
 
     参考: AlistAutoStrm strm.go:14-19
     """
+
     name: str = Field(..., description="STRM文件名")
     local_dir: str = Field("", description="本地目录路径")
     remote_dir: str = Field("", description="远程目录路径")
     raw_url: str = Field("", description="原始URL")
-    created_at: Optional[datetime] = Field(None, description="创建时间")
-    updated_at: Optional[datetime] = Field(None, description="更新时间")
+    created_at: datetime | None = Field(None, description="创建时间")
+    updated_at: datetime | None = Field(None, description="更新时间")
 
     @property
     def key(self) -> str:
@@ -64,12 +65,12 @@ class StrmModel(BaseModel):
             if not overwrite and os.path.exists(self.full_path):
                 return False
 
-            with open(self.full_path, 'w', encoding='utf-8') as f:
+            with open(self.full_path, "w", encoding="utf-8") as f:
                 f.write(self.raw_url)
 
             return True
         except Exception as e:
-            raise RuntimeError(f"Failed to generate STRM file {self.full_path}: {str(e)}")
+            raise RuntimeError(f"Failed to generate STRM file {self.full_path}: {e!s}")
 
     def delete_strm_file(self) -> bool:
         """
@@ -84,7 +85,7 @@ class StrmModel(BaseModel):
                 return True
             return False
         except Exception as e:
-            raise RuntimeError(f"Failed to delete STRM file {self.full_path}: {str(e)}")
+            raise RuntimeError(f"Failed to delete STRM file {self.full_path}: {e!s}")
 
     def check_valid(self) -> bool:
         """
@@ -96,6 +97,7 @@ class StrmModel(BaseModel):
             是否有效
         """
         import requests
+
         try:
             response = requests.head(self.raw_url, timeout=10)
             return response.status_code in [200, 302]
@@ -150,8 +152,9 @@ class LinkModel(BaseModel):
 
     参考: OpenList quark_uc/util.go:113-137
     """
+
     url: str = Field(..., description="直链URL")
     headers: dict = Field(default_factory=dict, description="请求头")
-    content_length: Optional[int] = Field(None, description="内容长度")
+    content_length: int | None = Field(None, description="内容长度")
     concurrency: int = Field(3, description="并发数")
     part_size: int = Field(10 * 1024 * 1024, description="分片大小")

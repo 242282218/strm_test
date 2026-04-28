@@ -19,6 +19,7 @@ services:
       - .env
     environment:
       - CONFIG_PATH=/app/config.yaml
+      - SMART_MEDIA_ENV=${SMART_MEDIA_ENV:-development}
       - SMART_MEDIA_LOG_FORMAT=${SMART_MEDIA_LOG_FORMAT:-json}
       - TZ=${TZ:-Asia/Shanghai}
     healthcheck:
@@ -71,6 +72,23 @@ services:
       - monitoring
     depends_on:
       - prometheus
+
+  frontend:
+    image: ${QUARK_STRM_FRONTEND_IMAGE:-quark-strm-frontend:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-runtime
+    container_name: quark-strm-frontend
+    ports:
+      - "${SMART_MEDIA_FRONTEND_PORT:-18080}:80"
+    depends_on:
+      - quark-strm
+    restart: unless-stopped
+    networks:
+      - monitoring
+    profiles:
+      - frontend
 
 networks:
   monitoring:

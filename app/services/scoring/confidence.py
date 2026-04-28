@@ -6,7 +6,6 @@ Confidence calculator - 置信度计算器
 
 import re
 import unicodedata
-from typing import Set, Optional
 
 
 class ConfidenceCalculator:
@@ -14,19 +13,55 @@ class ConfidenceCalculator:
 
     # 负面关键词列表
     VIDEO_NEG = [
-        "解说文案", "文案", "讲解稿", "台词", "脚本", "宣传文案", "攻略",
-        "补丁", "修改器", "安装", "破解版", "内购", "加速器", "网游", "手游", "客户端",
-        ".apk", ".exe", ".torrent",
-        "课程", "教程", "小说", "听书"
+        "解说文案",
+        "文案",
+        "讲解稿",
+        "台词",
+        "脚本",
+        "宣传文案",
+        "攻略",
+        "补丁",
+        "修改器",
+        "安装",
+        "破解版",
+        "内购",
+        "加速器",
+        "网游",
+        "手游",
+        "客户端",
+        ".apk",
+        ".exe",
+        ".torrent",
+        "课程",
+        "教程",
+        "小说",
+        "听书",
     ]
 
     # 正面关键词列表
     VIDEO_POS = [
-        "电影", "影视", "剧集", "电视剧", "蓝光", "原盘",
-        "remux", "bdmv", "webrip", "web-dl",
-        "1080p", "2160p", "4k", "720p",
-        "x264", "x265", "hevc", "hdr", "dv", "杜比",
-        "中字", "字幕"
+        "电影",
+        "影视",
+        "剧集",
+        "电视剧",
+        "蓝光",
+        "原盘",
+        "remux",
+        "bdmv",
+        "webrip",
+        "web-dl",
+        "1080p",
+        "2160p",
+        "4k",
+        "720p",
+        "x264",
+        "x265",
+        "hevc",
+        "hdr",
+        "dv",
+        "杜比",
+        "中字",
+        "字幕",
     ]
 
     def __init__(self):
@@ -34,7 +69,7 @@ class ConfidenceCalculator:
         self.intent_score = 0.0
         self.plausibility_score = 0.0
 
-    def calculate(self, query: str, title: str, tags: Set[str]) -> float:
+    def calculate(self, query: str, title: str, tags: set[str]) -> float:
         """
         计算置信度
 
@@ -78,7 +113,7 @@ class ConfidenceCalculator:
 
         # Bigram Jaccard相似度
         def bigrams(s):
-            return {s[i:i+2] for i in range(len(s)-1)}
+            return {s[i : i + 2] for i in range(len(s) - 1)}
 
         qbg, nbg = bigrams(qn), bigrams(nn)
         if not qbg or not nbg:
@@ -101,10 +136,10 @@ class ConfidenceCalculator:
         # NFKC标准化 + 小写 + 去空格
         text = unicodedata.normalize("NFKC", text)
         text = text.lower()
-        text = re.sub(r'\s+', '', text)
+        text = re.sub(r"\s+", "", text)
         return text
 
-    def _intent_score(self, name: str, tags: Set[str]) -> float:
+    def _intent_score(self, name: str, tags: set[str]) -> float:
         """意图评分"""
         name_lower = name.lower()
 
@@ -128,7 +163,7 @@ class ConfidenceCalculator:
 
         return min(1.0, score)
 
-    def _plausibility_score(self, name: str, tags: Set[str]) -> float:
+    def _plausibility_score(self, name: str, tags: set[str]) -> float:
         """合理性评分"""
         # 大小与标签矛盾检查
         # 注意：pansou返回的结果没有大小信息，简化处理

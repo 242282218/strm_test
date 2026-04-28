@@ -88,7 +88,9 @@ def test_stable_stream_route_when_direct_first_disabled_then_redirects_to_local_
         async def close(self):
             return None
 
-    mock_config = SimpleNamespace(playback=SimpleNamespace(direct_first=False, force_proxy_clients=[], force_proxy_hosts=[]))
+    mock_config = SimpleNamespace(
+        playback=SimpleNamespace(direct_first=False, force_proxy_clients=[], force_proxy_hosts=[])
+    )
 
     with (
         patch(
@@ -138,7 +140,9 @@ def test_stable_stream_route_when_native_authorization_header_marks_force_proxy_
         async def close(self):
             return None
 
-    mock_config = SimpleNamespace(playback=SimpleNamespace(direct_first=True, force_proxy_clients=["infuse"], force_proxy_hosts=[]))
+    mock_config = SimpleNamespace(
+        playback=SimpleNamespace(direct_first=True, force_proxy_clients=["infuse"], force_proxy_hosts=[])
+    )
 
     with (
         patch(

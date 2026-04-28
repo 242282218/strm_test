@@ -4,14 +4,11 @@ Quality calculator - 质量分计算器
 计算视频资源的技术质量得分
 """
 
-import re
-from typing import Set
-
 
 class QualityCalculator:
     """质量分计算器"""
 
-    def calculate(self, title: str, tags: Set[str]) -> float:
+    def calculate(self, title: str, tags: set[str]) -> float:
         """
         计算质量分
 

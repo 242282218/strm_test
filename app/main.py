@@ -21,12 +21,21 @@ from app.core.logging import get_logger
 from app.core.rate_limiter import setup_rate_limiting
 from app.services.config_service import get_config_service
 
+
 logger = get_logger(__name__)
 
 APP_TITLE = "夸克 STRM 系统"
 APP_DESCRIPTION = "Emby/Jellyfin 可播放的夸克网盘 STRM 系统"
 APP_VERSION = "0.1.0"
-REQUIRED_READY_COMPONENTS = ("database", "auth_system", "service_container", "http_pool")
+REQUIRED_READY_COMPONENTS = (
+    "production_security",
+    "database_migrations",
+    "database",
+    "auth_system",
+    "service_container",
+    "http_pool",
+    "task_worker",
+)
 
 # 全局配置实例
 config = None
@@ -63,9 +72,12 @@ def _resolve_readiness() -> tuple[bool, list[str], dict[str, dict[str, str | Non
         if not isinstance(component, dict):
             problems.append(f"{name}: missing")
             continue
-        if component.get("status") != "ok":
+        status = component.get("status")
+        if name == "production_security" and status == "skipped":
+            continue
+        if status != "ok":
             detail = component.get("detail")
-            problems.append(f"{name}: {component.get('status')} ({detail})" if detail else f"{name}: {component.get('status')}")
+            problems.append(f"{name}: {status} ({detail})" if detail else f"{name}: {status}")
 
     return len(problems) == 0, problems, components
 
@@ -99,6 +111,7 @@ def initialize_app():
     # 设置日志
     log_format = os.getenv("SMART_MEDIA_LOG_FORMAT", config.log.format)
     from app.core.logging import setup_logging
+
     setup_logging(
         log_level=config.log_level,
         log_file=config.log_file,
@@ -131,6 +144,8 @@ app = create_fastapi_app(APP_TITLE, APP_DESCRIPTION, APP_VERSION, lifespan_conte
 
 # 注册中间件
 from app.config.middleware import register_core_middleware
+
+
 register_core_middleware(app, config_service)
 app.middleware("http")(request_id_middleware)
 app.middleware("http")(prometheus_middleware)
@@ -147,16 +162,29 @@ setup_rate_limiting(
     read_block_duration=60,
 )
 
+
 @app.get("/")
 async def root(request: Request):
     """根路径。命中专用 Emby 代理入口时转发到 Emby 首页。"""
     is_dedicated_proxy_request = False
     try:
         from app.api import emby_gateway
+
         app_config = emby_gateway.config_service.get_config()
         is_dedicated_proxy_request = emby_gateway._is_dedicated_proxy_request(request, app_config)
         if is_dedicated_proxy_request:
-            return await emby_gateway._forward_to_emby(request, app_config, "")
+            emby_base_url = emby_gateway._resolve_emby_base_url(request, app_config)
+            proxy_base_url = emby_gateway._resolve_requested_proxy_base_url(request, app_config)
+            return await emby_gateway._forward_to_emby(
+                request,
+                app_config,
+                "",
+                emby_base_url=emby_base_url,
+                proxy_base_url=proxy_base_url,
+            )
+    except HTTPException:
+        if is_dedicated_proxy_request:
+            raise
     except Exception as exc:
         logger.warning(f"Dedicated Emby gateway root forwarding failed: {exc}")
         if is_dedicated_proxy_request:

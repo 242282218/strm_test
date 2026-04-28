@@ -35,7 +35,7 @@ class FakeQuery:
     offset_value: int | None = None
     limit_value: int | None = None
 
-    def filter(self, filter_expr: tuple[str, str, tuple[Any, ...]]) -> "FakeQuery":
+    def filter(self, filter_expr: tuple[str, str, tuple[Any, ...]]) -> FakeQuery:
         self.applied_filters.append(filter_expr)
         return self
 
@@ -47,15 +47,15 @@ class FakeQuery:
         allowed = set(allowed_values)
         return [record for record in self.records if getattr(record, field_name) in allowed]
 
-    def options(self, option: str) -> "FakeQuery":
+    def options(self, option: str) -> FakeQuery:
         self.options_calls.append(option)
         return self
 
-    def offset(self, value: int) -> "FakeQuery":
+    def offset(self, value: int) -> FakeQuery:
         self.offset_value = value
         return self
 
-    def limit(self, value: int) -> "FakeQuery":
+    def limit(self, value: int) -> FakeQuery:
         self.limit_value = value
         return self
 

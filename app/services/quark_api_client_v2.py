@@ -1,14 +1,23 @@
 """
 Quark API client based on OpenList-compatible endpoints.
+
+优化:
+- 使用全局 HTTP 连接池，实现连接复用
+- 降低 TCP 握手开销，减少延迟
+- 统一管理 HTTP 客户端，降低内存占用
+安全:
+- SSRF 防护: 验证所有 API URL，防止访问内网资源
 """
 
-import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import aiohttp
+import httpx
 
+from app.core.http_pool import ClientType, get_http_pool
 from app.core.logging import get_logger
 from app.core.retry import TransientError, retry_on_transient
+from app.core.url_validator import URLValidationError, quark_validator
+
 
 logger = get_logger(__name__)
 
@@ -26,34 +35,44 @@ class QuarkAPIClient:
         self.cookie = cookie
         self.referer = referer
         self.base_url = api_url.rstrip("/")
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.timeout = aiohttp.ClientTimeout(total=timeout)
+        self.timeout = timeout
+
+        # SSRF 防护: 验证 API URL
+        try:
+            quark_validator.validate(self.base_url)
+        except URLValidationError as e:
+            logger.error(f"Invalid API URL (SSRF protection): {e}")
+            raise ValueError(f"Invalid API URL: {e}")
+
         self.user_agent = (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "quark-cloud-drive/2.5.20 Chrome/100.0.4896.160 "
             "Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch"
         )
+        # 使用全局连接池，不再独立管理 session
+        self._pool = None
+        self._client: httpx.AsyncClient | None = None
 
-    async def _ensure_session(self):
-        """Ensure aiohttp session is initialized."""
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession(
-                timeout=self.timeout,
-                connector=aiohttp.TCPConnector(limit=10),
-            )
+    async def _get_client(self) -> httpx.AsyncClient:
+        """获取 HTTP 客户端（来自连接池）"""
+        if self._client is None or self._client.is_closed:
+            if self._pool is None:
+                self._pool = await get_http_pool()
+            self._client = await self._pool.get_client(ClientType.QUARK)
+        return self._client
 
     @retry_on_transient()
     async def request(
         self,
         pathname: str,
         method: str = "GET",
-        data: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, str]] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        data: dict[str, Any] | None = None,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Send request to Quark API and return decoded JSON payload."""
-        await self._ensure_session()
+        client = await self._get_client()
 
         url = f"{self.base_url}{pathname}"
         request_headers = {
@@ -70,41 +89,43 @@ class QuarkAPIClient:
             query_params.update(params)
 
         try:
-            async with self.session.request(
-                method=method,
-                url=url,
-                headers=request_headers,
-                json=data,
-                params=query_params,
-            ) as response:
-                raw_text = await response.text()
-                try:
-                    result = json.loads(raw_text)
-                except Exception as exc:
-                    preview = raw_text[:200].replace("\\n", " ")
-                    raise Exception(
-                        f"Non-JSON response from Quark API: status={response.status}, body={preview}"
-                    ) from exc
+            if method.upper() == "GET":
+                response = await client.get(url, headers=request_headers, params=query_params)
+            elif method.upper() == "POST":
+                response = await client.post(url, headers=request_headers, json=data, params=query_params)
+            else:
+                response = await client.request(method, url, headers=request_headers, json=data, params=query_params)
 
-                for cookie_key in ["__puus", "__pus"]:
-                    if cookie_key in response.cookies:
-                        cookie = response.cookies[cookie_key]
-                        self.cookie = self._update_cookie(self.cookie, cookie_key, cookie.value)
-                        logger.debug(f"Updated cookie: {cookie_key}")
+            # 更新 cookie（从响应头）
+            set_cookie = response.headers.get("set-cookie", "")
+            if set_cookie:
+                for cookie_part in set_cookie.split(";"):
+                    if "=" in cookie_part:
+                        key_val = cookie_part.strip().split("=", 1)
+                        if len(key_val) == 2:
+                            key, value = key_val
+                            if key in ["__puus", "__pus"]:
+                                self.cookie = self._update_cookie(self.cookie, key, value)
+                                logger.debug(f"Updated cookie: {key}")
 
-                status = int(result.get("status", response.status))
-                code = int(result.get("code", 0))
-                message = result.get("message", "")
+            result = response.json()
 
-                if status >= 500:
-                    raise TransientError(f"API transient error: {message} (status={status})")
-                if status >= 400 or code != 0:
-                    error_msg = message or "Unknown error"
-                    logger.error(f"API error: {error_msg}, status: {status}, code: {code}")
-                    raise Exception(error_msg)
+            status = int(result.get("status", response.status_code))
+            code = int(result.get("code", 0))
+            message = result.get("message", "")
 
-                return result
-        except aiohttp.ClientError as exc:
+            if status >= 500:
+                raise TransientError(f"API transient error: {message} (status={status})")
+            if status >= 400 or code != 0:
+                error_msg = message or "Unknown error"
+                logger.error(f"API error: {error_msg}, status: {status}, code: {code}")
+                raise Exception(error_msg)
+
+            return result
+        except httpx.HTTPStatusError as exc:
+            logger.error(f"Request failed: {exc}")
+            raise TransientError(f"Request failed: {exc}") from exc
+        except httpx.RequestError as exc:
             logger.error(f"Request failed: {exc}")
             raise TransientError(f"Request failed: {exc}") from exc
         except Exception:
@@ -112,7 +133,7 @@ class QuarkAPIClient:
 
     def _update_cookie(self, cookie_str: str, key: str, value: str) -> str:
         """Update one cookie key/value in a cookie string."""
-        cookies: Dict[str, str] = {}
+        cookies: dict[str, str] = {}
         for item in cookie_str.split(";"):
             item = item.strip()
             if "=" in item:
@@ -129,9 +150,9 @@ class QuarkAPIClient:
         order_by: str = "file_type",
         order_direction: str = "asc",
         only_video: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List files under a parent directory."""
-        files: List[Dict[str, Any]] = []
+        files: list[dict[str, Any]] = []
         page = 1
 
         while True:
@@ -174,7 +195,7 @@ class QuarkAPIClient:
         logger.debug("Got %d files from %s", len(files), parent)
         return files
 
-    async def get_download_link(self, file_id: str) -> Dict[str, Any]:
+    async def get_download_link(self, file_id: str) -> dict[str, Any]:
         """Get direct download link for a file."""
         data = {"fids": [file_id]}
         headers = {"User-Agent": self.user_agent}
@@ -195,7 +216,7 @@ class QuarkAPIClient:
             "part_size": 10 * 1024 * 1024,
         }
 
-    async def get_transcoding_link(self, file_id: str) -> Dict[str, Any]:
+    async def get_transcoding_link(self, file_id: str) -> dict[str, Any]:
         """Get transcoding link for a playable stream."""
         data = {
             "fid": file_id,
@@ -234,9 +255,9 @@ class QuarkAPIClient:
         )
         return result.get("data", {}).get("stoken", "")
 
-    async def get_share_files(self, pwd_id: str, stoken: str, pdir_fid: str = "0") -> List[Dict[str, Any]]:
+    async def get_share_files(self, pwd_id: str, stoken: str, pdir_fid: str = "0") -> list[dict[str, Any]]:
         """Get file list from shared resource."""
-        files: List[Dict[str, Any]] = []
+        files: list[dict[str, Any]] = []
         page = 1
         page_size = 100
 
@@ -273,7 +294,7 @@ class QuarkAPIClient:
 
         return files
 
-    async def save_share(self, pwd_id: str, stoken: str, fid_list: List[str], target_fid: str) -> Dict[str, Any]:
+    async def save_share(self, pwd_id: str, stoken: str, fid_list: list[str], target_fid: str) -> dict[str, Any]:
         """Save shared files to my cloud drive."""
         data = {
             "fid_list": fid_list,
@@ -291,36 +312,36 @@ class QuarkAPIClient:
         result = await self.request("/share/sharepage/save", method="POST", data=data, headers=headers)
         return result.get("data", {})
 
-    async def delete_files(self, fids: List[str]):
+    async def delete_files(self, fids: list[str]):
         """Delete files or directories."""
         data = {"filelist": fids}
         await self.request("/file/delete", method="POST", data=data)
 
-    async def create_directory(self, parent_fid: str, name: str) -> Dict[str, Any]:
+    async def create_directory(self, parent_fid: str, name: str) -> dict[str, Any]:
         """Create a directory."""
         data = {"pdir_fid": parent_fid, "file_name": name}
         result = await self.request("/file", method="POST", data=data)
         return result.get("data", {})
 
-    async def rename_file(self, fid: str, new_name: str) -> Dict[str, Any]:
+    async def rename_file(self, fid: str, new_name: str) -> dict[str, Any]:
         """Rename a file or directory."""
         data = {"fid": fid, "file_name": new_name}
         result = await self.request("/file/rename", method="POST", data=data)
         return result.get("data", {})
 
-    async def get_file_info(self, fid: str) -> Dict[str, Any]:
+    async def get_file_info(self, fid: str) -> dict[str, Any]:
         """Get file metadata by fid."""
         result = await self.request("/file/info", method="GET", params={"fid": fid})
         return result.get("data", {})
 
-    async def move_files(self, fids: List[str], to_pdir_fid: str) -> Dict[str, Any]:
+    async def move_files(self, fids: list[str], to_pdir_fid: str) -> dict[str, Any]:
         """Move files or directories to target directory."""
         data = {"filelist": fids, "to_pdir_fid": to_pdir_fid}
         result = await self.request("/file/move", method="POST", data=data)
         return result.get("data", {})
 
     async def close(self):
-        """Close aiohttp session."""
-        if self.session and not self.session.closed:
-            await self.session.close()
-            logger.debug("QuarkAPIClient session closed")
+        """关闭客户端（连接池统一管理，此方法保留兼容性）"""
+        # 连接池统一管理客户端生命周期，这里只清理引用
+        self._client = None
+        logger.debug("QuarkAPIClient closed (connection pool managed)")

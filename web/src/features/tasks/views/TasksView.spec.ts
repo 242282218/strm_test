@@ -155,4 +155,95 @@ describe('TasksView task launch routing', () => {
     expect(notificationMocks.success).not.toHaveBeenCalled()
     expect(router.currentRoute.value.fullPath).toBe('/tasks')
   })
+
+  it('clamps the current page when filters shrink the visible task set', async () => {
+    taskApiMocks.getTasks.mockResolvedValue([
+      {
+        id: 1,
+        task_type: 'strm_generation',
+        priority: 'normal',
+        status: 'pending',
+        progress: 0,
+        total_items: 0,
+        processed_items: 0,
+        params: {},
+        logs: [],
+        created_at: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 2,
+        task_type: 'rename',
+        priority: 'normal',
+        status: 'running',
+        progress: 10,
+        total_items: 0,
+        processed_items: 0,
+        params: {},
+        logs: [],
+        created_at: '2026-01-01T00:01:00Z',
+      },
+      {
+        id: 3,
+        task_type: 'rename',
+        priority: 'normal',
+        status: 'completed',
+        progress: 100,
+        total_items: 0,
+        processed_items: 0,
+        params: {},
+        logs: [],
+        created_at: '2026-01-01T00:02:00Z',
+      },
+      {
+        id: 4,
+        task_type: 'rename',
+        priority: 'normal',
+        status: 'failed',
+        progress: 100,
+        total_items: 0,
+        processed_items: 0,
+        params: {},
+        logs: [],
+        created_at: '2026-01-01T00:03:00Z',
+      }
+    ])
+
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        {
+          path: '/tasks',
+          name: 'Tasks',
+          component: TasksView
+        }
+      ]
+    })
+
+    await router.push('/tasks')
+    await router.isReady()
+
+    const wrapper = mount(TasksView, {
+      global: {
+        plugins: [router, ElementPlus]
+      }
+    })
+
+    await flushUi()
+
+    const vm = wrapper.vm as unknown as {
+      page: number
+      pageSize: number
+      filterForm: {
+        type: string
+      }
+    }
+
+    vm.pageSize = 1
+    vm.page = 5
+    vm.filterForm.type = 'rename'
+    await flushUi()
+
+    expect(vm.page).toBe(3)
+    expect(wrapper.text()).toContain('4')
+  })
 })

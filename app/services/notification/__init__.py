@@ -6,13 +6,14 @@
 
 from .base import BaseNotifier, NotificationMessage, NotificationPriority
 from .telegram import TelegramNotifier
-from .wechat import WeChatNotifier, ServerChanNotifier
+from .wechat import ServerChanNotifier, WeChatNotifier
+
 
 __all__ = [
     "BaseNotifier",
     "NotificationMessage",
     "NotificationPriority",
+    "ServerChanNotifier",
     "TelegramNotifier",
     "WeChatNotifier",
-    "ServerChanNotifier",
 ]

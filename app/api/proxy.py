@@ -8,12 +8,11 @@
 
 import asyncio
 import os
-import time
 import re
+import time
 
 import aiohttp
 from aiohttp.http_exceptions import LineTooLong
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
@@ -372,7 +371,14 @@ async def _stream_from_url(file_id: str, redirect_url: str, headers: dict[str, s
 
     def _build_response_headers(upstream_headers, *, fallback_total_length: str | None = None) -> dict[str, str]:
         response_headers: dict[str, str] = {}
-        for header_name in ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified", "ETag"]:
+        for header_name in [
+            "Content-Type",
+            "Content-Length",
+            "Content-Range",
+            "Accept-Ranges",
+            "Last-Modified",
+            "ETag",
+        ]:
             header_value = upstream_headers.get(header_name)
             if header_value:
                 response_headers[header_name] = header_value
@@ -625,7 +631,9 @@ async def redirect_302(
             try:
                 general_validator.validate(redirect_url)
             except URLValidationError as e:
-                logger.warning("Resolved redirect URL failed validation for %s, fallback to local proxy: %s", fallback_file_id, e)
+                logger.warning(
+                    "Resolved redirect URL failed validation for %s, fallback to local proxy: %s", fallback_file_id, e
+                )
                 return _build_stream_fallback_response(fallback_file_id)
 
             logger.info(f"302 redirect to: {redirect_url[:60]}... (Total len: {len(redirect_url)})")

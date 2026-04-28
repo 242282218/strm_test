@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 服务依赖注入测试
 
@@ -8,30 +7,29 @@
 import threading
 import time
 from types import SimpleNamespace
-from unittest.mock import Mock, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-import app.core.dependencies as dependencies
+from app.core import dependencies
+from app.core.dependencies import (
+    get_admin_user,
+    get_cache,
+    get_cron,
+    initialize_service_container,
+    override_service,
+    require_api_key,
+    reset_container,
+    restore_all_services,
+    restore_service,
+)
 from app.core.service_container import (
     ServiceContainer,
     ServiceLifetime,
     get_service_container,
     reset_service_container,
-)
-from app.core.dependencies import (
-    initialize_service_container,
-    override_service,
-    restore_service,
-    restore_all_services,
-    reset_container,
-    get_cache,
-    get_cron,
-    get_notification,
-    require_api_key,
-    get_admin_user,
 )
 
 
@@ -493,6 +491,7 @@ class TestServiceInfo:
 
 # ==================== 测试替身示例 ====================
 
+
 class MockCacheService:
     """Mock 缓存服务示例"""
 
@@ -590,6 +589,7 @@ async def test_get_root_id_uses_runtime_config(monkeypatch):
 
 
 # ==================== pytest fixtures ====================
+
 
 @pytest.fixture
 def clean_container():

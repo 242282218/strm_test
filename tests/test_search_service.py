@@ -97,8 +97,12 @@ def test_transform_pansou_result_merges_and_scores(service: tuple[ss.ResourceSea
     search, _ = service
     pansou_data = {
         "merged_by_type": {
-            "quark": [{"url": "https://pan.quark.cn/s/k1", "note": "Movie A", "source": "src-a", "datetime": "2026-04-16"}],
-            "baidu": [{"url": "https://pan.quark.cn/s/k2", "note": "Movie B", "source": "src-b", "datetime": "2026-04-15"}],
+            "quark": [
+                {"url": "https://pan.quark.cn/s/k1", "note": "Movie A", "source": "src-a", "datetime": "2026-04-16"}
+            ],
+            "baidu": [
+                {"url": "https://pan.quark.cn/s/k2", "note": "Movie B", "source": "src-b", "datetime": "2026-04-15"}
+            ],
         }
     }
 
@@ -168,7 +172,9 @@ def test_sort_results_with_supported_keys(service: tuple[ss.ResourceSearchServic
 
 
 @pytest.mark.asyncio
-async def test_search_returns_error_when_keyword_empty(service: tuple[ss.ResourceSearchService, _FakeSizeFetcher]) -> None:
+async def test_search_returns_error_when_keyword_empty(
+    service: tuple[ss.ResourceSearchService, _FakeSizeFetcher],
+) -> None:
     search, _ = service
 
     result = await search.search(keyword="   ")
@@ -309,7 +315,9 @@ async def test_search_returns_generic_exception_message(
 
 
 @pytest.mark.asyncio
-async def test_search_with_filters_passthrough_error(service: tuple[ss.ResourceSearchService, _FakeSizeFetcher]) -> None:
+async def test_search_with_filters_passthrough_error(
+    service: tuple[ss.ResourceSearchService, _FakeSizeFetcher],
+) -> None:
     search, _ = service
     search.search = AsyncMock(return_value={"error": "downstream"})  # type: ignore[method-assign]
 

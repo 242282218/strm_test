@@ -161,7 +161,13 @@ async def test_get_dashboard_stats_success(monkeypatch: pytest.MonkeyPatch) -> N
     class FakeCache:
         @staticmethod
         def get_stats() -> dict[str, Any]:
-            return {"valid_entries": 4, "total_entries": 8, "total_access_count": 10, "default_ttl": 120, "running": True}
+            return {
+                "valid_entries": 4,
+                "total_entries": 8,
+                "total_access_count": 10,
+                "default_ttl": 120,
+                "running": True,
+            }
 
     monkeypatch.setattr(
         dashboard,

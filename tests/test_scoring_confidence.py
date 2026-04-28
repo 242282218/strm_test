@@ -1,5 +1,6 @@
-from app.services.scoring.confidence import ConfidenceCalculator
 import pytest
+
+from app.services.scoring.confidence import ConfidenceCalculator
 
 
 def test_text_similarity_returns_one_when_query_fully_in_title() -> None:

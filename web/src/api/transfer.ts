@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Transfer API wrapper.
  *
  * Purpose: Provide transfer operations for share links.

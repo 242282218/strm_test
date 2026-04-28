@@ -8,29 +8,32 @@ API 速率限制中间件
 import hashlib
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.core.logging import get_logger
 
+
 logger = get_logger(__name__)
 
 AUTH_COOKIE_NAME = "auth_token"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-DEFAULT_SKIP_PATHS = frozenset({
-    "/health",
-    "/health/live",
-    "/health/ready",
-    "/ready",
-    "/metrics",
-    "/docs",
-    "/openapi.json",
-    "/api/auth/status",
-    "/api/auth/me",
-})
+DEFAULT_SKIP_PATHS = frozenset(
+    {
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/ready",
+        "/metrics",
+        "/docs",
+        "/openapi.json",
+        "/api/auth/status",
+        "/api/auth/me",
+    }
+)
 
 
 @dataclass
@@ -140,9 +143,7 @@ class RateLimiter:
 
         return decorator
 
-    async def _check_rate_limit(
-        self, request: Request, config: RateLimitConfig
-    ) -> tuple[bool, int, str | None]:
+    async def _check_rate_limit(self, request: Request, config: RateLimitConfig) -> tuple[bool, int, str | None]:
         """
         检查速率限制
 

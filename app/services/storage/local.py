@@ -1,21 +1,25 @@
+import builtins
 import os
 import shutil
-from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime
+from pathlib import Path
+
 from fastapi import HTTPException, status
-from app.services.storage.base import StorageProvider
-from app.schemas.file_manager import FileItem, FileType, StorageType
+
 from app.core.logging import get_logger
+from app.schemas.file_manager import FileItem, FileType, StorageType
+from app.services.storage.base import StorageProvider
+
 
 logger = get_logger(__name__)
+
 
 class LocalStorageProvider(StorageProvider):
     """Local filesystem storage provider."""
 
     def __init__(self):
         base_dir = os.getenv("SMART_MEDIA_LOCAL_ROOT")
-        self._base_path: Optional[Path] = None
+        self._base_path: Path | None = None
         if base_dir:
             self._base_path = Path(base_dir).expanduser().resolve()
             if not self._base_path.exists():
@@ -25,7 +29,10 @@ class LocalStorageProvider(StorageProvider):
                 )
             logger.info(f"Local storage restricted to: {self._base_path}")
         else:
-            logger.warning("SMART_MEDIA_LOCAL_ROOT not set; local storage is unrestricted")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="SMART_MEDIA_LOCAL_ROOT must be set for local storage",
+            )
 
     @property
     def storage_type(self) -> StorageType:
@@ -48,7 +55,7 @@ class LocalStorageProvider(StorageProvider):
             size=stat.st_size if not is_dir else 0,
             updated_at=datetime.fromtimestamp(stat.st_mtime),
             is_readable=os.access(full_path, os.R_OK),
-            is_writable=os.access(full_path, os.W_OK)
+            is_writable=os.access(full_path, os.W_OK),
         )
 
     def _resolve_path(self, path: str) -> Path:
@@ -77,12 +84,7 @@ class LocalStorageProvider(StorageProvider):
         except ValueError:
             return False
 
-    async def list(
-        self,
-        path: str,
-        page: int = 1,
-        size: int = 100
-    ) -> Tuple[List[FileItem], int, Optional[str]]:
+    async def list(self, path: str, page: int = 1, size: int = 100) -> tuple[list[FileItem], int, str | None]:
         """List local directory."""
         resolved = self._resolve_path(path)
         if not os.path.exists(resolved):
@@ -111,14 +113,18 @@ class LocalStorageProvider(StorageProvider):
 
         return items, total, str(parent_path) if parent_path else None
 
-    async def info(self, path: str) -> Optional[FileItem]:
+    async def info(self, path: str) -> FileItem | None:
         resolved = self._resolve_path(path)
         if not os.path.exists(resolved):
             return None
         return self._map_to_file_item(resolved)
 
     async def rename(self, path: str, new_name: str) -> FileItem:
-        if os.path.basename(new_name) != new_name or (os.path.altsep and os.path.altsep in new_name) or os.path.sep in new_name:
+        if (
+            os.path.basename(new_name) != new_name
+            or (os.path.altsep and os.path.altsep in new_name)
+            or os.path.sep in new_name
+        ):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid new name")
         resolved = self._resolve_path(path)
         parent = Path(resolved).parent
@@ -126,13 +132,13 @@ class LocalStorageProvider(StorageProvider):
         os.rename(resolved, new_path)
         return self._map_to_file_item(new_path)
 
-    async def move_batch(self, source_paths: List[str], target_dir: str) -> bool:
+    async def move_batch(self, source_paths: builtins.list[str], target_dir: str) -> bool:
         """Batch move local files."""
         for path in source_paths:
             await self.move(path, target_dir)
         return True
 
-    async def delete_batch(self, paths: List[str]) -> bool:
+    async def delete_batch(self, paths: builtins.list[str]) -> bool:
         """Batch delete local files."""
         for path in paths:
             await self.delete(path)

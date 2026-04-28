@@ -10,11 +10,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from app.core.auth_middleware import AuthMiddleware
 from app.core.constants import REQUEST_ID_HEADER
 from app.core.csrf_middleware import CSRFMiddleware
-from app.core.auth_middleware import AuthMiddleware
-from app.core.security_headers_middleware import SecurityHeadersMiddleware
 from app.core.logging import get_logger
+from app.core.security_headers_middleware import SecurityHeadersMiddleware
+
 
 logger = get_logger(__name__)
 
@@ -213,7 +214,9 @@ def normalize_endpoint(path: str) -> str:
     import re
 
     # 替换 UUID
-    path = re.sub(r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "/{uuid}", path, flags=re.IGNORECASE)
+    path = re.sub(
+        r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "/{uuid}", path, flags=re.IGNORECASE
+    )
 
     # 替换纯数字 ID
     path = re.sub(r"/\d+(?=/|$)", "/{id}", path)

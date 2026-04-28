@@ -27,8 +27,8 @@ from app.core.db import SessionLocal
 from app.core.logging import get_logger
 from app.core.validators import validate_path
 from app.models.scrape import RenameBatch, RenameHistory
-from app.services.config_service import get_config_service
 from app.services.ai_parser_service import get_ai_parser_service
+from app.services.config_service import get_config_service
 from app.services.emby_naming_service import NamingConfig, get_emby_naming_service
 from app.services.media.files import build_stable_file_id, discover_media_files, find_related_files
 from app.services.notification_service import NotificationType, get_notification_service

@@ -18,10 +18,10 @@ from app.services.playbackinfo_hook import PlaybackInfoHook
 from app.services.quark_service import QuarkService
 from app.utils.strm_url import (
     extract_file_id_from_proxy_url,
+    extract_file_id_from_strm_content,
     extract_media_id_from_strm_content,
     extract_media_id_from_url,
     extract_path_from_media_reference,
-    extract_file_id_from_strm_content,
     read_strm_file_content,
 )
 
@@ -328,7 +328,9 @@ class EmbyProxyService:
                             self.media_mapping_service.update_provider_file_id(media_id, file_info.fid)
                             return file_info.fid
                     except Exception as exc:
-                        logger.warning("Failed to resolve provider file by mapped path %s: %s", mapping.source_path, exc)
+                        logger.warning(
+                            "Failed to resolve provider file by mapped path %s: %s", mapping.source_path, exc
+                        )
 
         if text.startswith("quark://"):
             return extract_file_id_from_strm_content(text)

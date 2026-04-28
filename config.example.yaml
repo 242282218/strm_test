@@ -164,6 +164,7 @@ alist:
   mount_path: "/"
 
 cors:
+  # Development default. Production must configure explicit origins.
   allow_origins:
     - "*"
   allow_credentials: false
@@ -173,8 +174,9 @@ cors:
     - "*"
 
 security:
+  # Development default. Production readiness requires this to be true.
+  require_api_key: false
   # Environment: SMART_MEDIA_SECURITY_API_KEY
   api_key: ""
   # Environment: SMART_MEDIA_JWT_SECRET_KEY
   jwt_secret_key: ""
-  require_api_key: false

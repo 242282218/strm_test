@@ -156,9 +156,10 @@ def test_default_report_dir_and_stop_file_resolve_under_repo_root(tmp_path: Path
     report_dir = module.resolve_report_dir(repo_root, module.DEFAULT_REPORT_DIR)
 
     assert report_dir == (repo_root / "target" / "continuous").resolve()
-    assert module.resolve_stop_file(repo_root, report_dir, None) == (
-        repo_root / "target" / "continuous" / module.STOP_FILE_NAME
-    ).resolve()
+    assert (
+        module.resolve_stop_file(repo_root, report_dir, None)
+        == (repo_root / "target" / "continuous" / module.STOP_FILE_NAME).resolve()
+    )
     assert module.resolve_stop_file(repo_root, report_dir, Path("tmp/STOP")) == (repo_root / "tmp" / "STOP").resolve()
 
 
@@ -548,7 +549,9 @@ def test_run_iteration_only_verifies_failed_commands_and_merges_results(tmp_path
     monkeypatch.setattr(module, "utc_now", lambda: next(times))
     monkeypatch.setattr(module, "write_report_files", lambda *args, **kwargs: None)
     monkeypatch.setattr(module, "collect_git_state", lambda _repo_root: {"dirty_count": 1})
-    monkeypatch.setattr(module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules])
+    monkeypatch.setattr(
+        module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules]
+    )
 
     report = module.run_iteration(
         iteration=1,
@@ -636,7 +639,9 @@ def test_run_iteration_records_agent_lane_exceptions_and_continues_verify(tmp_pa
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(module, "run_module", fake_run_module)
-    monkeypatch.setattr(module, "run_agent_lane", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("lane crash")))
+    monkeypatch.setattr(
+        module, "run_agent_lane", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("lane crash"))
+    )
     monkeypatch.setattr(module, "utc_now", lambda: next(times))
     monkeypatch.setattr(
         module,
@@ -644,7 +649,9 @@ def test_run_iteration_records_agent_lane_exceptions_and_continues_verify(tmp_pa
         lambda _report_dir, _iteration_slug, report: captured.setdefault("report", report),
     )
     monkeypatch.setattr(module, "collect_git_state", lambda _repo_root: {"dirty_count": 1})
-    monkeypatch.setattr(module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules])
+    monkeypatch.setattr(
+        module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules]
+    )
 
     report = module.run_iteration(
         iteration=1,
@@ -721,7 +728,9 @@ def test_run_iteration_returns_report_error_and_fallback_snapshot_when_report_wr
         lambda _report_dir, _iteration_slug, report, markdown=None: captured.setdefault("report", report),
     )
     monkeypatch.setattr(module, "collect_git_state", lambda _repo_root: {"dirty_count": 1})
-    monkeypatch.setattr(module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules])
+    monkeypatch.setattr(
+        module, "build_module_inventory", lambda modules, _repo_root: [{"name": item.name} for item in modules]
+    )
 
     report = module.run_iteration(
         iteration=1,

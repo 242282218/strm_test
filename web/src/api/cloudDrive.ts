@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Cloud drive API wrapper.
  *
  * Purpose: Provide access to cloud drive endpoints.

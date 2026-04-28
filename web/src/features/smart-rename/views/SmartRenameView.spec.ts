@@ -248,6 +248,9 @@ describe('SmartRenameView', () => {
 
     const row = vm.previewRows[0]
     expect(row).toBeTruthy()
+    if (!row) {
+      throw new Error('preview row missing')
+    }
 
     vm.openEditDialog(row)
     vm.editingItem.new_name = 'Movie - Edited (2024).mkv'

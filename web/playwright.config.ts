@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url'
 
 import { defineConfig, devices } from '@playwright/test'
 
-const DEFAULT_BASE_URL = 'http://127.0.0.1:3000'
-const DEFAULT_API_TARGET = 'http://127.0.0.1:8000'
+const DEFAULT_BASE_URL = 'http://127.0.0.1:18099'
+const DEFAULT_API_TARGET = 'http://127.0.0.1:18000'
 const configDir = fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = resolve(configDir, '..')
 

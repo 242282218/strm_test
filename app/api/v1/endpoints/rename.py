@@ -1,12 +1,16 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends
-from typing import List, Optional, Literal
-from pydantic import BaseModel, Field, ConfigDict
-from app.schemas.base import BaseResponse
-from app.services.rename_service import get_rename_service, RenameService
-from app.core.exceptions import AppException, AppErrorCode
-from app.core.validators import validate_path, InputValidationError
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.constants import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, MAX_PATH_LENGTH, MIN_BATCH_SIZE
 from app.core.dependencies import require_api_key
-from app.core.constants import MAX_PATH_LENGTH, MIN_BATCH_SIZE, MAX_BATCH_SIZE, DEFAULT_BATCH_SIZE
+from app.core.error_codes import ErrorCode
+from app.core.exceptions import AppException
+from app.core.validators import InputValidationError, validate_path
+from app.schemas.base import BaseResponse
+from app.services.rename_service import RenameService, get_rename_service
+
 
 router = APIRouter()
 
@@ -23,24 +27,24 @@ class RenameOptions(BaseModel):
 class RenamePreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    target_path: Optional[str] = Field(default=None, max_length=MAX_PATH_LENGTH)
-    path: Optional[str] = Field(default=None, max_length=MAX_PATH_LENGTH)
+    target_path: str | None = Field(default=None, max_length=MAX_PATH_LENGTH)
+    path: str | None = Field(default=None, max_length=MAX_PATH_LENGTH)
     media_type: Literal["auto", "movie", "tv"] = "auto"
     recursive: bool = True
-    options: Optional[RenameOptions] = None
+    options: RenameOptions | None = None
 
 
 class RenameItemResponse(BaseModel):
     original_path: str
     original_name: str
-    new_path: Optional[str] = None
-    new_name: Optional[str] = None
-    tmdb_id: Optional[int] = None
-    title: Optional[str] = None
-    year: Optional[int] = None
+    new_path: str | None = None
+    new_name: str | None = None
+    tmdb_id: int | None = None
+    title: str | None = None
+    year: int | None = None
     confidence: float = 0.0
     status: str
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 class RenamePreviewResponse(BaseModel):
@@ -49,7 +53,7 @@ class RenamePreviewResponse(BaseModel):
     total_items: int
     matched_items: int
     skipped_items: int
-    items: List[RenameItemResponse]
+    items: list[RenameItemResponse]
 
 
 @router.post("/preview", response_model=BaseResponse[RenamePreviewResponse])
@@ -63,9 +67,8 @@ async def preview_rename(
         target_path = request.target_path or request.path
         if not target_path:
             raise AppException(
-                code=AppErrorCode.VALIDATION_ERROR,
+                code=ErrorCode.VALIDATION_MISSING_FIELD,
                 message="target_path or path is required",
-                status_code=422,
             )
         target_path = validate_path(target_path, "target_path", allow_absolute=True)
 
@@ -106,11 +109,10 @@ async def preview_rename(
         return BaseResponse(data=response)
     except InputValidationError as e:
         raise AppException(
-            code=AppErrorCode.VALIDATION_ERROR,
+            code=ErrorCode.VALIDATION_INVALID_PARAM,
             message=str(e),
-            status_code=422,
         )
     except AppException:
         raise
     except Exception as e:
-        raise AppException(code=AppErrorCode.SYSTEM_ERROR, message=str(e))
+        raise AppException(code=ErrorCode.SYSTEM_INTERNAL_ERROR, message=str(e))

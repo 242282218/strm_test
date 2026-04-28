@@ -150,7 +150,9 @@ def test_cache_level_enum_and_init_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         __import__("builtins"),
         "__import__",
-        lambda name, *args, **kwargs: raise_import() if name == "app.services.redis_cache" else __import__(name, *args, **kwargs),
+        lambda name, *args, **kwargs: (
+            raise_import() if name == "app.services.redis_cache" else __import__(name, *args, **kwargs)
+        ),
     )
 
     # build with L1/L2 only to avoid import override side effects on normal path
@@ -312,4 +314,3 @@ def test_get_tiered_cache_singleton() -> None:
     first = tiered_cache.get_tiered_cache(tiered_cache.CacheConfig(enable_l1=False, enable_l2=False, enable_l3=False))
     second = tiered_cache.get_tiered_cache()
     assert first is second
-

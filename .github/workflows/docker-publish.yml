@@ -23,6 +23,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  FRONTEND_IMAGE_NAME: ${{ github.repository }}-frontend
 
 jobs:
   # ===========================================================================
@@ -101,6 +102,21 @@ jobs:
             VCS_REF=${{ github.sha }}
             VERSION=${{ steps.version.outputs.version }}
 
+      - name: Build and push frontend runtime image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          target: frontend-runtime
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Sign the published Docker image
         if: github.event_name != 'pull_request'
         run: |
@@ -129,13 +145,16 @@ jobs:
       - name: Pull Docker image
         run: |
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.build-and-push.outputs.version }}
 
       - name: Create test configuration
         run: |
           cp .env.example .env
           {
             echo "QUARK_STRM_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.version }}"
+            echo "QUARK_STRM_FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.build-and-push.outputs.version }}"
             echo "SMART_MEDIA_EMBY_PROXY_PORT=18097"
+            echo "SMART_MEDIA_FRONTEND_PORT=18080"
           } >> .env
           cp config.example.yaml config.yaml
           mkdir -p logs strm
@@ -143,15 +162,15 @@ jobs:
 
       - name: Start services
         run: |
-          docker compose up --pull never -d
+          docker compose --profile frontend up --pull never -d
           echo "Waiting for service to start..."
 
-      - name: Wait for health endpoint
+      - name: Wait for ready endpoint
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:8000/health" > /dev/null 2>&1; then
-              echo "Service is healthy!"
-              curl -fsS "http://127.0.0.1:8000/health" | jq '.'
+            if curl -fsS "http://127.0.0.1:8000/ready" > /dev/null 2>&1; then
+              echo "Service is ready!"
+              curl -fsS "http://127.0.0.1:8000/ready" | jq '.'
               exit 0
             fi
             echo "Waiting for service... ($i/30)"
@@ -171,6 +190,13 @@ jobs:
 
           # Test OpenAPI schema
           curl -fsS "http://127.0.0.1:8000/openapi.json" | jq '.info'
+
+          # Test frontend SPA and backend probe through Nginx
+          curl -fsS "http://127.0.0.1:18080/" > /tmp/frontend-index.html
+          grep -E '<div id="app"|<script[^>]+type="module"' /tmp/frontend-index.html
+          curl -fsS "http://127.0.0.1:18080/login" > /tmp/frontend-login.html
+          grep -E '<div id="app"|<script[^>]+type="module"' /tmp/frontend-login.html
+          curl -fsS "http://127.0.0.1:18080/ready" | jq '.'
 
       - name: Stop services
         if: always()

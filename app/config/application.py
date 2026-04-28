@@ -6,7 +6,6 @@
 
 from fastapi import FastAPI, HTTPException
 
-from app.config.lifecycle import create_lifespan_context
 from app.core.logging import get_logger
 
 
@@ -41,41 +40,8 @@ def register_routers(_app: FastAPI):
     Args:
         _app: FastAPI 应用实例
     """
-    from app.api import auth as auth_router
-    from app.api import (
-        cloud_drive,
-        dashboard,
-        emby,
-        emby_gateway,
-        file_manager,
-        monitoring,
-        prometheus,
-        proxy,
-        quark,
-        quark_sdk,
-        rename,
-        scrape,
-        search,
-        security,
-        smart_rename,
-        stable_stream,
-        strm,
-        strm_validator,
-        tasks,
-        tmdb,
-    )
-    from app.api import notification as notification_router
-    from app.api.v1 import v1_router
 
     # 导入模型以确保创建表
-    import app.models.cloud_drive
-    import app.models.emby
-    import app.models.media_mapping
-    import app.models.notification
-    import app.models.scrape
-    import app.models.security_event
-    import app.models.task
-    import app.models.user
 
     # 注册传统路由
     register_legacy_routers(_app)
@@ -92,7 +58,7 @@ def register_legacy_routers(_app: FastAPI):
         _app: FastAPI 应用实例
     """
     import warnings
-    from app.api import auth as auth_router
+
     from app.api import (
         cloud_drive,
         dashboard,
@@ -108,12 +74,12 @@ def register_legacy_routers(_app: FastAPI):
         stable_stream,
         strm,
         strm_validator,
+        system_config,
         tasks,
         tmdb,
+        transfer,
     )
     from app.api import notification as notification_router
-    from app.api import transfer
-    from app.api import system_config
 
     warnings.filterwarnings("default", message=".*deprecated.*", category=DeprecationWarning)
 
@@ -164,6 +130,7 @@ def register_v1_and_support_routers(_app: FastAPI):
     # 注册批量操作 API
     try:
         from app.api import batch_ops
+
         _app.include_router(batch_ops.router)
     except ImportError as e:
         logger.warning(f"Batch ops router not available: {e}")

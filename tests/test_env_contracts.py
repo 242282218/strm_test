@@ -8,10 +8,10 @@ import pytest
 
 from app.config.settings import AppConfig
 from app.core import config_manager as config_manager_module
-from app.core.config_manager import ConfigManager
 from app.core import dependencies as dependencies_module
-from app.services import config_service as config_service_module
+from app.core.config_manager import ConfigManager
 from app.services import auth_service as auth_service_module
+from app.services import config_service as config_service_module
 from app.services.config_service import ConfigService
 
 
@@ -222,6 +222,87 @@ def test_config_manager_applies_legacy_provider_env_without_config_file(
     assert provider["api_key"] == "legacy-glm-key"
 
 
+def test_production_requirements_report_missing_security_and_cors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "production")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("SMART_MEDIA_SECURITY_API_KEY", raising=False)
+    monkeypatch.delenv("SMART_MEDIA_API_KEY", raising=False)
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("SMART_MEDIA_JWT_SECRET_KEY", raising=False)
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    monkeypatch.delenv("REQUIRE_API_KEY", raising=False)
+
+    config = AppConfig(
+        security={"require_api_key": False, "api_key": "", "jwt_secret_key": ""},
+        cors={"allow_origins": ["*"]},
+    )
+
+    problems = config.validate_production_requirements()
+
+    assert "Production requires security.require_api_key=true" in problems
+    assert "Production requires security.api_key or SMART_MEDIA_SECURITY_API_KEY" in problems
+    assert "Production requires security.jwt_secret_key or SMART_MEDIA_JWT_SECRET_KEY" in problems
+    assert "Production CORS allow_origins must not contain '*'" in problems
+
+
+def test_production_requirements_accept_complete_security_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "production")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("REQUIRE_API_KEY", raising=False)
+
+    config = AppConfig(
+        security={"require_api_key": True, "api_key": "api-key", "jwt_secret_key": "jwt-secret"},
+        cors={"allow_origins": ["https://media.example"]},
+    )
+
+    assert config.validate_production_requirements() == []
+
+
+def test_production_requirements_accept_canonical_security_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "production")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("SMART_MEDIA_SECURITY_API_KEY", "env-api-key")
+    monkeypatch.setenv("SMART_MEDIA_JWT_SECRET_KEY", "env-jwt-secret")
+    monkeypatch.setenv("REQUIRE_API_KEY", "true")
+
+    config = AppConfig(
+        security={"require_api_key": False, "api_key": "", "jwt_secret_key": ""},
+        cors={"allow_origins": ["https://media.example"]},
+    )
+
+    assert config.validate_production_requirements() == []
+
+
+def test_development_defaults_do_not_trigger_production_requirements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "development")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+
+    config = AppConfig(
+        security={"require_api_key": False, "api_key": "", "jwt_secret_key": ""},
+        cors={"allow_origins": ["*"]},
+    )
+
+    assert config.validate_production_requirements() == []
+
+
+def test_production_cors_rejects_wildcard_with_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SMART_MEDIA_ENV", "production")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+
+    with pytest.raises(ValueError, match="allow_credentials"):
+        AppConfig(cors={"allow_origins": ["*"], "allow_credentials": True})
+
+
 def test_env_example_documents_canonical_env_contract_only() -> None:
     env_example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
     documented_envs = {
@@ -231,6 +312,7 @@ def test_env_example_documents_canonical_env_contract_only() -> None:
     }
 
     canonical_envs = (
+        "SMART_MEDIA_ENV",
         "SMART_MEDIA_QUARK_COOKIE",
         "SMART_MEDIA_JWT_SECRET_KEY",
         "SMART_MEDIA_ZHIPU_API_KEY",
